@@ -250,7 +250,7 @@
     $bestList = collect($bestSellers ?? [])
         ->filter()
         ->unique(fn ($product) => $product->id ?? $product->slug ?? spl_object_id($product))
-        ->take(6)
+        ->take(5)
         ->values();
 
     // Produits réellement en promotion (promo_price actif, voir Product::getIsOnPromoAttribute()).
@@ -290,7 +290,7 @@
         : $catalogUrl;
 
     // Sélection toujours peuplée (écologique, puis catégorie la mieux fournie, puis fallback catalogue global).
-    $featuredList = collect($featuredCategoryProducts ?? [])->filter()->take(3)->values();
+    $featuredList = collect($featuredCategoryProducts ?? [])->filter()->take(4)->values();
 
     $giftImages = [
         'bon-achat' => asset('images/home/bon-achat.png'),
@@ -312,7 +312,6 @@
         @include('public.home.hero')
         @include('public.home.categories')
         @include('public.home.commerce-row')
-        @include('public.home.best-sellers')
         @include('public.home.promotions')
         @include('public.home.event-offers')
         @include('public.home.featured-selection')
