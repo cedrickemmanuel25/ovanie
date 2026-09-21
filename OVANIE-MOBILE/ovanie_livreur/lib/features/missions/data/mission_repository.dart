@@ -86,6 +86,17 @@ class MissionRepository {
     return _missionFromResponse(response.data);
   }
 
+  Future<void> verifyOtp(
+    String missionNumber,
+    String otpCode,
+  ) async {
+    final response = await ApiClient.dio.post<dynamic>(
+      '/driver/missions/${Uri.encodeComponent(missionNumber)}/verify-otp',
+      data: {'delivery_otp_code': otpCode},
+    );
+    ApiClient.ensureSuccess(response);
+  }
+
   Future<void> recordLocation(
     String missionNumber, {
     required double latitude,

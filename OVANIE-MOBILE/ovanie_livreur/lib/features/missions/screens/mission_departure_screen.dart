@@ -27,12 +27,20 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
   bool _loading = false;
   bool _actionBusy = false;
   String? _error;
+  final _otpController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _mission = widget.initialMission;
+    _otpController.addListener(() => setState(() {}));
     _load(showSpinner: _mission == null);
+  }
+
+  @override
+  void dispose() {
+    _otpController.dispose();
+    super.dispose();
   }
 
   Future<void> _load({bool showSpinner = true}) async {
@@ -71,6 +79,44 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
     }
   }
 
+  Future<void> _confirmArrival() async {
+    final mission = _mission;
+    if (mission == null || _actionBusy || !mission.isInTransit) return;
+    setState(() => _actionBusy = true);
+    try {
+      final updated = await MissionRepository.instance.updateStage(
+        mission.missionNumber,
+        'arrived',
+      );
+      if (!mounted) return;
+      setState(() => _mission = updated);
+      showMissionSnack(context, 'Arrivée confirmée. Demandez le code au client.');
+    } catch (error) {
+      if (mounted) showMissionSnack(context, ApiClient.friendlyError(error), error: true);
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  Future<void> _confirmDelivery() async {
+    final mission = _mission;
+    final code = _otpController.text.trim();
+    if (mission == null || _actionBusy || !mission.isArrived || code.length != 6) {
+      return;
+    }
+    setState(() => _actionBusy = true);
+    try {
+      await MissionRepository.instance.verifyOtp(mission.missionNumber, code);
+      if (!mounted) return;
+      showMissionSnack(context, 'Livraison confirmée. Merci !');
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) showMissionSnack(context, ApiClient.friendlyError(error), error: true);
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
   Future<void> _reportProblem() async {
     final draft = await showMissionIncidentDialog(context);
     if (!mounted || draft == null) return;
@@ -95,7 +141,20 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
   Widget build(BuildContext context) {
     final mission = _mission;
     final route = mission?.routePlan;
-    final alreadyStarted = mission != null && (mission.isInTransit || mission.isArrived);
+
+    String primaryLabel = 'Démarrer le trajet vers le client';
+    VoidCallback? primaryAction = _startTrip;
+    var primaryEnabled = mission?.isLoaded ?? false;
+    if (mission != null && mission.isArrived) {
+      primaryLabel = 'Confirmer la livraison';
+      primaryAction = _confirmDelivery;
+      primaryEnabled = _otpController.text.trim().length == 6;
+    } else if (mission != null && mission.isInTransit) {
+      primaryLabel = 'Confirmer l\'arrivée à destination';
+      primaryAction = _confirmArrival;
+      primaryEnabled = true;
+    }
+
     return Scaffold(
       backgroundColor: MissionPalette.mint,
       body: Column(
@@ -189,6 +248,41 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
                         ],
                       ),
                     ),
+                    if (mission.isArrived) ...[
+                      const SizedBox(height: 12),
+                      MissionSurfaceCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const MissionSectionTitle('Remise et confirmation'),
+                            const SizedBox(height: 12),
+                            const MissionTintMessage(
+                              text: 'Demandez le code à 6 chiffres au client après la remise '
+                                  'complète des articles.',
+                              icon: Icons.key_rounded,
+                            ),
+                            const SizedBox(height: 14),
+                            TextField(
+                              controller: _otpController,
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.center,
+                              maxLength: 6,
+                              style: const TextStyle(
+                                color: MissionPalette.navy,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 10,
+                              ),
+                              decoration: const InputDecoration(
+                                counterText: '',
+                                hintText: '000000',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -215,10 +309,10 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: MissionPrimaryButton(
-                        label: alreadyStarted ? 'Trajet démarré' : 'Démarrer le trajet vers le client',
+                        label: primaryLabel,
                         loading: _actionBusy,
-                        enabled: mission.isLoaded,
-                        onPressed: _startTrip,
+                        enabled: primaryEnabled,
+                        onPressed: primaryAction,
                       ),
                     ),
                   ],
