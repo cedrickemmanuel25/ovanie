@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Dispute;
 use App\Services\OrderWorkflowService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -27,9 +28,8 @@ class VendorDisputeController extends Controller
         $dateTo = $request->query('date_to');
         $perPage = max(5, min(50, (int) $request->query('per_page', 10)));
 
-        $all = Dispute::query()
+        $all = $this->vendorDisputeQuery()
             ->with(['order.client'])
-            ->where('vendor_id', Auth::id())
             ->latest('updated_at')
             ->get();
 
@@ -121,9 +121,8 @@ class VendorDisputeController extends Controller
         ]);
 
         DB::transaction(function () use ($id, $validated) {
-            $dispute = Dispute::query()
+            $dispute = $this->vendorDisputeQuery()
                 ->whereKey($id)
-                ->where('vendor_id', Auth::id())
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -145,9 +144,8 @@ class VendorDisputeController extends Controller
     public function escalate($id, OrderWorkflowService $workflow)
     {
         [$dispute, $justEscalated] = DB::transaction(function () use ($id) {
-            $dispute = Dispute::query()
+            $dispute = $this->vendorDisputeQuery()
                 ->whereKey($id)
-                ->where('vendor_id', Auth::id())
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -184,7 +182,12 @@ class VendorDisputeController extends Controller
         );
     }
 
-    private function resolveDisplayStatus(Dispute $dispute): string
+    /**
+     * Statut d'affichage en 5 états, partagé avec l'API mobile
+     * (VendorMobileController::disputePayload) pour que web et mobile
+     * montrent toujours la même progression d'un litige.
+     */
+    public static function resolveDisplayStatus(Dispute $dispute): string
     {
         $status = strtolower((string) ($dispute->status ?? ''));
 
@@ -240,5 +243,27 @@ class VendorDisputeController extends Controller
         }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
+    }
+
+    /**
+     * Même clé de rattachement (shop_id) que l'API mobile
+     * (VendorMenuEndpoints::menuCases) et que les retours vendeur
+     * (VendorReturnController::vendorReturnQuery), pour que web et mobile
+     * affichent toujours la même liste de litiges — y compris si une
+     * boutique est un jour gérée par plusieurs comptes.
+     */
+    private function vendorDisputeQuery(): Builder
+    {
+        $shop = Auth::user()?->shop;
+        abort_unless($shop, 403, 'Boutique introuvable.');
+
+        return Dispute::query()
+            ->where(function (Builder $query) use ($shop) {
+                $query->where('shop_id', $shop->id)
+                    ->orWhere(function (Builder $legacy) use ($shop) {
+                        $legacy->whereNull('shop_id')
+                            ->whereHas('orderItem', fn (Builder $item) => $item->where('shop_id', $shop->id));
+                    });
+            });
     }
 }

@@ -441,6 +441,7 @@ String caseStatus(dynamic x) =>
     const {
       'pending': 'En attente',
       'open': 'Nouveau',
+      'new': 'Nouveau',
       'accepted': 'Validé',
       'rejected': 'Refusé',
       'refunded': 'Remboursé',
@@ -448,11 +449,12 @@ String caseStatus(dynamic x) =>
       'closed': 'Clôturé',
       'in_progress': 'En cours',
       'processing': 'En cours',
+      'waiting_ovanie': 'En attente OVANIE',
     }['$x'] ??
     screenText(x);
 Color caseColor(dynamic x) =>
     ['accepted', 'resolved', 'closed', 'refunded'].contains(x)
     ? Colors.green
-    : ['rejected', 'open'].contains(x)
+    : ['rejected', 'open', 'new'].contains(x)
     ? Colors.red
     : menuOrange;

@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
 import '../menu/menu_ui.dart';
@@ -43,10 +45,10 @@ class _AfterSalesState extends State<AfterSalesScreen> {
   @override
   Widget build(BuildContext context) {
     final statuses = widget.disputes
-        ? ['all', 'open', 'in_progress', 'resolved']
+        ? ['all', 'new', 'in_progress', 'waiting_ovanie', 'resolved']
         : ['all', 'pending', 'accepted', 'rejected', 'refunded'];
     final labels = widget.disputes
-        ? ['Tous', 'Nouveaux', 'En cours', 'Résolus']
+        ? ['Tous', 'Nouveaux', 'En cours', 'Attente OVANIE', 'Résolus']
         : ['Tous', 'En attente', 'Validés', 'Refusés', 'Remboursés'];
     final selected = rows
         .where(
@@ -202,6 +204,7 @@ class _CaseState extends State<CaseDetailScreen> {
   Map<String, dynamic> data = {}, shop = {};
   bool loading = true, busy = false;
   String? error;
+  File? rejectionProof;
   final response = TextEditingController();
   String get path => widget.disputes ? 'disputes' : 'returns';
   @override
@@ -236,9 +239,32 @@ class _CaseState extends State<CaseDetailScreen> {
     }
   }
 
+  Future<void> pickRejectionProof() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+    );
+    final path = result?.files.single.path;
+    if (path != null && mounted) setState(() => rejectionProof = File(path));
+  }
+
   Future<void> action(String action) async {
     if (action == 'respond' && response.text.trim().isEmpty) {
       menuError(context, Exception('Rédigez une solution avant de l’envoyer.'));
+      return;
+    }
+    if (action == 'reject' && response.text.trim().length < 10) {
+      menuError(
+        context,
+        Exception('Expliquez le refus en au moins 10 caractères.'),
+      );
+      return;
+    }
+    if (action == 'reject' && rejectionProof == null) {
+      menuError(
+        context,
+        Exception('Ajoutez un justificatif avant de refuser ce retour.'),
+      );
       return;
     }
     setState(() => busy = true);
@@ -250,6 +276,9 @@ class _CaseState extends State<CaseDetailScreen> {
           if (action == 'respond') 'response': response.text.trim(),
           if (!widget.disputes) 'vendor_response': response.text.trim(),
         },
+        files: action == 'reject' && rejectionProof != null
+            ? {'vendor_rejection_proof': rejectionProof!}
+            : null,
       );
       await load();
     } catch (e) {
@@ -492,21 +521,81 @@ class _CaseState extends State<CaseDetailScreen> {
               icon: Icons.send_outlined,
             ),
           ),
-        ] else if (data['can_decide'] == true)
-          dataPair(
-            menuButton(
-              'Refuser le retour',
-              busy ? null : () => action('reject'),
-              outlined: true,
-              icon: Icons.cancel_outlined,
+        ] else if (data['can_decide'] == true) ...[
+          DataCard(
+            title: 'Réponse au client',
+            child: TextField(
+              controller: response,
+              maxLines: 4,
+              maxLength: 1000,
+              decoration: const InputDecoration(
+                hintText: 'Expliquez votre décision au client '
+                    '(obligatoire pour refuser, au moins 10 caractères)',
+                border: OutlineInputBorder(),
+              ),
             ),
-            menuButton(
-              'Valider le retour',
-              busy ? null : () => action('accept'),
-              icon: Icons.check,
+          ),
+          DataCard(
+            title: 'Justificatif de refus',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Une photo ou un document est obligatoire pour refuser un retour.',
+                  style: TextStyle(color: menuMuted, fontSize: 13),
+                ),
+                if (rejectionProof != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    rejectionProof!.path.split('/').last,
+                    style: const TextStyle(color: menuBlue),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                menuButton(
+                  rejectionProof == null
+                      ? 'Ajouter un justificatif'
+                      : 'Remplacer le justificatif',
+                  pickRejectionProof,
+                  outlined: true,
+                  icon: Icons.attach_file,
+                ),
+              ],
             ),
-          )
-        else
+          ),
+          Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: menuButton(
+                  'Refuser le retour',
+                  busy ? null : () => action('reject'),
+                  outlined: true,
+                  icon: Icons.cancel_outlined,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: menuButton(
+                  'Rembourser le client',
+                  busy ? null : () => action('refund'),
+                  outlined: true,
+                  icon: Icons.currency_exchange,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: menuButton(
+                  'Valider le retour',
+                  busy ? null : () => action('accept'),
+                  icon: Icons.check,
+                ),
+              ),
+            ],
+          ),
+        ] else
           menuInfo(
             'Le remboursement et la suite logistique suivent le traitement du dossier par OVANIE.',
           ),

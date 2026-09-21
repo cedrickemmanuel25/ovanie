@@ -321,6 +321,7 @@ Route::prefix('mobile/v1/vendor')
         Route::get('/returns', [VendorMobileController::class, 'returns']);
         Route::post('/returns/{return}/accept', [VendorMobileController::class, 'acceptReturn']);
         Route::post('/returns/{return}/reject', [VendorMobileController::class, 'rejectReturn']);
+        Route::post('/returns/{return}/refund', [VendorMobileController::class, 'refundReturn']);
 
         Route::get('/disputes', [VendorMobileController::class, 'disputes']);
         Route::post('/disputes/{dispute}/respond', [VendorMobileController::class, 'respondDispute']);

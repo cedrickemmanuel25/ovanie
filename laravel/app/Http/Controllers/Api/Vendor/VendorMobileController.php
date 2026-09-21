@@ -1027,6 +1027,18 @@ class VendorMobileController extends Controller
         return response()->json(['message' => 'Décision sur le retour enregistrée.']);
     }
 
+    public function refundReturn(Request $request, ReturnModel $return): JsonResponse
+    {
+        $this->shopFor($request);
+        $this->bindUserToAuth($request);
+        $this->callController(VendorReturnController::class, 'refund', [
+            'request' => $request,
+            'id' => $return->id,
+        ]);
+
+        return response()->json(['message' => 'Décision de remboursement transmise à OVANIE Logistics.']);
+    }
+
     public function disputes(Request $request): JsonResponse
     {
         $shop = $this->shopFor($request);
@@ -1597,7 +1609,7 @@ class VendorMobileController extends Controller
         return $this->caseSummary($dispute) + [
             'id' => $dispute->id,
             'reference' => $dispute->order_reference ?: ('LIT-'.$dispute->id),
-            'status' => $dispute->status,
+            'status' => VendorDisputeController::resolveDisplayStatus($dispute),
             'subject' => $dispute->subject ?? $dispute->title ?? $dispute->reason,
             'description' => $dispute->response,
             'order_id' => $dispute->order_id,
