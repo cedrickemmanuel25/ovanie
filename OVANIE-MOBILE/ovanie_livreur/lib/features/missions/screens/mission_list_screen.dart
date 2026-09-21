@@ -74,7 +74,7 @@ class _MissionListScreenState extends State<MissionListScreen> {
         'accepted' => mission.isAccepted,
         'in_progress' => mission.isInProgress,
         'delivered' => mission.isDelivered,
-        _ => !mission.isRejected,
+        _ => !mission.isRejected && !mission.isOfferExpired,
       };
       if (!matchesFilter) return false;
       if (needle.isEmpty) return true;
@@ -529,6 +529,13 @@ class _MissionListCard extends StatelessWidget {
                 flex: 6,
                 child: Column(
                   children: [
+                    if (mission.netAmount > 0)
+                      MissionInfoRow(
+                        icon: Icons.payments_rounded,
+                        label: 'Vous gagnez',
+                        labelWidth: 72,
+                        value: missionMoney(mission.netAmount),
+                      ),
                     MissionInfoRow(
                       icon: Icons.schedule_rounded,
                       label: 'Heure prévue',

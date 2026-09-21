@@ -55,7 +55,13 @@
                 <div><h3>Mission</h3><p>Acceptation et démarrage</p></div>
             </div>
 
-            @if(in_array($mission['status'], ['planned', 'assigned']))
+            @if(in_array($mission['status'], ['planned', 'assigned', 'offered']))
+                @if(($mission['net_amount'] ?? 0) > 0)
+                    <div class="driver-operation-note is-ready">
+                        <i data-lucide="banknote"></i>
+                        <span>Vous gagnerez {{ number_format($mission['net_amount'], 0, ',', ' ') }} FCFA pour cette course.</span>
+                    </div>
+                @endif
                 <form method="POST" action="{{ route('driver.missions.accept', $mission['mission_number']) }}">
                     @csrf
                     <button class="driver-btn driver-btn--primary driver-btn--block" type="submit">

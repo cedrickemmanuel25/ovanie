@@ -142,6 +142,10 @@ class _MissionDetailScreenState extends State<MissionDetailScreen> {
                   else if (mission != null) ...[
                     MissionOverviewBlock(mission: mission),
                     const SizedBox(height: 12),
+                    if (mission.isToAccept && mission.netAmount > 0) ...[
+                      _EarningsCard(netAmount: mission.netAmount),
+                      const SizedBox(height: 12),
+                    ],
                     MissionPreparationStops(stops: mission.pickupStops, title: 'Collectes prévues'),
                     const SizedBox(height: 12),
                     _DeliveryPreview(mission: mission),
@@ -189,6 +193,60 @@ class _DeliveryPreview extends StatelessWidget {
           const MissionTintMessage(
             text: 'La mission pourra démarrer dès que tous les points sont prêts.',
             icon: Icons.info_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EarningsCard extends StatelessWidget {
+  const _EarningsCard({required this.netAmount});
+
+  final double netAmount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF9F3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFBFEBD9)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: const BoxDecoration(color: OvanieColors.green, shape: BoxShape.circle),
+            child: const Icon(Icons.payments_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Vous gagnerez',
+                  style: TextStyle(
+                    color: MissionPalette.slate,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  missionMoney(netAmount),
+                  style: const TextStyle(
+                    color: MissionPalette.navy,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

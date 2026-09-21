@@ -60,6 +60,11 @@ String missionDistance(double? value) {
   return '${value.toStringAsFixed(decimals).replaceAll('.', ',')} km';
 }
 
+String missionMoney(double value) {
+  if (value <= 0) return '—';
+  return '${_groupThousands(value.round().toString())} FCFA';
+}
+
 String incidentTypeLabel(String? type) {
   return switch (type) {
     'traffic_jam' => 'Embouteillage',

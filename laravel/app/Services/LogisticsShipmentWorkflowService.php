@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\DeliveryAssignment;
 use App\Models\DeliveryDriver;
 use App\Models\OrderItem;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\FirebasePushService;
 use App\Support\LogisticsOperationalDataScope;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class LogisticsShipmentWorkflowService
@@ -48,6 +50,174 @@ class LogisticsShipmentWorkflowService
             ->get()
             ->filter(fn (DeliveryDriver $driver) => $this->isDriverAvailable($driver) && $this->driverCanHandle($driver, $requiredCode))
             ->values();
+    }
+
+    /**
+     * Marque le colis prêt pour enlèvement OVANIE puis, si ce passage vient
+     * réellement de se produire (pas un rejeu / double clic), diffuse la
+     * course à tous les livreurs éligibles — voir broadcastToEligibleDrivers().
+     * Point d'entrée unique appelé par VendorOrderController::markShipped()
+     * (web + délégation mobile) et VendorMobileController::updateOrderPreparation().
+     */
+    public function markReadyAndBroadcast(OrderItem $item, ?User $actor = null, ?string $note = null): OrderItem
+    {
+        $wasReady = $item->delivery_status === OrderWorkflowService::DELIVERY_READY_FOR_PICKUP;
+        $updated = $this->workflow->markVendorReadyForOvanie($item, $actor, $note);
+
+        if (! $wasReady && $updated->delivery_status === OrderWorkflowService::DELIVERY_READY_FOR_PICKUP) {
+            $this->broadcastToEligibleDrivers($updated);
+        }
+
+        return $updated;
+    }
+
+    /**
+     * Crée une offre (DeliveryAssignment status="offered") pour chaque livreur
+     * éligible, avec le même prix affiché (montant net après commission
+     * OVANIE), puis notifie chacun par push. Le premier qui accepte
+     * (DriverMissionService::accept) remporte la course ; les autres offres
+     * expirent automatiquement. Aucun effet si le colis n'est plus "prêt pour
+     * enlèvement" ou si des offres sont déjà en cours (rediffusion évitée).
+     */
+    public function broadcastToEligibleDrivers(OrderItem $item): int
+    {
+        $drivers = DB::transaction(function () use ($item) {
+            $lockedItem = OrderItem::query()
+                ->with(['shipment', 'product.shop'])
+                ->whereKey($item->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedItem->delivery_status !== OrderWorkflowService::DELIVERY_READY_FOR_PICKUP) {
+                return collect();
+            }
+
+            $hasLiveOffers = DeliveryAssignment::query()
+                ->where('order_item_id', $lockedItem->id)
+                ->where('status', 'offered')
+                ->exists();
+            if ($hasLiveOffers) {
+                return collect();
+            }
+
+            $eligible = $this->eligibleDrivers($lockedItem);
+            if ($eligible->isEmpty()) {
+                Log::info('OVANIE Logistics : aucun livreur éligible pour diffuser la course.', [
+                    'order_item_id' => $lockedItem->id,
+                ]);
+                return collect();
+            }
+
+            $requiredCode = $this->requiredVehicleCode($lockedItem);
+            $pricing = $this->priceForItem($lockedItem);
+
+            foreach ($eligible as $driver) {
+                DeliveryAssignment::create([
+                    'order_id' => $lockedItem->order_id,
+                    'order_item_id' => $lockedItem->id,
+                    'driver_id' => $driver->id,
+                    'status' => 'offered',
+                    'pickup_address' => $lockedItem->shipment?->pickup_address,
+                    'delivery_address' => $lockedItem->shipment?->delivery_address,
+                    'price_amount' => $pricing['gross'],
+                    'driver_commission_percent' => $pricing['commission_percent'],
+                    'driver_net_amount' => $pricing['net'],
+                    'meta' => array_filter([
+                        'required_vehicle_code' => $requiredCode,
+                    ]),
+                ]);
+            }
+
+            // Les push FCM ne doivent jamais partir tant que la transaction
+            // englobante (celle-ci, ou celle plus large de l'appelant — ex.
+            // VendorOrderController::updateStatus — qui verrouille toute la
+            // commande) n'a pas réellement validé : sinon un appel HTTP lent
+            // vers Firebase retiendrait ces verrous DB inutilement, et une
+            // notification pourrait partir pour une offre qui serait ensuite
+            // annulée par un rollback. DB::afterCommit() attend le commit le
+            // plus externe, quel que soit le niveau d'imbrication.
+            DB::afterCommit(function () use ($eligible, $pricing, $item) {
+                $netLabel = number_format((float) $pricing['net'], 0, ',', ' ') . ' FCFA';
+                foreach ($eligible as $driver) {
+                    $this->driverPush->sendToDriver(
+                        $driver,
+                        'Nouvelle course disponible',
+                        "Une livraison vous est proposée pour {$netLabel}. Ouvrez l'app pour l'accepter avant un autre livreur.",
+                        [
+                            'category' => 'mission_offered',
+                            'mission_number' => 'OVL-' . str_pad((string) $item->order_id, 5, '0', STR_PAD_LEFT) . '-01',
+                        ]
+                    );
+                }
+            });
+
+            return $eligible;
+        });
+
+        return $drivers->count();
+    }
+
+    /**
+     * Attache le prix (et le montant net livreur) à une affectation créée par
+     * le flux d'attribution manuelle de la Logistique
+     * (LogisticsController::assignShipment -> OrderWorkflowService::assignDriver,
+     * le seul chemin réellement appelé par l'interface staff aujourd'hui —
+     * contrairement à self::assign() ci-dessus, qui n'a aucun appelant), puis
+     * notifie le livreur par push avec le montant. $suppressNotification
+     * reprend le même indicateur que le reste de la boucle d'affectation
+     * consolidée (un seul push pour une mission multi-colis).
+     */
+    public function attachPricingAndNotify(DeliveryAssignment $assignment, OrderItem $item, bool $suppressNotification = false): void
+    {
+        $pricing = $this->priceForItem($item);
+
+        $assignment->forceFill([
+            'price_amount' => $pricing['gross'],
+            'driver_commission_percent' => $pricing['commission_percent'],
+            'driver_net_amount' => $pricing['net'],
+        ])->save();
+
+        if ($suppressNotification || ! $assignment->driver_id) {
+            return;
+        }
+
+        $driver = $assignment->driver ?: DeliveryDriver::find($assignment->driver_id);
+        if (! $driver) {
+            return;
+        }
+
+        $netLabel = number_format((float) $pricing['net'], 0, ',', ' ') . ' FCFA';
+
+        DB::afterCommit(function () use ($driver, $assignment, $netLabel) {
+            $this->driverPush->sendToDriver(
+                $driver,
+                'Nouvelle mission',
+                "Une livraison vous a été attribuée pour {$netLabel}. Ouvrez l'app pour l'accepter.",
+                [
+                    'category' => 'mission_assigned',
+                    'mission_number' => $assignment->resolved_mission_number,
+                ]
+            );
+        });
+    }
+
+    /**
+     * Prix de la course pour un colis donné : le montant de livraison déjà
+     * facturé au client sur cette ligne (OrderItem::delivery_price, calculé
+     * au checkout par OvanieDeliveryPriceCalculator), duquel on retient la
+     * commission OVANIE pour obtenir le montant net que touche le livreur.
+     */
+    private function priceForItem(OrderItem $item): array
+    {
+        $gross = round((float) $item->delivery_price, 0);
+        $commissionPercent = (float) Setting::getValue('logistics_driver_commission_percent', 15);
+        $net = round($gross * (1 - $commissionPercent / 100), 0);
+
+        return [
+            'gross' => $gross,
+            'commission_percent' => $commissionPercent,
+            'net' => $net,
+        ];
     }
 
     public function assign(
@@ -101,6 +271,8 @@ class LogisticsShipmentWorkflowService
                 ->whereIn('status', ['assigned', 'picked_up', 'in_transit'])
                 ->update(['status' => 'reassigned']);
 
+            $pricing = $this->priceForItem($lockedItem);
+
             $assignment = DeliveryAssignment::create([
                 'order_id' => $lockedItem->order_id,
                 'order_item_id' => $lockedItem->id,
@@ -111,6 +283,9 @@ class LogisticsShipmentWorkflowService
                 'pickup_address' => $data['pickup_address'] ?? $lockedItem->shipment?->pickup_address,
                 'delivery_address' => $data['delivery_address'] ?? $lockedItem->shipment?->delivery_address,
                 'pickup_scheduled_at' => $data['pickup_scheduled_at'] ?? null,
+                'price_amount' => $pricing['gross'],
+                'driver_commission_percent' => $pricing['commission_percent'],
+                'driver_net_amount' => $pricing['net'],
                 'meta' => array_filter([
                     'required_vehicle_code' => $requiredCode,
                     'driver_vehicle' => $lockedDriver->vehicle,

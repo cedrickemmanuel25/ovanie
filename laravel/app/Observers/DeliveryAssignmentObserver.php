@@ -13,6 +13,16 @@ class DeliveryAssignmentObserver
     public function created(DeliveryAssignment $assignment): void
     {
         $this->normalizeMissionNumber($assignment);
+
+        // Une offre diffusée à plusieurs livreurs candidats (status "offered",
+        // voir LogisticsShipmentWorkflowService::broadcastToEligibleDrivers)
+        // n'est pas une affectation : le message "mission affectée" serait
+        // trompeur tant qu'aucun livreur n'a accepté. La notification propre
+        // à l'offre (avec le montant) part séparément via FirebasePushService.
+        if ($assignment->status === 'offered') {
+            return;
+        }
+
         $this->notifyDriver($assignment->fresh(['driver', 'order']));
     }
 
@@ -21,6 +31,16 @@ class DeliveryAssignmentObserver
         $this->normalizeMissionNumber($assignment);
 
         if ($assignment->wasChanged('driver_id') && $assignment->driver_id) {
+            $this->notifyDriver($assignment->fresh(['driver', 'order']));
+            return;
+        }
+
+        // Un livreur qui remporte une offre diffusée (offered -> accepted)
+        // reçoit ici la confirmation "mission affectée" classique.
+        if ($assignment->wasChanged('status')
+            && $assignment->status === 'accepted'
+            && $assignment->getOriginal('status') === 'offered'
+        ) {
             $this->notifyDriver($assignment->fresh(['driver', 'order']));
         }
     }

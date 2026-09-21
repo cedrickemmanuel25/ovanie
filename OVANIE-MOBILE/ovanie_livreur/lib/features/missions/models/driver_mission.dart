@@ -61,6 +61,7 @@ class DriverMissionSummaryModel {
     this.vehicleLabel,
     this.preparationPercent = 0,
     this.readyCount = 0,
+    this.netAmount = 0,
   });
 
   final String missionNumber;
@@ -86,6 +87,7 @@ class DriverMissionSummaryModel {
   final String? vehicleLabel;
   final int preparationPercent;
   final int readyCount;
+  final double netAmount;
 
   factory DriverMissionSummaryModel.fromJson(Map<String, dynamic> json) {
     return DriverMissionSummaryModel(
@@ -112,10 +114,13 @@ class DriverMissionSummaryModel {
       vehicleLabel: json['vehicle_label']?.toString(),
       preparationPercent: _asInt(json['preparation_percent']),
       readyCount: _asInt(json['ready_count']),
+      netAmount: _asDouble(json['net_amount']),
     );
   }
 
-  bool get isToAccept => status == 'assigned' || status == 'planned';
+  bool get isToAccept => status == 'assigned' || status == 'planned' || status == 'offered';
+  bool get isOffered => status == 'offered';
+  bool get isOfferExpired => status == 'offer_expired';
   bool get isAccepted => status == 'accepted';
   bool get isCollecting => status == 'collecting';
   bool get isLoaded => status == 'picked_up';
@@ -126,7 +131,7 @@ class DriverMissionSummaryModel {
   bool get hasIncident => status == 'incident';
   bool get isInProgress =>
       isCollecting || isLoaded || isInTransit || isArrived || hasIncident;
-  bool get isHistory => isDelivered || isRejected || hasIncident;
+  bool get isHistory => isDelivered || isRejected || hasIncident || isOfferExpired;
 
   String get displayDestination {
     final preferred = (destinationLabel ?? '').trim();
@@ -162,6 +167,7 @@ class DriverMissionDetail extends DriverMissionSummaryModel {
     super.vehicleLabel,
     super.preparationPercent,
     super.readyCount,
+    super.netAmount,
     this.destinationAddress,
     this.pickupStops = const [],
     this.routePlan,
@@ -219,6 +225,7 @@ class DriverMissionDetail extends DriverMissionSummaryModel {
       vehicleLabel: summary.vehicleLabel,
       preparationPercent: summary.preparationPercent,
       readyCount: summary.readyCount,
+      netAmount: summary.netAmount,
       destinationAddress: json['destination_address']?.toString(),
       incidentType: json['incident_type']?.toString(),
       incidentDescription: json['incident_description']?.toString(),

@@ -231,14 +231,69 @@ class DriverMissionService
         $assignments = $this->assignments($driver, $missionNumber);
         abort_if($assignments->isEmpty(), 404);
 
-        $this->latestPerItem($assignments)->each(fn (DeliveryAssignment $assignment) =>
+        foreach ($this->latestPerItem($assignments) as $assignment) {
+            if ($assignment->status === 'offered') {
+                $this->acceptOffer($driver, $assignment);
+                continue;
+            }
+
             $assignment->forceFill([
                 'status' => 'accepted',
                 'accepted_at' => $assignment->accepted_at ?: now(),
                 'rejected_at' => null,
                 'rejection_reason' => null,
-            ])->save()
-        );
+            ])->save();
+        }
+    }
+
+    /**
+     * Fait gagner la course au livreur qui accepte en premier : verrouille le
+     * colis, vérifie que personne ne l'a déjà remportée entretemps, fait
+     * expirer les offres des autres livreurs candidats, puis affecte
+     * réellement le colis (même transition que l'attribution manuelle par la
+     * Logistique). Voir LogisticsShipmentWorkflowService::broadcastToEligibleDrivers.
+     */
+    private function acceptOffer(DeliveryDriver $driver, DeliveryAssignment $assignment): void
+    {
+        DB::transaction(function () use ($driver, $assignment) {
+            $lockedItem = OrderItem::query()
+                ->whereKey($assignment->order_item_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedItem->delivery_status !== OrderWorkflowService::DELIVERY_READY_FOR_PICKUP) {
+                $assignment->forceFill(['status' => 'offer_expired'])->save();
+
+                throw ValidationException::withMessages([
+                    'mission' => 'Cette course a déjà été acceptée par un autre livreur.',
+                ]);
+            }
+
+            DeliveryAssignment::query()
+                ->where('order_item_id', $lockedItem->id)
+                ->where('status', 'offered')
+                ->where('id', '!=', $assignment->id)
+                ->update(['status' => 'offer_expired']);
+
+            $assignment->forceFill([
+                'status' => 'accepted',
+                'accepted_at' => now(),
+                'rejected_at' => null,
+                'rejection_reason' => null,
+            ])->save();
+
+            $this->workflow->setDeliveryStatus(
+                $lockedItem,
+                OrderWorkflowService::DELIVERY_ASSIGNED,
+                null,
+                'logistics',
+                'Course acceptée par ' . $driver->name . '.',
+                [
+                    'driver_name' => $driver->name,
+                    'driver_phone' => $driver->phone,
+                ]
+            );
+        });
     }
 
     public function reject(DeliveryDriver $driver, string $missionNumber, ?string $reason): void
@@ -811,6 +866,7 @@ class DriverMissionService
             'line_count' => collect($group['items'] ?? [])->count(),
             'total_weight_kg' => (float) ($group['weight'] ?? 0),
             'total_volume_m3' => (float) ($group['volume'] ?? 0),
+            'net_amount' => (float) $latest->sum('driver_net_amount'),
             // Sur les écrans Mission, on affiche le véhicule requis par le
             // chargement (poids/volume), comme sur les maquettes. Le véhicule
             // personnel du partenaire reste affiché dans son Accueil/Profil.
@@ -837,7 +893,7 @@ class DriverMissionService
         }
 
         $statuses = $assignments->pluck('status');
-        foreach (['incident', 'arrived', 'in_transit', 'picked_up', 'collecting', 'accepted', 'assigned', 'planned', 'rejected'] as $status) {
+        foreach (['incident', 'arrived', 'in_transit', 'picked_up', 'collecting', 'accepted', 'assigned', 'offered', 'planned', 'rejected', 'offer_expired'] as $status) {
             if ($statuses->contains($status)) {
                 return $status;
             }
@@ -851,6 +907,8 @@ class DriverMissionService
         return match ($status) {
             'planned' => 'Planifiée',
             'assigned' => 'À accepter',
+            'offered' => 'Nouvelle course à accepter',
+            'offer_expired' => 'Prise par un autre livreur',
             'accepted' => 'Acceptée',
             'collecting' => 'Collectes en cours',
             'picked_up' => 'Chargement terminé',

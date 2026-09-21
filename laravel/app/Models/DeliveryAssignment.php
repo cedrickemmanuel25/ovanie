@@ -31,6 +31,9 @@ class DeliveryAssignment extends Model
         'picked_up_at',
         'delivered_at',
         'meta',
+        'price_amount',
+        'driver_commission_percent',
+        'driver_net_amount',
     ];
 
     protected $casts = [
@@ -46,6 +49,9 @@ class DeliveryAssignment extends Model
         'picked_up_at' => 'datetime',
         'delivered_at' => 'datetime',
         'meta' => 'array',
+        'price_amount' => 'decimal:2',
+        'driver_commission_percent' => 'decimal:2',
+        'driver_net_amount' => 'decimal:2',
     ];
 
     public function order()

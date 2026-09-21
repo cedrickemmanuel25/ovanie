@@ -34,7 +34,7 @@ class DriverMissionController extends Controller
         return response()->json([
             'missions' => $missions->map(fn (array $mission) => $this->serializeSummary($mission))->values()->all(),
             'counts' => [
-                'to_accept' => $missions->filter(fn (array $mission) => in_array($mission['status'] ?? '', ['assigned', 'planned'], true))->count(),
+                'to_accept' => $missions->filter(fn (array $mission) => in_array($mission['status'] ?? '', ['assigned', 'planned', 'offered'], true))->count(),
                 'accepted' => $missions->where('status', 'accepted')->count(),
                 'in_progress' => $missions->filter(fn (array $mission) => in_array($mission['status'] ?? '', [
                     'collecting', 'picked_up', 'in_transit', 'arrived', 'incident',
@@ -277,6 +277,7 @@ class DriverMissionController extends Controller
             'line_count' => (int) ($mission['line_count'] ?? 0),
             'total_weight_kg' => (float) ($mission['total_weight_kg'] ?? 0),
             'total_volume_m3' => (float) ($mission['total_volume_m3'] ?? 0),
+            'net_amount' => (float) ($mission['net_amount'] ?? 0),
             'vehicle_code' => $mission['vehicle_code'] ?? null,
             'vehicle_label' => $mission['vehicle_label'] ?? null,
             'preparation_percent' => (int) ($mission['preparation_percent'] ?? 0),

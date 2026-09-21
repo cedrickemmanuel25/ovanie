@@ -1330,7 +1330,7 @@ class LogisticsController extends Controller
         );
 
         if ((int) $group['preparation_percent'] >= 100) {
-            DB::transaction(function () use ($group, $driver, $pickupAt, $data) {
+            DB::transaction(function () use ($group, $driver, $pickupAt, $data, $shipmentWorkflow) {
                 $workflow = app(OrderWorkflowService::class);
 
                 foreach ($group['items'] as $index => $groupItem) {
@@ -1338,17 +1338,21 @@ class LogisticsController extends Controller
                         continue;
                     }
 
-                    $workflow->assignDriver($groupItem->fresh(), [
+                    $suppressNotification = $index > 0 || ! (bool) ($data['notify_driver'] ?? true);
+
+                    $assignment = $workflow->assignDriver($groupItem->fresh(), [
                         'driver_id' => $driver->id,
                         'pickup_scheduled_at' => $pickupAt,
                         'delivery_address' => $group['address'],
                         'meta' => [
                             'mission_number' => $group['mission_number'],
                             'consolidated' => true,
-                            'suppress_notifications' => $index > 0 || ! (bool) ($data['notify_driver'] ?? true),
+                            'suppress_notifications' => $suppressNotification,
                         ],
-                        'suppress_notifications' => $index > 0 || ! (bool) ($data['notify_driver'] ?? true),
+                        'suppress_notifications' => $suppressNotification,
                     ], auth()->user());
+
+                    $shipmentWorkflow->attachPricingAndNotify($assignment, $groupItem, $suppressNotification);
                 }
             });
 

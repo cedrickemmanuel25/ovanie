@@ -9,6 +9,7 @@ use App\Models\VendorPaymentVerificationRequest;
 use App\Services\CommissionService;
 use App\Services\ClientDeliveryGroupService;
 use App\Services\DeliveryNotificationService;
+use App\Services\LogisticsShipmentWorkflowService;
 use App\Services\OrderWorkflowService;
 use App\Services\SellerDeliverySupervisionService;
 use App\Services\VendorOrderTransitionService;
@@ -243,7 +244,8 @@ class VendorOrderController extends Controller
         Order $order,
         Request $request,
         VendorOrderTransitionService $transitions,
-        OrderWorkflowService $workflow
+        OrderWorkflowService $workflow,
+        LogisticsShipmentWorkflowService $logistics
     ) {
         $shop = Auth::user()?->shop;
         $this->authorizeOrder($order, $shop);
@@ -296,7 +298,7 @@ class VendorOrderController extends Controller
                 ]);
 
                 if ($status === 'ready' && $item->delivery_provider === OrderWorkflowService::PROVIDER_OVANIE) {
-                    $workflow->markVendorReadyForOvanie(
+                    $logistics->markReadyAndBroadcast(
                         $item->refresh(),
                         Auth::user(),
                         'Le vendeur a terminé la préparation. Le colis est prêt pour enlèvement OVANIE.'
@@ -607,7 +609,8 @@ class VendorOrderController extends Controller
         Order $order,
         VendorOrderTransitionService $transitions,
         OrderWorkflowService $workflow,
-        SellerDeliverySupervisionService $supervision
+        SellerDeliverySupervisionService $supervision,
+        LogisticsShipmentWorkflowService $logistics
     ) {
         $shop = Auth::user()?->shop;
         $this->authorizeOrder($order, $shop);
@@ -624,7 +627,7 @@ class VendorOrderController extends Controller
 
         $sellerTrackingSession = null;
 
-        DB::transaction(function () use ($order, $shop, $validated, $transitions, $workflow, $supervision, &$sellerTrackingSession) {
+        DB::transaction(function () use ($order, $shop, $validated, $transitions, $workflow, $supervision, $logistics, &$sellerTrackingSession) {
             $lockedOrder = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
             $itemsQuery = $this->vendorItems($lockedOrder, (int) $shop->id);
             $requestedProvider = $validated['delivery_provider'] ?? null;
@@ -664,7 +667,7 @@ class VendorOrderController extends Controller
                     }
 
                     $transitions->assertCanMarkReadyForOvanie($item);
-                    $workflow->markVendorReadyForOvanie(
+                    $logistics->markReadyAndBroadcast(
                         $item,
                         Auth::user(),
                         'Le colis est prêt pour l’enlèvement OVANIE Logistics.'

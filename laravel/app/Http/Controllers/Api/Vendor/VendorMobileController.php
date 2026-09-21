@@ -25,6 +25,7 @@ use App\Models\Shop;
 use App\Models\User;
 use App\Models\VendorPayout;
 use App\Services\CommissionService;
+use App\Services\LogisticsShipmentWorkflowService;
 use App\Services\OrderWorkflowService;
 use App\Services\OvanieReferenceDataService;
 use App\Services\ProductSheetPresenter;
@@ -802,7 +803,8 @@ class VendorMobileController extends Controller
         Request $request,
         Order $order,
         VendorOrderTransitionService $transitions,
-        OrderWorkflowService $workflow
+        OrderWorkflowService $workflow,
+        LogisticsShipmentWorkflowService $logistics
     ): JsonResponse {
         $shop = $this->shopFor($request);
         $this->authorizeOrder($order, $shop);
@@ -815,7 +817,7 @@ class VendorMobileController extends Controller
         $note = $validated['vendor_status_note'] ?? null;
         $rank = ['pending' => 0, 'accepted' => 1, 'preparing' => 2, 'ready' => 3];
 
-        DB::transaction(function () use ($order, $shop, $target, $note, $rank, $transitions, $workflow, $request) {
+        DB::transaction(function () use ($order, $shop, $target, $note, $rank, $transitions, $workflow, $logistics, $request) {
             $lockedOrder = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
             $items = $this->visibleVendorItems($lockedOrder->items(), $shop)->lockForUpdate()->get();
 
@@ -862,7 +864,7 @@ class VendorMobileController extends Controller
                     ]);
 
                     if ($next === 'ready' && $item->delivery_provider === OrderWorkflowService::PROVIDER_OVANIE) {
-                        $workflow->markVendorReadyForOvanie(
+                        $logistics->markReadyAndBroadcast(
                             $item->refresh(),
                             $request->user(),
                             'Le vendeur a terminé la préparation. Le colis est prêt pour enlèvement OVANIE.'
