@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\DeliveryDriver;
+use App\Models\DriverPushDevice;
 use App\Models\MobilePushDevice;
 use App\Models\User;
 use Firebase\JWT\JWT;
@@ -108,6 +110,102 @@ class FirebasePushService
             Log::warning('FCM OVANIE: notification non envoyée.', [
                 'device_id' => $device->id,
                 'user_id' => $device->user_id,
+                'status' => $response->status(),
+                'error' => $errorStatus,
+            ]);
+            return false;
+        } catch (\Throwable $exception) {
+            report($exception);
+            $device->forceFill([
+                'last_error_at' => now(),
+                'last_error_code' => 'transport_error',
+            ])->save();
+            return false;
+        }
+    }
+
+    public function sendToDriver(DeliveryDriver $driver, string $title, string $body, array $data = []): int
+    {
+        if (! $this->configured() || ! Schema::hasTable('driver_push_devices')) {
+            return 0;
+        }
+
+        // Comme pour les clients, toutes les installations actives du livreur
+        // reçoivent la notification (téléphone principal, éventuel second
+        // appareil), sans désactiver les autres.
+        $devices = DriverPushDevice::query()
+            ->where('driver_id', $driver->id)
+            ->where('is_active', true)
+            ->orderByDesc('last_seen_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $sent = 0;
+        foreach ($devices as $device) {
+            if ($this->sendToDriverDevice($device, $title, $body, $data)) {
+                $sent++;
+            }
+        }
+
+        return $sent;
+    }
+
+    public function sendToDriverDevice(DriverPushDevice $device, string $title, string $body, array $data = []): bool
+    {
+        if (! $this->configured()) {
+            return false;
+        }
+
+        $projectId = (string) config('firebase_push.project_id');
+        $endpoint = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+        $payloadData = collect($data)
+            ->filter(fn ($value) => $value !== null)
+            ->mapWithKeys(fn ($value, $key) => [(string) $key => is_scalar($value) ? (string) $value : json_encode($value)])
+            ->all();
+
+        try {
+            $response = Http::timeout((int) config('firebase_push.timeout', 15))
+                ->withToken($this->accessToken())
+                ->acceptJson()
+                ->post($endpoint, [
+                    'message' => [
+                        'token' => $device->token,
+                        'notification' => [
+                            'title' => $title,
+                            'body' => $body,
+                        ],
+                        'data' => $payloadData,
+                        // Pas de channel_id personnalisé : contrairement à l'app
+                        // client, l'app livreur ne crée pas encore de canal de
+                        // notification Android dédié. Un channel_id qui n'existe
+                        // pas sur l'appareil fait échouer silencieusement
+                        // l'affichage sur Android 8+, donc on laisse FCM utiliser
+                        // son canal de secours par défaut.
+                        'android' => [
+                            'priority' => 'high',
+                        ],
+                    ],
+                ]);
+
+            if ($response->successful()) {
+                $device->forceFill([
+                    'last_error_at' => null,
+                    'last_error_code' => null,
+                ])->save();
+                return true;
+            }
+
+            $errorStatus = (string) data_get($response->json(), 'error.status', 'HTTP_'.$response->status());
+            $invalid = in_array($errorStatus, ['UNREGISTERED', 'INVALID_ARGUMENT'], true);
+            $device->forceFill([
+                'is_active' => $invalid ? false : $device->is_active,
+                'last_error_at' => now(),
+                'last_error_code' => $errorStatus,
+            ])->save();
+
+            Log::warning('FCM OVANIE Livreur: notification non envoyée.', [
+                'device_id' => $device->id,
+                'driver_id' => $device->driver_id,
                 'status' => $response->status(),
                 'error' => $errorStatus,
             ]);

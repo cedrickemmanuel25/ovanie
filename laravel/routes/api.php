@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Driver\DriverDashboardController;
 use App\Http\Controllers\Api\Driver\DriverMissionController;
 use App\Http\Controllers\Api\Driver\DriverOnboardingController;
 use App\Http\Controllers\Api\Driver\DriverPresenceController;
+use App\Http\Controllers\Api\Driver\DriverPushDeviceController;
 use App\Http\Controllers\Api\Commercial\CommercialMobileDashboardController;
 use App\Http\Controllers\Api\Commercial\CommercialMobileClientController;
 use App\Http\Controllers\Api\Commercial\CommercialMobileShopController;
@@ -600,6 +601,13 @@ Route::prefix('driver')->name('api.driver.')->group(function () {
             ->middleware('throttle:10,1')
             ->name('onboarding.submit');
         Route::get('/territory/communes', [DriverOnboardingController::class, 'communes'])->name('territory.communes');
+        Route::get('/push', [DriverPushDeviceController::class, 'status'])->name('push.status');
+        Route::post('/push/devices', [DriverPushDeviceController::class, 'store'])
+            ->middleware('throttle:15,1')
+            ->name('push.devices.store');
+        Route::delete('/push/devices', [DriverPushDeviceController::class, 'destroy'])
+            ->middleware('throttle:15,1')
+            ->name('push.devices.destroy');
     });
 });
 

@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import '../../core/config/api_config.dart';
 import '../../core/location/driver_presence_service.dart';
 import '../../core/network/api_client.dart';
+import '../../core/push/push_notification_service.dart';
 import '../../core/storage/token_storage.dart';
 import '../../shared/widgets/phone_format.dart';
 import '../auth/login_screen.dart';
@@ -116,6 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _loggingOut = true);
     try {
       await DriverPresenceService.instance.stop(notifyBackend: true);
+      await PushNotificationService.instance.unregisterCurrentDevice();
       await TokenStorage.instance.clear();
       ApiClient.setBearerToken(null);
     } catch (_) {

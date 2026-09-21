@@ -6,6 +6,7 @@ use App\Models\DeliveryAssignment;
 use App\Models\DeliveryDriver;
 use App\Models\OrderItem;
 use App\Models\User;
+use App\Services\FirebasePushService;
 use App\Support\LogisticsOperationalDataScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -32,6 +33,7 @@ class LogisticsShipmentWorkflowService
     public function __construct(
         private readonly OrderWorkflowService $workflow,
         private readonly OvanieNotificationDispatcher $notifications,
+        private readonly FirebasePushService $driverPush,
     ) {
     }
 
@@ -54,7 +56,7 @@ class LogisticsShipmentWorkflowService
         array $data,
         ?User $actor = null
     ): DeliveryAssignment {
-        return DB::transaction(function () use ($item, $driver, $data, $actor) {
+        $assignment = DB::transaction(function () use ($item, $driver, $data, $actor) {
             $lockedItem = OrderItem::query()
                 ->with(['shipment', 'product.shop', 'order.client'])
                 ->whereKey($item->id)
@@ -130,6 +132,23 @@ class LogisticsShipmentWorkflowService
 
             return $assignment->fresh(['driver']);
         });
+
+        // Hors transaction : l'attribution reste valide même si la notification
+        // push échoue, si Firebase n'est pas configuré (voir
+        // FirebasePushService::configured()), ou si l'appel réseau est lent. Le
+        // livreur retrouve de toute façon la mission au prochain rafraîchissement
+        // de la liste.
+        $this->driverPush->sendToDriver(
+            $assignment->driver,
+            'Nouvelle mission',
+            'Une nouvelle livraison vous a été attribuée. Ouvrez l’app pour l’accepter.',
+            [
+                'category' => 'mission_assigned',
+                'mission_number' => $assignment->resolved_mission_number,
+            ]
+        );
+
+        return $assignment;
     }
 
     public function advance(OrderItem $item, string $targetStatus, ?User $actor = null, ?string $note = null): OrderItem

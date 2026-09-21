@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/network/api_client.dart';
+import '../../core/push/push_notification_service.dart';
 import '../../shared/widgets/ovanie_widgets.dart';
 import '../driver/data/driver_repository.dart';
 import '../driver/models/driver_profile.dart';
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _load();
+    unawaited(PushNotificationService.instance.registerCurrentDevice(force: true));
     _verificationTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (!mounted || _loading || _isActive) return;
       _load();
