@@ -1350,6 +1350,13 @@ class VendorMobileController extends Controller
             'sale_type' => $product->sale_type,
             'created_at' => optional($product->created_at)->toIso8601String(),
             'updated_at' => optional($product->updated_at)->toIso8601String(),
+
+            // Seuils de négociation : réservés à l'espace vendeur, jamais
+            // exposés côté client (voir NegotiationController::store()).
+            'is_negotiable' => (bool) $product->is_negotiable,
+            'price_p1' => $product->price_p1,
+            'price_p2' => $product->price_p2,
+            'price_p3' => $product->price_p3,
         ]);
 
         if ($detailed) {

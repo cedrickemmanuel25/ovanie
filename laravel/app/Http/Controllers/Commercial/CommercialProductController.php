@@ -153,6 +153,10 @@ class CommercialProductController extends Controller
             'width_cm' => [$required(), 'nullable', 'numeric', $publishing ? 'gt:0' : 'min:0'],
             'height_cm' => [$required(), 'nullable', 'numeric', $publishing ? 'gt:0' : 'min:0'],
             'fragile' => [$required(), 'nullable', Rule::in(['0', '1', 0, 1])],
+            'is_negotiable' => ['nullable', 'boolean'],
+            'price_p1' => ['nullable', 'required_if:is_negotiable,1', 'integer', 'min:1', 'lt:price'],
+            'price_p2' => ['nullable', 'required_if:is_negotiable,1', 'integer', 'min:1', 'lt:price_p1'],
+            'price_p3' => ['nullable', 'required_if:is_negotiable,1', 'integer', 'min:1', 'lt:price_p2'],
             'requires_unloading' => [$required(), 'nullable', Rule::in(['0', '1', 0, 1])],
             'unloading_instructions' => ['nullable', 'required_if:requires_unloading,1', 'string', 'max:2000'],
             'images' => ['nullable', 'array', 'max:8'],
@@ -172,9 +176,11 @@ class CommercialProductController extends Controller
             $volume = round(((float) $data['length_cm'] * (float) $data['width_cm'] * (float) $data['height_cm']) / 1000000, 6);
         }
         return [
-            ...collect($data)->only(['shop_id','category_id','name','brand','type','short_description','description','price','promo_price','stock','unit','packaging','min_order_quantity','units_per_package','supply_delay','usage_area','technical_details','weight_kg','length_cm','width_cm','height_cm','unloading_instructions'])->all(),
+            ...collect($data)->only(['shop_id','category_id','name','brand','type','short_description','description','price','promo_price','stock','unit','packaging','min_order_quantity','units_per_package','supply_delay','usage_area','technical_details','weight_kg','length_cm','width_cm','height_cm','unloading_instructions','price_p1','price_p2','price_p3'])->all(),
             'stock' => (int) ($data['stock'] ?? 0), 'sale_type' => 'normal', 'product_attributes' => $attributes,
             'volume_m3' => $volume, 'fragile' => array_key_exists('fragile', $data) ? (bool) $data['fragile'] : false,
+            'is_negotiable' => ! empty($data['is_negotiable'])
+                && ! empty($data['price_p1']) && ! empty($data['price_p2']) && ! empty($data['price_p3']),
             'requires_unloading' => array_key_exists('requires_unloading', $data) ? (bool) $data['requires_unloading'] : false,
             'status' => $publishing ? ($shop->canPublishProducts() ? 'actif' : 'pending_logistics') : 'draft',
             'is_active' => $publishing && $shop->canPublishProducts(),

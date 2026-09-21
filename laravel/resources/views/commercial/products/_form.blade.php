@@ -5,6 +5,7 @@
     $workspaceShop = $shops->firstWhere('id', $selectedShopId);
     $attrs = old('attributes', $editing ? ($product->product_attributes ?: []) : []);
     $attrs = count($attrs) ? $attrs : [['label' => '', 'value' => '', 'unit' => '']];
+    $isNegotiable = old('is_negotiable', ($editing && $product->is_negotiable) ? '1' : '0') === '1';
 @endphp
 
 <style>
@@ -141,6 +142,16 @@
                     <div class="form-group"><label class="required">Quantité minimale</label><input type="number" min="0.01" step="0.01" name="min_order_quantity" value="{{ $value('min_order_quantity', 1) }}"></div>
                     <div class="form-group"><label>Quantité par conditionnement</label><input type="number" min="0.01" step="0.01" name="units_per_package" value="{{ $value('units_per_package') }}"></div>
                     <div class="form-group"><label>Délai d’approvisionnement</label><input name="supply_delay" value="{{ $value('supply_delay') }}" placeholder="Ex. 48 heures"></div>
+                    <div class="form-group span-2">
+                        <label>Prix négociable</label>
+                        <div class="radio-row">
+                            <label class="radio-option"><input type="radio" name="is_negotiable" value="1" @checked($isNegotiable)> Oui, accepter les propositions</label>
+                            <label class="radio-option"><input type="radio" name="is_negotiable" value="0" @checked(! $isNegotiable)> Non, prix fixe</label>
+                        </div>
+                        <input type="hidden" name="price_p1" id="priceP1" value="{{ $value('price_p1') }}">
+                        <input type="hidden" name="price_p2" id="priceP2" value="{{ $value('price_p2') }}">
+                        <input type="hidden" name="price_p3" id="priceP3" value="{{ $value('price_p3') }}">
+                    </div>
                 </div>
             </section>
 
@@ -332,6 +343,24 @@
     }
     document.querySelectorAll('input[name="requires_unloading"]').forEach(input => input.addEventListener('change', toggleUnloading));
     toggleUnloading();
+
+    function updateNegotiationOffers() {
+        const price = Number(document.querySelector('input[name="price"]')?.value || 0);
+        const negotiable = document.querySelector('input[name="is_negotiable"]:checked')?.value === '1';
+        if (!negotiable || !price) return;
+        const p1 = document.getElementById('priceP1');
+        const p2 = document.getElementById('priceP2');
+        const p3 = document.getElementById('priceP3');
+        // Toujours recalculés à partir du prix courant (sinon un prix modifié
+        // après activation de la négociation peut laisser des seuils >= au
+        // nouveau prix et faire échouer la validation price_p1 < price).
+        if (p1) p1.value = Math.max(1, Math.round(price * .95));
+        if (p2) p2.value = Math.max(1, Math.round(price * .90));
+        if (p3) p3.value = Math.max(1, Math.round(price * .85));
+    }
+    document.querySelector('input[name="price"]')?.addEventListener('input', updateNegotiationOffers);
+    document.querySelectorAll('input[name="is_negotiable"]').forEach(input => input.addEventListener('change', updateNegotiationOffers));
+    updateNegotiationOffers();
 
     document.getElementById('addAttribute').addEventListener('click', () => {
         document.getElementById('attributes').insertAdjacentHTML('beforeend', `<div class="attributes-row"><input name="attributes[${attrIndex}][label]" placeholder="Ex. Puissance"><input name="attributes[${attrIndex}][value]" placeholder="Ex. 200"><input name="attributes[${attrIndex}][unit]" placeholder="Ex. W"><button type="button" class="small-icon-button remove-attribute" aria-label="Supprimer">×</button></div>`);

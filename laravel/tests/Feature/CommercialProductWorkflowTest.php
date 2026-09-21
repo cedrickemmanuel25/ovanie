@@ -85,4 +85,48 @@ class CommercialProductWorkflowTest extends TestCase
         $source=file_get_contents(app_path('Http/Controllers/Commercial/CommercialProductController.php'));
         $this->assertStringContainsString('abort_unless($this->managedShops($request)->whereKey($product->shop_id)->exists(), 403);',$source);
     }
+
+    public function test_negotiable_offers_are_required_when_is_negotiable_is_checked(): void
+    {
+        $data=$this->publishPayload();
+        $data['is_negotiable']='1';
+        $errors=Validator::make($data,$this->rules(true))->errors();
+        $this->assertTrue($errors->has('price_p1') && $errors->has('price_p2') && $errors->has('price_p3'));
+    }
+
+    public function test_negotiable_offers_pass_validation_when_strictly_decreasing_below_price(): void
+    {
+        $data=$this->publishPayload();
+        $data['is_negotiable']='1';
+        $data['price_p1']=4750; $data['price_p2']=4500; $data['price_p3']=4250;
+        $this->assertFalse(Validator::make($data,$this->rules(true))->fails());
+    }
+
+    public function test_stale_offer_above_a_lowered_price_fails_validation(): void
+    {
+        $data=$this->publishPayload();
+        $data['price']=4000; // baissé après calcul initial des offres sur 5000
+        $data['is_negotiable']='1';
+        $data['price_p1']=4750; $data['price_p2']=4500; $data['price_p3']=4250;
+        $this->assertTrue(Validator::make($data,$this->rules(true))->errors()->has('price_p1'));
+    }
+
+    public function test_product_attributes_marks_negotiable_only_when_all_three_offers_are_present(): void
+    {
+        $shop=new Shop(['status'=>'approved','is_active'=>true,'logistics_status'=>'ready','logistics_type'=>'ovanie','address'=>'Rue 1','commune'=>'Cocody','district'=>'Anono','latitude'=>5.3,'longitude'=>-4.0,'geo_status'=>'verified']);
+        $method=new ReflectionMethod(CommercialProductController::class,'productAttributes');
+
+        $data=$this->publishPayload();
+        $data['is_negotiable']='1';
+        $data['price_p1']=4750; $data['price_p2']=4500; $data['price_p3']=4250;
+        $attributes=$method->invoke(new CommercialProductController(),$data,true,$shop);
+        $this->assertTrue($attributes['is_negotiable']);
+        $this->assertSame(4750,$attributes['price_p1']);
+        $this->assertSame(4250,$attributes['price_p3']);
+
+        $data['is_negotiable']='1';
+        unset($data['price_p3']);
+        $attributes=$method->invoke(new CommercialProductController(),$data,true,$shop);
+        $this->assertFalse($attributes['is_negotiable']);
+    }
 }
