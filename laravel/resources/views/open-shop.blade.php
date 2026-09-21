@@ -16,7 +16,7 @@
 @php
     $stepFields = [
         1 => ['sellerName', 'sellerEmail', 'sellerPhone', 'sellerType', 'password', 'companyName', 'legalForm', 'rccm', 'taxpayerNumber', 'rccmFile', 'taxFile'],
-        2 => ['shopName', 'description', 'selfie', 'region', 'city', 'commune', 'commune_id', 'district', 'quarter_id', 'landmark', 'landmark_id', 'address', 'main_category', 'delivery_zone', 'logistics_type', 'latitude', 'longitude', 'whatsapp', 'business_email'],
+        2 => ['shopName', 'description', 'selfie', 'region', 'city', 'commune', 'commune_id', 'district', 'quarter_id', 'landmark', 'landmark_id', 'address', 'categories', 'categories.*', 'delivery_zone', 'logistics_type', 'latitude', 'longitude', 'whatsapp', 'business_email'],
         3 => ['identityCountry', 'identityType', 'identityNumber', 'identityUploadMode', 'identityFile', 'identityFileFront', 'identityFileBack'],
         4 => ['payment_mode', 'mmOperator', 'mmNumber', 'mmHolder'],
         5 => ['terms'],
@@ -523,15 +523,20 @@
                             </div>
 
                             <div class="form-grid two-cols">
-                                <div class="field">
-                                    <label for="main_category">Catégorie principale <em>*</em></label>
-                                    <select id="main_category" name="main_category" required>
-                                        <option value="">Sélectionner une catégorie</option>
+                                <div class="field span-2">
+                                    <label for="categories">Catégories de produits vendus <em>*</em></label>
+                                    <small>Sélectionnez toutes les catégories dans lesquelles vous vendez des produits. La première catégorie cochée devient la catégorie principale de la boutique.</small>
+                                    @php $selectedCategories = old('categories', []); @endphp
+                                    <div class="categories-multiselect" id="categories">
                                         @foreach ($categories as $category)
-                                            <option value="{{ $category->slug }}" @selected(old('main_category') === $category->slug)>{{ $category->name }}</option>
+                                            <label class="category-check">
+                                                <input type="checkbox" name="categories[]" value="{{ $category->slug }}" @checked(in_array($category->slug, $selectedCategories, true))>
+                                                <span>{{ $category->name }}</span>
+                                            </label>
                                         @endforeach
-                                    </select>
-                                    @error('main_category')<p class="field-error">{{ $message }}</p>@enderror
+                                    </div>
+                                    @error('categories')<p class="field-error">{{ $message }}</p>@enderror
+                                    @error('categories.*')<p class="field-error">{{ $message }}</p>@enderror
                                 </div>
 
                                 <div class="field">

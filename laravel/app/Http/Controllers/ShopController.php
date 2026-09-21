@@ -108,6 +108,7 @@ class ShopController extends Controller
 
             $this->storeUploadedDocuments($request, $shop);
             $shop->save();
+            $this->syncShopCategories($shop, $validated['categories'] ?? []);
 
             return $shop;
         });
@@ -229,6 +230,7 @@ class ShopController extends Controller
             $shop->is_active = true;
             $shop->approved_at = $shop->approved_at ?: now();
             $shop->save();
+            $this->syncShopCategories($shop, $validated['categories'] ?? []);
         });
 
         app(SellerLogisticsValidator::class)->synchronizeShopStatus($shop->refresh());
@@ -575,7 +577,8 @@ class ShopController extends Controller
             'geo_precision' => ['nullable', Rule::in(['high', 'medium', 'low', 'confirmed'])],
             'geo_precision_score' => ['nullable', 'integer', 'between:0,100'],
 
-            'main_category' => $this->categoryValidationRules(),
+            'categories' => ['required', 'array', 'min:1'],
+            'categories.*' => $this->categoryValidationRules(),
             'delivery_zone' => ['required', Rule::in(['abidjan', 'grand_abidjan', 'national', 'afrique_ouest'])],
             'logistics_type' => ['required', Rule::in(['ovanie', 'seller'])],
 
@@ -638,7 +641,9 @@ class ShopController extends Controller
             'latitude.required' => 'Autorisez la localisation afin qu’OVANIE enregistre la position GPS exacte de la boutique.',
             'longitude.required' => 'Autorisez la localisation afin qu’OVANIE enregistre la position GPS exacte de la boutique.',
             'geo_source.required' => 'La position GPS exacte de la boutique est obligatoire avec OVANIE Logistics.',
-            'main_category.required' => 'Choisissez une catégorie principale.',
+            'categories.required' => 'Choisissez au moins une catégorie.',
+            'categories.min' => 'Choisissez au moins une catégorie.',
+            'categories.*.exists' => 'Une des catégories sélectionnées n’est plus disponible.',
             'delivery_zone.required' => 'Choisissez une zone commerciale.',
             'logistics_type.required' => 'Choisissez le mode logistique de la boutique.',
             'identityNumber.regex' => 'Le format du numéro de pièce est invalide.',
@@ -834,7 +839,10 @@ class ShopController extends Controller
             $shop->geo_verified_at = null;
         }
 
-        $shop->main_category = $validated['main_category'];
+        // main_category reste peuplée (compat lecture) avec la première catégorie
+        // choisie ; la liste complète est synchronisée séparément dans la table
+        // pivot shop_category une fois la boutique enregistrée (voir syncShopCategories).
+        $shop->main_category = $validated['categories'][0] ?? null;
         $shop->delivery_zone = $validated['delivery_zone'];
         $shop->processing_time = $validated['processing_time'] ?? null;
         $shop->logistics_type = $validated['logistics_type'];
@@ -852,6 +860,31 @@ class ShopController extends Controller
         $shop->mm_operator = $validated['mmOperator'];
         $shop->mm_number = $validated['mmNumber'];
         $shop->mm_holder = $validated['mmHolder'];
+    }
+
+    /**
+     * @param string[] $categorySlugs
+     */
+    private function syncShopCategories(Shop $shop, array $categorySlugs): void
+    {
+        if ($categorySlugs === [] || ! Schema::hasTable('shop_category') || ! Schema::hasTable('categories')) {
+            return;
+        }
+
+        $categoryIds = Category::query()
+            ->whereIn('slug', $categorySlugs)
+            ->pluck('id', 'slug');
+
+        // Préserve l'ordre choisi par le vendeur (categories[0] = catégorie
+        // principale) plutôt que l'ordre renvoyé par la requête SQL.
+        $orderedIds = collect($categorySlugs)
+            ->map(fn (string $slug) => $categoryIds->get($slug))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $shop->categories()->sync($orderedIds);
     }
 
     private function coordinatesInsideConfiguredCountry(float $latitude, float $longitude): bool
@@ -1058,7 +1091,7 @@ class ShopController extends Controller
                     ->when(Schema::hasColumn('categories', 'status'), fn ($query) => $query->where('status', 'actif'))
                     ->when(Schema::hasColumn('categories', 'is_active'), fn ($query) => $query->where('is_active', true))
                     ->orderBy(Schema::hasColumn('categories', 'sort_order') ? 'sort_order' : 'name')
-                    ->get(['name', 'slug']);
+                    ->get(['id', 'name', 'slug']);
             }
         } catch (\Throwable) {
             // Le fallback ci-dessous garde le formulaire utilisable pendant les migrations.

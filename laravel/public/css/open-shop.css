@@ -415,6 +415,36 @@ input:invalid.is-touched, select:invalid.is-touched, textarea:invalid.is-touched
 }
 .label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
+.categories-multiselect {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+}
+.category-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid #cfd8e8;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12px;
+    color: #223766;
+    cursor: pointer;
+    transition: border-color .18s ease, background .18s ease;
+}
+.category-check:has(input:checked) {
+    border-color: var(--blue);
+    background: rgba(11,79,244,.06);
+}
+.category-check input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--blue);
+    flex: 0 0 auto;
+}
+
 .phone-field {
     display: grid;
     grid-template-columns: auto minmax(0,1fr);

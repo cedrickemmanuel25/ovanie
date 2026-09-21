@@ -146,6 +146,19 @@ class Shop extends Model
         return $this->hasMany(Product::class);
     }
 
+    /**
+     * Catégories dans lesquelles la boutique vend des produits (plusieurs
+     * possibles). main_category reste renseignée en lecture seule pour la
+     * compatibilité avec le code existant (affichage, filtres simples) et
+     * correspond toujours à la première catégorie sélectionnée.
+     */
+    public function categories()
+    {
+        return $this->belongsToMany(Category::class, 'shop_category')
+            ->withTimestamps()
+            ->orderBy('shop_category.id');
+    }
+
     public function orders()
     {
         return $this->hasMany(Order::class);
