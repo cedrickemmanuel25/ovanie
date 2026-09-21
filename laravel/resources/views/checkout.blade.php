@@ -31,6 +31,7 @@
     $checkoutPaymentMethods = collect($paymentOptions['methods'] ?? []);
     $onlinePaymentOption = $checkoutPaymentMethods->firstWhere('code', 'paydunya');
     $cashOnDeliveryOption = $checkoutPaymentMethods->firstWhere('code', 'cash_on_delivery');
+    $bankTransferOption = $checkoutPaymentMethods->firstWhere('code', 'bank_transfer');
     $cashOnDeliveryRequired = (bool) ($paymentOptions['cash_on_delivery_required'] ?? false);
     $selectedPaymentMethod = old('payment_method', $cashOnDeliveryRequired ? 'cash_on_delivery' : '');
 @endphp
@@ -153,11 +154,65 @@
                             </span>
                         </label>
                         @endif
+
+                        @if($bankTransferOption)
+                        <label class="payment-choice {{ $selectedPaymentMethod === 'bank_transfer' ? 'active' : '' }}">
+                            <input
+                                type="radio"
+                                name="payment_method"
+                                value="bank_transfer"
+                                {{ ($bankTransferOption['enabled'] ?? false) ? '' : 'disabled' }}
+                                @checked($selectedPaymentMethod === 'bank_transfer')
+                                required
+                            >
+                            <span>
+                                <strong>{{ $bankTransferOption['label'] ?? 'Virement bancaire' }}</strong>
+                                <small>{{ $bankTransferOption['description'] ?? 'Effectuez un virement puis déposez votre preuve de paiement.' }}</small>
+                            </span>
+                        </label>
+                        @endif
                     </div>
 
                             <p id="paymentAvailabilityNote" class="payment-inline-note" {{ ($onlinePaymentOption && ! ($onlinePaymentOption['enabled'] ?? false) && ! empty($onlinePaymentOption['reason'])) ? '' : 'hidden' }}>
                                 {{ $onlinePaymentOption['reason'] ?? '' }}
                             </p>
+
+                            @if($bankTransferOption)
+                        <div class="bank-transfer-fields" id="bankTransferFields" {{ $selectedPaymentMethod === 'bank_transfer' ? '' : 'hidden' }}>
+                            <div style="margin-top:16px;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;">
+                                <p style="margin:0 0 12px;font-weight:700;color:#0f172a;">Coordonnées bancaires OVANIE</p>
+                                <p style="margin:0 0 4px;color:#334155;">Banque : <strong>{{ $settings['bankName'] ?? 'NSIA Banque' }}</strong></p>
+                                <p style="margin:0 0 4px;color:#334155;">Titulaire du compte : <strong>{{ $settings['bankAccountName'] ?? 'OVANIE SARL' }}</strong></p>
+                                <p style="margin:0 0 16px;color:#334155;">Numéro de compte : <strong>{{ $settings['bankAccountNumber'] ?? '' }}</strong></p>
+
+                                <label for="bankReferenceInput" style="display:block;font-weight:700;color:#334155;font-size:13px;">
+                                    Référence du virement
+                                    <input
+                                        id="bankReferenceInput"
+                                        type="text"
+                                        name="bank_reference"
+                                        value="{{ old('bank_reference') }}"
+                                        placeholder="Référence indiquée sur votre virement"
+                                        style="width:100%;margin-top:8px;border:1px solid #cbd5e1;border-radius:10px;padding:12px;"
+                                        required
+                                    >
+                                </label>
+
+                                <label for="bankReceiptInput" style="display:block;font-weight:700;color:#334155;font-size:13px;margin-top:12px;">
+                                    Preuve de paiement (image ou PDF)
+                                    <input
+                                        id="bankReceiptInput"
+                                        type="file"
+                                        name="bank_receipt"
+                                        accept=".jpg,.jpeg,.png,.pdf"
+                                        style="width:100%;margin-top:8px;"
+                                        required
+                                    >
+                                </label>
+                                <small style="display:block;margin-top:6px;color:#64748b;">Formats acceptés : JPG, PNG, PDF — 2 Mo maximum.</small>
+                            </div>
+                        </div>
+                            @endif
 
                             @if($loyaltyPointsAvailable > 0)
                         <div style="margin-top:16px;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;">
@@ -499,18 +554,22 @@
         const methods = new Map(paymentOptions.methods.map((item) => [item.code, item]));
         const online = methods.get('paydunya');
         const cod = methods.get('cash_on_delivery');
+        const bank = methods.get('bank_transfer');
         const onlineInput = document.querySelector('input[name="payment_method"][value="paydunya"]');
         const codInput = document.querySelector('input[name="payment_method"][value="cash_on_delivery"]');
+        const bankInput = document.querySelector('input[name="payment_method"][value="bank_transfer"]');
         const note = document.getElementById('paymentAvailabilityNote');
 
         if (onlineInput && online) onlineInput.disabled = !Boolean(online.enabled);
         if (codInput && cod) codInput.disabled = !Boolean(cod.enabled);
+        if (bankInput && bank) bankInput.disabled = !Boolean(bank.enabled);
 
         if (paymentOptions.cash_on_delivery_required && codInput && !codInput.disabled) {
             document.querySelectorAll('.payment-choice').forEach((el) => el.classList.remove('active'));
             codInput.checked = true;
             codInput.closest('.payment-choice')?.classList.add('active');
             if (onlineInput) onlineInput.checked = false;
+            if (bankInput) bankInput.checked = false;
         } else {
             const checked = document.querySelector('input[name="payment_method"]:checked');
             if (checked?.disabled) {
@@ -525,7 +584,7 @@
             note.hidden = !reason;
         }
 
-        setSummaryActionState();
+        updatePaymentDetailsVisibility();
     }
 
     function setSummaryActionState() {
@@ -541,6 +600,12 @@
             }
 
             if (selectedPaymentMethod === 'cash_on_delivery') {
+                summaryActionBtn.textContent = 'Confirmer la commande';
+                summaryActionBtn.disabled = false;
+                return;
+            }
+
+            if (selectedPaymentMethod === 'bank_transfer') {
                 summaryActionBtn.textContent = 'Confirmer la commande';
                 summaryActionBtn.disabled = false;
                 return;
@@ -1609,6 +1674,12 @@
     });
 
     function updatePaymentDetailsVisibility() {
+        const selectedPaymentMethod = document.querySelector('input[name="payment_method"]:checked')?.value || '';
+        const bankFields = document.getElementById('bankTransferFields');
+        if (bankFields) {
+            bankFields.hidden = selectedPaymentMethod !== 'bank_transfer';
+        }
+
         setSummaryActionState();
     }
 
