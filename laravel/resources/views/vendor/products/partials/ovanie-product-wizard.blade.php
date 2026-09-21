@@ -1579,12 +1579,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const negotiable = root.querySelector('input[name="is_negotiable"]:checked')?.value === '1';
         if (negotiable && normalPrice > 0) {
+            // Toujours recalculés à partir du prix courant : sinon, modifier le prix
+            // après avoir activé la négociation (ou lors d'une édition) laisse des
+            // seuils obsolètes qui peuvent devenir >= au nouveau prix et faire
+            // échouer la validation (price_p1 doit rester strictement < price).
             const p1 = qs('#pwPriceP1');
             const p2 = qs('#pwPriceP2');
             const p3 = qs('#pwPriceP3');
-            if (p1 && !p1.value) p1.value = Math.max(1, Math.round(normalPrice * .95));
-            if (p2 && !p2.value) p2.value = Math.max(1, Math.round(normalPrice * .90));
-            if (p3 && !p3.value) p3.value = Math.max(1, Math.round(normalPrice * .85));
+            if (p1) p1.value = Math.max(1, Math.round(normalPrice * .95));
+            if (p2) p2.value = Math.max(1, Math.round(normalPrice * .90));
+            if (p3) p3.value = Math.max(1, Math.round(normalPrice * .85));
         }
     }
 
