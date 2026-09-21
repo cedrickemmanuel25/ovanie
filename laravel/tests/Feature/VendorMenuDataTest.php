@@ -55,7 +55,7 @@ class VendorMenuDataTest extends TestCase {
  }
  public function test_preparation_schedule_persists_and_rejects_invalid_times(): void {
   [$u,$shop]=$this->vendor();$this->actingAs($u,'sanctum');
-  $data=['logistics_type'=>'seller','processing_time'=>'24_48h','days'=>[1,2,3],'start'=>'08:00','end'=>'18:00'];
+  $data=['processing_time'=>'24_48h','days'=>[1,2,3],'start'=>'08:00','end'=>'18:00'];
   $this->postJson('/api/mobile/v1/vendor/shop/preparation-settings',$data)->assertOk();
   $this->assertSame([1,2,3],json_decode($shop->fresh()->mobile_presentation,true)['preparation']['days']);
   $this->postJson('/api/mobile/v1/vendor/shop/preparation-settings',array_replace($data,['end'=>'07:00']))->assertUnprocessable();

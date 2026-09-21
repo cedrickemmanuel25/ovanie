@@ -169,7 +169,8 @@
                         $shop = $group['shop'];
                         $seller = $group['seller'];
                         $groupItems = $group['items'];
-                        $isSellerLogistics = $shop?->logistics_type === 'seller';
+                        $firstItem = $groupItems->first();
+                        $isSellerLogistics = ($firstItem?->delivery_provider ?: $firstItem?->delivery_mode ?: $shop?->logistics_type) === 'seller';
                         $groupReleased = $group['visible_lines'];
                     @endphp
 

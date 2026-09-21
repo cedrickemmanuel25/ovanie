@@ -13,7 +13,7 @@ auth.json
 
 # Dependencies and generated artifacts
 node_modules/
-vendor/
+/laravel/vendor/
 .gradle/
 .gradle-*/
 .dart_tool/

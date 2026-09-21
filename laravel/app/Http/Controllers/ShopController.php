@@ -194,6 +194,8 @@ class ShopController extends Controller
     {
         $this->authorizeShopAccess($shop);
         $this->normalizeRequest($request);
+        // Mode changes go through the dedicated confirmed and validated flow.
+        $request->merge(['logistics_type' => $shop->logistics_type ?: 'ovanie']);
         $this->synchronizeStructuredLocation($request);
         $this->preserveExistingExactLocationWhenUnchanged($request, $shop);
         $this->enrichLocationFromGps($request, $locationResolver);

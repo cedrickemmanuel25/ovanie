@@ -553,6 +553,12 @@ class MobileCheckoutService
                 throw ValidationException::withMessages(['cart' => 'Un produit du panier n’est plus disponible.']);
             }
 
+            $product->setRelation('shop', \App\Models\Shop::query()
+                ->whereKey($product->shop_id)->lockForUpdate()->first());
+            if (! $product->shop?->canPublishProducts()) {
+                throw ValidationException::withMessages(['cart' => 'La boutique ne peut plus accepter cette commande.']);
+            }
+
             $minimum = max(1, (int) ($product->min_order_quantity ?: 1));
             if ((int) $item->quantity < $minimum) {
                 throw ValidationException::withMessages([

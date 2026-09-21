@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
 import '../../data/vendor_repository.dart';
 import 'menu_ui.dart';
+import 'logistics_settings_screen.dart';
 
 class DeliverySettingsScreen extends StatefulWidget {
   const DeliverySettingsScreen({super.key});
@@ -64,7 +65,7 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
       context: context,
       initialTime: (first ? start : end) ?? const TimeOfDay(hour: 8, minute: 0),
     );
-    if (t != null && mounted)
+    if (t != null && mounted) {
       setState(() {
         if (first) {
           start = t;
@@ -72,6 +73,7 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
           end = t;
         }
       });
+    }
   }
 
   Future<void> save() async {
@@ -88,17 +90,17 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
         'shop/preparation-settings',
         method: 'POST',
         data: {
-          'logistics_type': mode,
           'processing_time': delay,
           'days': days.toList(),
           'start': time(start),
           'end': time(end),
         },
       );
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Paramètres enregistrés.')),
         );
+      }
     } catch (e) {
       if (mounted) menuError(context, e);
     } finally {
@@ -106,9 +108,22 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
     }
   }
 
+  Future<void> editLogistics({bool change = false}) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => LogisticsSettingsScreen(
+          shop: shop,
+          targetMode: change ? (mode == 'seller' ? 'ovanie' : 'seller') : mode,
+        ),
+      ),
+    );
+    if (mounted) await load();
+  }
+
   @override
   Widget build(BuildContext context) => MenuPage(
-    title: 'Paramètres de livraison',
+    title: 'Livraison & logistique',
     subtitle: 'Configurez votre mode logistique et vos délais de traitement',
     refresh: load,
     loading: loading,
@@ -118,19 +133,26 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
       DataCard(
         title: 'Mode logistique',
         icon: Icons.local_shipping_outlined,
-        child: dataPair(
-          forMode(
-            'ovanie',
-            'OVANIE Logistics',
-            'OVANIE gère la collecte et la livraison.',
-            Icons.local_shipping_outlined,
-          ),
-          forMode(
-            'seller',
-            'Logistique vendeur',
-            'Vous gérez vos propres livraisons.',
-            Icons.person_outline,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            menuHeading(
+              mode == 'seller' ? 'Ma propre logistique' : 'OVANIE Logistics',
+            ),
+            const SizedBox(height: 12),
+            menuButton(
+              'Changer de mode logistique',
+              saving ? null : () => editLogistics(change: true),
+            ),
+            TextButton(
+              onPressed: saving ? null : () => editLogistics(),
+              child: const Text('Modifier mes informations logistiques'),
+            ),
+            const Text(
+              'Les commandes déjà créées ou en cours conservent leur mode logistique.',
+              style: TextStyle(color: menuMuted),
+            ),
+          ],
         ),
       ),
       DataCard(
@@ -193,16 +215,17 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
           ],
         ),
       ),
-      DataCard(
-        title: 'Zones de livraison',
-        icon: Icons.location_on_outlined,
-        child: ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(screenText(shop['delivery_zone'], 'Gérer les zones')),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => openMenuPage(context, const DeliveryZonesScreen()),
+      if (mode == 'seller')
+        DataCard(
+          title: 'Zones de livraison',
+          icon: Icons.location_on_outlined,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(screenText(shop['delivery_zone'], 'Gérer les zones')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => openMenuPage(context, const DeliveryZonesScreen()),
+          ),
         ),
-      ),
       if (mode == 'seller')
         menuInfo(
           'Les capacités de transport et les tarifs par commune doivent être configurés pour la logistique vendeur.',
@@ -213,44 +236,11 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
       ),
     ],
   );
-  Widget forMode(String value, String title, String sub, IconData icon) =>
-      InkWell(
-        onTap: () => setState(() => mode = value),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: mode == value ? menuBlue : const Color(0xFFE5EBF7),
-              width: 1.5,
-            ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  menuIcon(icon),
-                  const Spacer(),
-                  Icon(
-                    mode == value
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_off,
-                    color: menuBlue,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              menuHeading(title),
-              Text(sub, style: const TextStyle(color: menuMuted, fontSize: 13)),
-            ],
-          ),
-        ),
-      );
 }
 
 class DeliveryZonesScreen extends StatefulWidget {
-  const DeliveryZonesScreen({super.key});
+  const DeliveryZonesScreen({super.key, this.configuring = false});
+  final bool configuring;
   @override
   State<DeliveryZonesScreen> createState() => _ZonesState();
 }
@@ -273,7 +263,10 @@ class _ZonesState extends State<DeliveryZonesScreen> {
       error = null;
     });
     try {
-      final r = await Future.wait([menuApi('shop'), menuApi('shop/delivery')]);
+      final r = await Future.wait([
+        menuApi('shop'),
+        menuApi('shop/delivery${widget.configuring ? '?configure=1' : ''}'),
+      ]);
       shop = mapOf(r[0]['shop']);
       data = r[1];
     } catch (e) {
@@ -337,7 +330,7 @@ class _ZonesState extends State<DeliveryZonesScreen> {
           filter,
           (v) => setState(() => filter = v),
         ),
-        if (data['uses_seller_logistics'] == true)
+        if (data['uses_seller_logistics'] == true || widget.configuring)
           Align(
             alignment: Alignment.centerRight,
             child: menuButton(
@@ -598,7 +591,6 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
                             'api': '1',
                             'query': '$name, Abidjan, Côte d’Ivoire',
                           }),
-                          
                         );
                       } catch (e) {
                         if (context.mounted) menuError(context, e);

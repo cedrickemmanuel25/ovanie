@@ -203,8 +203,7 @@
                         foreach ($shopGroups as $groupItems) {
                             $firstItem = $groupItems->first();
                             $shop = $firstItem?->shop ?: $firstItem?->product?->shop ?: $order->shop;
-                            $isSellerLogistics = in_array($shop?->logistics_type, ['seller', 'vendor'], true)
-                                || in_array($shop?->delivery_mode, ['seller', 'vendor'], true);
+                            $isSellerLogistics = in_array($firstItem?->delivery_provider ?: $firstItem?->delivery_mode ?: $shop?->logistics_type, ['seller', 'vendor'], true);
 
                             if ($isSellerLogistics) {
                                 $sellerLogisticsCount++;
@@ -320,8 +319,7 @@
                                         $shop = $firstItem?->shop ?: $firstItem?->product?->shop ?: $order->shop;
                                         $seller = $shop?->user;
                                         $groupItemCount = $groupItems->sum(fn ($item) => (int) $item->quantity);
-                                        $isSellerLogistics = in_array($shop?->logistics_type, ['seller', 'vendor'], true)
-                                            || in_array($shop?->delivery_mode, ['seller', 'vendor'], true);
+                                        $isSellerLogistics = in_array($firstItem?->delivery_provider ?: $firstItem?->delivery_mode ?: $shop?->logistics_type, ['seller', 'vendor'], true);
                                     @endphp
 
                                     <article class="admin-shop-card">

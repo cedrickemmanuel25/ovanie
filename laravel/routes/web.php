@@ -422,6 +422,10 @@ Route::middleware('auth')->group(function () {
             Route::get('/products/{product}/boost/cancel', [VendorProductController::class, 'boostCancel'])->name('products.boost.cancel');
 
             Route::get('/livraison', [VendorDeliverySettingsController::class, 'index'])->name('delivery.index');
+            Route::get('/livraison/mode', [VendorDeliverySettingsController::class, 'mode'])->name('delivery.mode');
+            Route::post('/livraison/mode', [VendorDeliverySettingsController::class, 'saveMode'])->name('delivery.mode.update');
+            Route::get('/livraison/localisation', [VendorDeliverySettingsController::class, 'location'])->name('delivery.location');
+            Route::post('/livraison/localisation/detecter', [VendorDeliverySettingsController::class, 'resolveLocation'])->middleware('throttle:30,1')->name('delivery.location.resolve');
             Route::get('/livraison/configuration', [VendorDeliverySettingsController::class, 'edit'])->name('delivery.edit');
             Route::post('/livraison/configuration', [VendorDeliverySettingsController::class, 'update'])->name('delivery.update');
             Route::post('/livraison/zones', [VendorDeliverySettingsController::class, 'storeZone'])->name('delivery.zones.store');
@@ -1188,4 +1192,3 @@ Route::get('/telecharger-admin', function () {
         'Content-Type' => 'application/octet-stream',
     ]);
 })->middleware(['auth:admin', 'throttle:10,1'])->name('download.admin');
-

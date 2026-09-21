@@ -182,11 +182,11 @@ class VendorOrderController extends Controller
             ->where('delivery_provider', OrderWorkflowService::PROVIDER_OVANIE)
             ->sum(fn ($item) => (float) ($item->delivery_price ?? 0));
 
-        if ($sellerDeliveryFee <= 0 && $shop->usesSellerLogistics()) {
+        if ($sellerDeliveryFee <= 0 && $order->items->every(fn ($item) => ! filled($item->delivery_provider) && ! filled($item->delivery_mode)) && $shop->usesSellerLogistics()) {
             $sellerDeliveryFee = (float) $order->items->sum(fn ($item) => (float) ($item->delivery_price ?? 0));
         }
 
-        if ($ovanieDeliveryFee <= 0 && $shop->usesOvanieLogistics()) {
+        if ($ovanieDeliveryFee <= 0 && $order->items->every(fn ($item) => ! filled($item->delivery_provider) && ! filled($item->delivery_mode)) && $shop->usesOvanieLogistics()) {
             $ovanieDeliveryFee = (float) $order->items->sum(fn ($item) => (float) ($item->delivery_price ?? 0));
         }
 

@@ -48,11 +48,11 @@ class SellerLogisticsValidator
             $missing[] = 'délai par défaut';
         }
 
-        if (! filled($profile?->max_weight_kg)) {
+        if ((float) $profile?->max_weight_kg <= 0) {
             $missing[] = 'poids maximum';
         }
 
-        if (! filled($profile?->max_volume_m3)) {
+        if ((float) $profile?->max_volume_m3 <= 0) {
             $missing[] = 'volume maximum';
         }
 
@@ -69,6 +69,12 @@ class SellerLogisticsValidator
 
         if (! $hasZone) {
             $missing[] = 'au moins une commune livrée avec tarif et délai';
+        }
+
+        if ($shop->sellerDeliveryZones->where('is_active', true)->contains(fn ($zone) =>
+            ! filled($zone->commune) || $zone->delivery_price === null
+            || (float) $zone->delivery_price < 0 || ! filled($zone->estimated_delay))) {
+            $missing[] = 'commune, tarif et délai valides pour chaque zone active';
         }
 
         return [

@@ -29,7 +29,7 @@
                 $shop = $firstItem?->shop ?: $firstItem?->product?->shop;
                 $seller = $shop?->user;
                 $provider = $firstItem?->delivery_provider;
-                $isSellerDelivery = $provider === 'seller' || $shop?->logistics_type === 'seller';
+                $isSellerDelivery = ($provider ?: $shop?->logistics_type) === 'seller';
                 $groupWeight = (float) $groupItems->sum('logistics_weight_kg');
                 $groupVolume = (float) $groupItems->sum('logistics_volume_m3');
                 $groupDeliveryPrice = (float) $groupItems->sum('delivery_price');

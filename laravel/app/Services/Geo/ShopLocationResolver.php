@@ -126,8 +126,47 @@ class ShopLocationResolver
             'amenity', 'shop', 'building', 'tourism', 'leisure', 'road',
         ]);
 
-        if ($landmark === '' && $displayName !== '') {
-            $landmark = trim(explode(',', $displayName)[0] ?? '');
+        if ($landmark === '' && $displayName !== ''
+            && ! $this->sameToken($displayNameFirstSegment = trim(explode(',', $displayName)[0] ?? ''), $commune)
+            && ! $this->sameToken($displayNameFirstSegment, $district)) {
+            $landmark = $displayNameFirstSegment;
+        }
+
+        // Quand le fournisseur de géocodage ne renvoie qu'un seul jeton grossier
+        // (ex. simple nom de village pour une position peu précise), les chaînes
+        // de repli ci-dessus retombent toutes sur cette même valeur. Afficher ce
+        // même mot dans quatre champs différents donne l'impression d'un résultat
+        // factice au vendeur : on désactive donc les doublons plutôt que de les
+        // afficher.
+        if ($this->sameToken($landmark, $commune) || $this->sameToken($landmark, $district)) {
+            $landmark = '';
+        }
+
+        if ($district !== '' && $this->sameToken($district, $commune)) {
+            $district = '';
+        }
+
+        $resolvedAddress = $streetAddress !== '' ? $streetAddress : $displayName;
+        if ($resolvedAddress !== '' && $this->sameToken($resolvedAddress, $commune)) {
+            $resolvedAddress = '';
+        }
+
+        // Une partie du référentiel des quartiers d'Abidjan contient encore des
+        // libellés historiques mal encodés (ex. « Feh Kess?? » pour « Feh Kessé »),
+        // reconnaissables au marqueur "??" laissé par une conversion de charset
+        // ratée. Ne jamais présenter ce texte visiblement cassé au vendeur : on
+        // masque le champ concerné plutôt que d'afficher une donnée illisible.
+        if ($this->looksCorrupted($commune)) {
+            $commune = '';
+        }
+        if ($this->looksCorrupted($district)) {
+            $district = '';
+        }
+        if ($this->looksCorrupted($landmark)) {
+            $landmark = '';
+        }
+        if ($this->looksCorrupted($resolvedAddress)) {
+            $resolvedAddress = '';
         }
 
         $precision = $this->detectPrecision($geo);
@@ -137,7 +176,7 @@ class ShopLocationResolver
             'latitude' => isset($geo['latitude']) ? round((float) $geo['latitude'], 7) : null,
             'longitude' => isset($geo['longitude']) ? round((float) $geo['longitude'], 7) : null,
             'display_name' => $displayName ?: null,
-            'address' => $streetAddress ?: ($displayName ?: null),
+            'address' => $resolvedAddress ?: null,
             'region' => $region ?: null,
             'city' => $city ?: null,
             'commune' => $commune ?: null,
@@ -153,6 +192,43 @@ class ShopLocationResolver
             'precision_score' => $precision['score'],
             'precision_label' => $precision['label'],
         ];
+    }
+
+    /**
+     * Compare deux jetons d'adresse en ignorant casse, accents et espaces
+     * superflus, afin de détecter les doublons produits par les chaînes de
+     * repli du géocodage (ex. "Gobelet village" répété dans plusieurs champs).
+     */
+    private function sameToken(?string $a, ?string $b): bool
+    {
+        $a = trim((string) $a);
+        $b = trim((string) $b);
+
+        if ($a === '' || $b === '') {
+            return false;
+        }
+
+        return $this->normalize($a) === $this->normalize($b);
+    }
+
+    private function normalize(string $value): string
+    {
+        return \Illuminate\Support\Str::lower(\Illuminate\Support\Str::ascii(trim($value)));
+    }
+
+    /**
+     * Détecte les libellés dont l'encodage a été corrompu (accents remplacés
+     * par des "?", ex. « Att??coub?? »), qu'ils viennent du fournisseur de
+     * géocodage ou du référentiel legacy des quartiers d'Abidjan.
+     */
+    private function looksCorrupted(?string $value): bool
+    {
+        $value = (string) $value;
+        if ($value === '') {
+            return false;
+        }
+
+        return str_contains($value, '??') || str_contains($value, "\u{FFFD}");
     }
 
     /**

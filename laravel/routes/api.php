@@ -285,6 +285,8 @@ Route::prefix('mobile/v1/vendor')
         Route::get('/shop', [VendorMobileController::class, 'shop']);
         Route::match(['put', 'patch', 'post'], '/shop', [VendorMobileController::class, 'updateShop']);
         Route::get('/shop/delivery', [VendorMobileController::class, 'deliverySettings']);
+        Route::post('/shop/logistics-settings', [VendorMobileController::class, 'saveLogisticsSettings']);
+        Route::post('/shop/logistics-location', [VendorMobileController::class, 'resolveLogisticsLocation'])->middleware('throttle:30,1');
         Route::post('/shop/delivery', [VendorMobileController::class, 'updateDeliverySettings']);
         Route::post('/shop/delivery/zones', [VendorMobileController::class, 'storeDeliveryZone']);
         Route::match(['put', 'patch'], '/shop/delivery/zones/{zone}', [VendorMobileController::class, 'updateDeliveryZone']);

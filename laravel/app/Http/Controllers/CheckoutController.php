@@ -491,7 +491,10 @@ class CheckoutController extends Controller
                     throw new \RuntimeException('Un produit du panier est indisponible.');
                 }
 
-                $lockedProduct->loadMissing('shop');
+                // Serialize checkout with a shop logistics change: the quote and
+                // the persisted order snapshot must use the same current mode.
+                $lockedProduct->setRelation('shop', \App\Models\Shop::query()
+                    ->whereKey($lockedProduct->shop_id)->lockForUpdate()->first());
 
                 if (! $lockedProduct->shop?->canPublishProducts()) {
                     throw new \RuntimeException('Le produit ' . $lockedProduct->name . ' n’est plus disponible à la commande.');

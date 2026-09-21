@@ -57,7 +57,7 @@
         ->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))
         ->implode('');
 
-    $showDeliveryMenu = $shop?->usesSellerLogistics() ?? false;
+    $showDeliveryMenu = $shop !== null;
 
     /*
     |--------------------------------------------------------------------------

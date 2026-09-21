@@ -1165,10 +1165,10 @@
         option?.scrollIntoView({ block: 'nearest' });
     }
 
-    function filterCombobox(input, menu) {
+    function filterCombobox(input, menu, { search = true } = {}) {
         if (!input || !menu) return [];
 
-        const query = normalizeLocalitySearch(input.value);
+        const query = search ? normalizeLocalitySearch(input.value) : '';
         const options = optionButtons(menu);
         let visibleCount = 0;
 
@@ -1188,7 +1188,7 @@
         return visible;
     }
 
-    function openCombobox(input, menu) {
+    function openCombobox(input, menu, { search = false } = {}) {
         if (!input || !menu || input.disabled) return;
         document.querySelectorAll('.geo-combobox__menu').forEach((otherMenu) => {
             if (otherMenu !== menu) {
@@ -1196,7 +1196,9 @@
                 closeCombobox(otherInput, otherMenu);
             }
         });
-        filterCombobox(input, menu);
+        // Opening a selector shows the whole catalogue. Only typing filters it:
+        // a saved value or browser autofill (e.g. "Abidjan") is not a search.
+        filterCombobox(input, menu, { search });
         menu.hidden = false;
         input.setAttribute('aria-expanded', 'true');
     }
@@ -1218,7 +1220,7 @@
         input.addEventListener('click', () => openCombobox(input, menu));
         input.addEventListener('input', () => {
             onFreeInput?.();
-            openCombobox(input, menu);
+            openCombobox(input, menu, { search: true });
         });
         input.addEventListener('keydown', (event) => {
             if (event.key === 'ArrowDown') {
@@ -1247,9 +1249,10 @@
         });
 
         toggle?.addEventListener('click', () => {
-            if (menu.hidden) openCombobox(input, menu);
-            else closeCombobox(input, menu);
+            const wasOpen = !menu.hidden;
             input.focus();
+            if (wasOpen) closeCombobox(input, menu);
+            else openCombobox(input, menu);
         });
     }
 
@@ -1609,9 +1612,13 @@
         );
 
         if (!communeOption) {
-            communeSearchInput.value = desiredCommune;
-            communeSearchInput.setCustomValidity('Sélectionnez une commune dans la liste.');
+            communeSearchInput.value = '';
+            communeSearchInput.setCustomValidity('');
+            if (communeInput) communeInput.value = '';
+            if (communeIdInput) communeIdInput.value = '';
             clearLocalitySelection({ disable: true, dispatch: false });
+            setLocalityStatus('Sélectionnez une commune dans la liste pour retrouver ses quartiers.');
+            scheduleDraftSave();
             return;
         }
 

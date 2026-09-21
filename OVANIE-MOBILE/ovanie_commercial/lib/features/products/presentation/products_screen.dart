@@ -950,17 +950,77 @@ class _ReadonlyField extends StatelessWidget{
 class _EnumField extends StatelessWidget{
   const _EnumField({required this.label,required this.value,required this.options,required this.onChanged});
   final String label; final String? value; final Map<String,String> options; final ValueChanged<String?> onChanged;
-  @override Widget build(BuildContext c) => Padding(padding:const EdgeInsets.only(bottom:12),child:DropdownButtonFormField<String>(
-    value: value!=null && options.containsKey(value) ? value : null,
-    isExpanded:true,
-    dropdownColor:Colors.white,
-    borderRadius:BorderRadius.circular(10),
-    elevation:3,
-    icon: const Icon(Icons.keyboard_arrow_down_rounded,color:Color(0xFF5A7196)),
-    decoration:InputDecoration(labelText:label,labelStyle:const TextStyle(color:Color(0xFF274B79),fontSize:13),isDense:true,filled:true,fillColor:Colors.white,contentPadding:const EdgeInsets.symmetric(horizontal:13,vertical:15),border:OutlineInputBorder(borderRadius:BorderRadius.circular(10))),
-    items:options.entries.map((e)=>DropdownMenuItem(value:e.key,child:Text(e.value,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Color(0xFF00133A))))).toList(),
-    onChanged:onChanged,
-  ));
+  @override Widget build(BuildContext c) => _SheetField<String>(label:label,value:value,options:options,onChanged:onChanged);
+}
+
+/// Sélecteur en feuille modale (bottom sheet) : évite le menu déroulant
+/// natif Flutter qui peut déborder de l'écran sur les champs étroits.
+Future<void> _openSheetPicker<T>(BuildContext context,{required String label,required Map<T,String> options,required T? value,required ValueChanged<T?> onChanged}) async {
+  FocusManager.instance.primaryFocus?.unfocus();
+  final entries=options.entries.toList();
+  final picked=await showModalBottomSheet<T>(
+    context:context,
+    isScrollControlled:true,
+    backgroundColor:Colors.transparent,
+    barrierColor:Colors.black.withValues(alpha:.38),
+    builder:(sheetContext)=>SafeArea(top:false,child:Container(
+      constraints:BoxConstraints(maxHeight:MediaQuery.sizeOf(context).height*.68),
+      padding:const EdgeInsets.fromLTRB(18,10,18,18),
+      decoration:const BoxDecoration(color:Colors.white,borderRadius:BorderRadius.vertical(top:Radius.circular(24))),
+      child:Column(mainAxisSize:MainAxisSize.min,children:[
+        Container(width:44,height:4,decoration:BoxDecoration(color:const Color(0xFFD5DBE5),borderRadius:BorderRadius.circular(99))),
+        const SizedBox(height:14),
+        Row(children:[
+          Expanded(child:Text(label,style:const TextStyle(color:Color(0xFF00133A),fontSize:18,fontWeight:FontWeight.w900))),
+          IconButton(onPressed:()=>Navigator.pop(sheetContext),icon:const Icon(Icons.close_rounded)),
+        ]),
+        const SizedBox(height:4),
+        Flexible(child: entries.isEmpty
+          ? const Padding(padding:EdgeInsets.symmetric(vertical:24),child:Text('Aucune option disponible',style:TextStyle(color:Color(0xFF315B8A))))
+          : ListView.separated(
+              shrinkWrap:true,
+              itemCount:entries.length,
+              separatorBuilder:(_,__)=>const Divider(height:1),
+              itemBuilder:(_,i){
+                final entry=entries[i];
+                final selected=entry.key==value;
+                return ListTile(
+                  contentPadding:const EdgeInsets.symmetric(horizontal:4,vertical:2),
+                  title:Text(entry.value,style:TextStyle(color:const Color(0xFF00133A),fontWeight:selected?FontWeight.w900:FontWeight.w600)),
+                  trailing:selected?const Icon(Icons.check_circle_rounded,color:_blue):null,
+                  onTap:()=>Navigator.pop(sheetContext,entry.key),
+                );
+              },
+            )),
+      ]),
+    )),
+  );
+  if(picked!=null)onChanged(picked);
+}
+
+class _SheetField<T> extends StatelessWidget{
+  const _SheetField({required this.label,required this.value,required this.options,required this.onChanged});
+  final String label; final T? value; final Map<T,String> options; final ValueChanged<T?> onChanged;
+  @override Widget build(BuildContext c){
+    final text=value!=null&&options.containsKey(value)?options[value]:null;
+    return Padding(padding:const EdgeInsets.only(bottom:12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(label,style:const TextStyle(fontWeight:FontWeight.w600,fontSize:13,color:Color(0xFF274B79))),
+      const SizedBox(height:6),
+      InkWell(
+        borderRadius:BorderRadius.circular(10),
+        onTap:options.isEmpty?null:()=>_openSheetPicker<T>(c,label:label,options:options,value:value,onChanged:onChanged),
+        child:Container(
+          width:double.infinity,
+          padding:const EdgeInsets.symmetric(horizontal:13,vertical:15),
+          decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(10),border:Border.all(color:const Color(0xFFD8E0EA))),
+          child:Row(children:[
+            Expanded(child:Text(text??'Sélectionner',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:text==null?const Color(0xFF8FA0BC):const Color(0xFF00133A),fontWeight:FontWeight.w600))),
+            const Icon(Icons.keyboard_arrow_down_rounded,color:Color(0xFF5A7196)),
+          ]),
+        ),
+      ),
+    ]));
+  }
 }
 
 class _ToggleField extends StatelessWidget{
@@ -1248,40 +1308,12 @@ class DropdownField extends StatelessWidget {
   final ValueChanged<int?> onChanged;
 
   @override
-  Widget build(BuildContext context) => DropdownButtonFormField<int>(
-        value: value,
-        isExpanded: true,
-        dropdownColor: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        elevation: 3,
-        itemHeight: 42,
-        menuMaxHeight: 320,
-        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF5A7196), size: 20),
-        style: const TextStyle(color: Color(0xFF00133A), fontSize: 14),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(color: Color(0xFF274B79), fontSize: 13),
-          isDense: true,
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 15),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-        items: items
-            .map(
-              (e) => DropdownMenuItem<int>(
-                value: (e['id'] as num).toInt(),
-                child: Text(
-                  '${e['name']}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF00133A), fontSize: 14),
-                ),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
-      );
+  Widget build(BuildContext context) {
+    final options = {
+      for (final e in items) (e['id'] as num).toInt(): '${e['name']}',
+    };
+    return _SheetField<int>(label: label, value: value, options: options, onChanged: onChanged);
+  }
 }
 class StepTitle extends StatelessWidget{const StepTitle({super.key,required this.n,required this.title});final int n;final String title;@override Widget build(BuildContext c)=>Padding(padding:const EdgeInsets.only(bottom:10,top:4),child:Row(children:[CircleAvatar(radius:14,backgroundColor:_blue,foregroundColor:Colors.white,child:Text('$n')),const SizedBox(width:10),Text(title,style:const TextStyle(fontSize:17,fontWeight:FontWeight.w800))]));}
 class Metric extends StatelessWidget{const Metric({super.key,required this.n,required this.label});final int n;final String label;@override Widget build(BuildContext c)=>Column(children:[Text('$n',style:const TextStyle(fontSize:22,fontWeight:FontWeight.w800,color:Color(0xFF00133A))),Text(label,textAlign:TextAlign.center,style:const TextStyle(color:Color(0xFF315B8A),fontSize:11))]);}

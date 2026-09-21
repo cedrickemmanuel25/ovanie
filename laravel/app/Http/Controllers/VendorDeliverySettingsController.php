@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\SellerDeliveryZone;
 use App\Models\AbidjanCommune;
 use App\Services\SellerLogisticsValidator;
+use App\Services\ShopLogisticsSettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -56,11 +57,36 @@ class VendorDeliverySettingsController extends Controller
         return view('vendor.delivery.edit', compact('shop', 'zones', 'communes'));
     }
 
-    /**
-     * Enregistre uniquement les capacités de la logistique vendeur.
-     * Le choix OVANIE Logistics / logistique vendeur est fait pendant l'ouverture
-     * de la boutique et ne doit pas être modifié depuis cette page.
-     */
+    public function mode(Request $request)
+    {
+        $shop = $this->sellerLogisticsShop();
+        if ($shop->usesOvanieLogistics()) {
+            return redirect()->route('vendor.delivery.edit');
+        }
+        return view('vendor.delivery.location', ['shop' => $shop, 'changing' => true]);
+    }
+
+    public function location()
+    {
+        $shop = $this->sellerLogisticsShop();
+        abort_unless($shop->usesOvanieLogistics(), 404);
+        return view('vendor.delivery.location', ['shop' => $shop, 'changing' => false]);
+    }
+
+    public function saveMode(Request $request, ShopLogisticsSettingsService $settings)
+    {
+        $settings->save($this->sellerLogisticsShop(), $request->all());
+        return redirect()->route('vendor.delivery.index')->with('success',
+            'Informations logistiques enregistrées. Les commandes existantes conservent leur mode de livraison.');
+    }
+
+    public function resolveLocation(Request $request, \App\Services\ShopPickupLocationService $locations)
+    {
+        return response()->json($locations->resolve($this->sellerLogisticsShop(), $request->all()))
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /** Enregistre aussi une configuration inactive avant un changement de mode. */
     public function update(Request $request, SellerLogisticsValidator $validator)
     {
         $shop = $this->sellerLogisticsShop();
@@ -76,10 +102,11 @@ class VendorDeliverySettingsController extends Controller
         ]);
 
         DB::transaction(function () use ($shop, $data) {
+            $shop = \App\Models\Shop::query()->lockForUpdate()->findOrFail($shop->id);
             $shop->sellerDeliveryProfile()->updateOrCreate(
                 ['shop_id' => $shop->id],
                 [
-                    'is_enabled' => true,
+                    'is_enabled' => $shop->usesSellerLogistics(),
                     'default_delay' => trim($data['default_delay']),
                     'max_weight_kg' => $data['max_weight_kg'],
                     'max_volume_m3' => $data['max_volume_m3'],
@@ -112,7 +139,7 @@ class VendorDeliverySettingsController extends Controller
 
         $profile = $shop->sellerDeliveryProfile()->firstOrCreate(
             ['shop_id' => $shop->id],
-            ['is_enabled' => true, 'status' => 'incomplete']
+            ['is_enabled' => $shop->usesSellerLogistics(), 'status' => 'incomplete']
         );
 
         $this->ensureUniqueRate($shop->id, $data['commune_id'], $data['vehicle_code']);
@@ -220,9 +247,6 @@ class VendorDeliverySettingsController extends Controller
     private function sellerLogisticsShop()
     {
         $shop = Auth::user()->shop()->firstOrFail();
-
-        // La page Livraison est réservée aux vendeurs qui gèrent eux-mêmes la livraison.
-        abort_unless($shop->usesSellerLogistics(), 404);
 
         return $shop;
     }

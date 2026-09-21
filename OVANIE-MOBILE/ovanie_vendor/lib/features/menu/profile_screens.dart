@@ -176,7 +176,7 @@ class _ShopProfileState extends State<ShopProfileScreen> {
           ),
         ),
         DataCard(
-          title: 'Paramètres de livraison',
+          title: 'Livraison & logistique',
           icon: Icons.local_shipping_outlined,
           trailing: IconButton(
             onPressed: () =>

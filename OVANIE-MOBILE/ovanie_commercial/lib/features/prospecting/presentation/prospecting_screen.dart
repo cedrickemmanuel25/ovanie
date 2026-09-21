@@ -276,7 +276,22 @@ class _CommercialProspectingScreenState extends State<CommercialProspectingScree
             children: [
               DropdownButtonFormField<String>(
                 value: outcome,
-                decoration: const InputDecoration(labelText: 'Résultat de la visite'),
+                isExpanded: true,
+                dropdownColor: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                elevation: 3,
+                menuMaxHeight: 320,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF5A7196), size: 20),
+                style: const TextStyle(color: Color(0xFF00133A), fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Résultat de la visite',
+                  labelStyle: const TextStyle(color: Color(0xFF274B79), fontSize: 13),
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 15),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
                 items: const [
                   DropdownMenuItem(value: 'visited', child: Text('Visité')),
                   DropdownMenuItem(value: 'interested', child: Text('Intéressé')),
