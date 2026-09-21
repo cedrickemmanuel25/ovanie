@@ -1,0 +1,31 @@
+# 05 — Index des preuves source
+
+Les lignes ci-dessous sont des repères dans le ZIP audité. Elles servent à retrouver rapidement les contrats actuels.
+
+| Clé | Fichier | Ligne approximative |
+|---|---|---:|
+| `product_web_sale_type` | `web/resources/views/vendor/products/partials/ovanie-product-wizard.blade.php` | 955 |
+| `product_web_state` | `web/resources/views/vendor/products/partials/ovanie-product-wizard.blade.php` | 849 |
+| `vendor_mobile_sale_types` | `mobile vendeur/lib/features/products/product_form_screen.dart` | 53 |
+| `vendor_mobile_state_forced` | `mobile vendeur/lib/features/products/product_form_screen.dart` | 478 |
+| `vendor_mobile_sale_payload` | `mobile vendeur/lib/features/products/product_form_screen.dart` | 489 |
+| `shop_web_company` | `web/app/Http/Controllers/ShopController.php` | 522 |
+| `vendor_onboarding_values` | `mobile vendeur/lib/features/onboarding/shop_onboarding_screen.dart` | 347 |
+| `vendor_local_categories` | `mobile vendeur/lib/features/menu/profile_screens.dart` | 214 |
+| `client_mobile_profile` | `mobile client/lib/features/account/domain/account_models.dart` | 10 |
+| `client_mobile_update` | `web/app/Http/Controllers/Api/MobileClientAccountController.php` | 75 |
+| `client_web_extended_profile` | `web/app/Http/Controllers/ClientAccountController.php` | 627 |
+| `checkout_localities` | `mobile client/lib/features/checkout/presentation/checkout_screen.dart` | 20 |
+| `territory_route` | `web/routes/api.php` | 337 |
+| `address_types` | `web/app/Http/Controllers/Api/AddressController.php` | 136 |
+| `payment_local_operators` | `mobile client/lib/features/payments/presentation/resume_payment_screen.dart` | 31 |
+| `driver_submit_mobile` | `mobile livreur /lib/features/driver/data/driver_repository.dart` | 250 |
+| `driver_backend_birth` | `web/app/Http/Controllers/Api/Driver/DriverOnboardingController.php` | 124 |
+| `driver_supporting_backend` | `web/app/Http/Controllers/Api/Driver/DriverOnboardingController.php` | 139 |
+| `driver_profile_mobile` | `mobile livreur /lib/features/driver/models/driver_profile.dart` | 6 |
+| `commercial_seller_types` | `web/app/Http/Controllers/Api/Commercial/CommercialMobileShopController.php` | 295 |
+| `commercial_product` | `web/app/Http/Controllers/Api/Commercial/CommercialMobileProductController.php` | 16 |
+| `commercial_publish` | `web/app/Http/Controllers/Api/Commercial/CommercialMobileProductController.php` | 35 |
+| `vendor_order_local_status` | `mobile vendeur/lib/features/orders/order_ui.dart` | 38 |
+| `return_local_reason` | `mobile client/lib/features/returns/presentation/return_form_screen.dart` | 58 |
+| `route_active` | `web/bootstrap/app.php` | 10 |

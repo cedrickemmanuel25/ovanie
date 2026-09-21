@@ -1,0 +1,202 @@
+/* ======================= */
+/* Orders page – Modern UI */
+/* ======================= */
+
+/* ===== Container général ===== */
+.container {
+    max-width: 1100px;
+    margin: 2rem auto;
+    background-color: #fff;
+    padding: 0 1rem;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #333;
+}
+
+.page-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+
+.page-header p {
+    color: #666;
+    font-size: 0.95rem;
+}
+
+/* ===== Empty state ===== */
+.empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    background-color: #fafafa;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.empty p {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.empty .btn {
+    display: inline-block;
+    padding: 0.6rem 1.2rem;
+    background-color: #007bff;
+    color: #fff;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.empty .btn:hover {
+    background-color: #0056b3;
+}
+
+/* ===== Table commandes ===== */
+.orders-table {
+    overflow-x: auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 0.5rem;
+}
+
+.table th,
+.table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+}
+
+.table th {
+    background-color: #f4f6f8;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #555;
+}
+
+.table tbody tr {
+    background-color: #fff;
+    transition: transform 0.2s, box-shadow 0.2s;
+    border-radius: 8px;
+    display: table-row;
+}
+
+.table tbody tr:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.table td a.btn-sm {
+    display: inline-block;
+    padding: 0.3rem 0.8rem;
+    background-color: #007bff;
+    color: #fff;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.table td a.btn-sm:hover {
+    background-color: #0056b3;
+}
+
+/* ===== Statuts badges ===== */
+.status {
+    display: inline-block;
+    padding: 0.3rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: capitalize;
+    color: #fff;
+    transition: all 0.2s;
+}
+
+.status-pending {
+    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+    color: #212529;
+}
+
+.status-processing {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+}
+
+.status-completed {
+    background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+}
+
+.status-cancelled {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+}
+
+/* ===== Pagination ===== */
+.pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: 1.5rem;
+}
+
+.pagination nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.pagination .page-link,
+.pagination .active span {
+    display: inline-block;
+    padding: 0.4rem 0.9rem;
+    border-radius: 6px;
+    text-decoration: none;
+    border: 1px solid #ddd;
+    color: #007bff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.pagination .page-link:hover {
+    background-color: #007bff;
+    color: #fff;
+    border-color: #007bff;
+}
+
+.pagination .active span {
+    background-color: #007bff;
+    color: #fff;
+    border-color: #007bff;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+
+    .table th,
+    .table td {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.85rem;
+    }
+
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .empty {
+        padding: 2rem 1rem;
+    }
+
+    .status {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+    }
+}

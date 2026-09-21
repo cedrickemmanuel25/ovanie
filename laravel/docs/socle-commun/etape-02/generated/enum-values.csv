@@ -1,0 +1,174 @@
+enum,code,label
+product_state,new,Neuf
+product_state,reconditioned,Reconditionné
+product_state,used,Occasion
+commercial_sale_type,normal,"Vente normale"
+commercial_sale_type,flash_sale,"Vente flash"
+commercial_sale_type,black_friday,"Black Friday"
+commercial_sale_type,promotion,"Promo spéciale"
+selling_mode,unit,"Vente à l’unité"
+selling_mode,lot,"Vente par lot"
+selling_mode,weight,"Vente au poids"
+selling_mode,linear_meter,"Vente au mètre"
+selling_mode,surface,"Vente au m²"
+selling_mode,volume,"Vente au m³"
+product_unit,sac,Sac
+product_unit,tonne,Tonne
+product_unit,m3,m³
+product_unit,m2,m²
+product_unit,ml,"Mètre linéaire"
+product_unit,piece,Pièce
+product_unit,palette,Palette
+product_unit,rouleau,Rouleau
+product_unit,seau,Seau
+product_unit,carton,Carton
+product_unit,paquet,Paquet
+product_unit,barre,Barre
+product_unit,bidon,Bidon
+product_unit,kg,Kilogramme
+product_unit,litre,Litre
+product_type,materiau,"Matériau de construction"
+product_type,outillage,Outillage
+product_type,equipement,Équipement
+product_type,consommable,Consommable
+product_type,autre,"Autre produit BTP"
+product_availability_status,in_stock,"En stock immédiat"
+product_availability_status,on_order,"Disponible sous commande"
+product_availability_status,preorder,Précommande
+product_availability_status,out_of_stock,"Rupture temporaire"
+product_publication_status,draft,Brouillon
+product_publication_status,pending_logistics,"Logistique à compléter"
+product_publication_status,active,"En ligne"
+product_publication_status,inactive,"Hors ligne"
+product_publication_status,archived,Archivé
+seller_type,particulier,Particulier
+seller_type,entreprise,Entreprise
+seller_type,artisan,Artisan
+seller_type,grossiste,Grossiste
+legal_form,sarl,SARL
+legal_form,sarlu,SARLU
+legal_form,sa,SA
+legal_form,sas,SAS
+legal_form,ei,"Entreprise individuelle"
+legal_form,cooperative,Coopérative
+legal_form,autre,Autre
+identity_type,cni,CNI
+identity_type,passport,Passeport
+identity_type,permis,"Permis de conduire"
+identity_type,resident,"Carte de résident"
+shop_logistics_type,ovanie,"OVANIE Logistics"
+shop_logistics_type,seller,"Logistique vendeur"
+shop_delivery_zone,abidjan,Abidjan
+shop_delivery_zone,grand_abidjan,"Grand Abidjan"
+shop_delivery_zone,national,"Toute la Côte d’Ivoire"
+shop_delivery_zone,afrique_ouest,"Afrique de l’Ouest"
+vendor_payment_mode,post_delivery,"Paiement après livraison (72h)"
+vendor_payment_mode,weekly,"Paiement hebdomadaire"
+mobile_money_operator,orange,"Orange Money"
+mobile_money_operator,mtn,"MTN MoMo"
+mobile_money_operator,wave,Wave
+mobile_money_operator,moov,"Moov Money"
+client_gender,homme,Homme
+client_gender,femme,Femme
+client_gender,non_precise,"Ne pas préciser"
+client_account_type,particulier,"Particulier — Achats personnels"
+client_account_type,professionnel,"Professionnel — Entreprise BTP"
+client_account_type,artisan,"Artisan — Indépendant"
+address_type,home,Domicile
+address_type,office,Bureau
+address_type,site,Chantier
+address_type,warehouse,Dépôt
+address_type,other,Autre
+driver_onboarding_status,invited,Invité
+driver_onboarding_status,pending_review,"Dossier à vérifier"
+driver_onboarding_status,active,Validé
+driver_onboarding_status,suspended,Suspendu
+driver_onboarding_status,rejected,Refusé
+driver_availability_status,available,Disponible
+driver_availability_status,unavailable,Indisponible
+driver_availability_status,on_mission,"En mission"
+vehicle_type,moto,Moto
+vehicle_type,tricycle,Tricycle
+vehicle_type,pickup,Pickup
+vehicle_type,camion_3t,"Camion 3T"
+vehicle_type,camion_10t,"Camion 10T"
+week_day,lundi,Lundi
+week_day,mardi,Mardi
+week_day,mercredi,Mercredi
+week_day,jeudi,Jeudi
+week_day,vendredi,Vendredi
+week_day,samedi,Samedi
+week_day,dimanche,Dimanche
+vendor_preparation_status,pending,"Commande reçue"
+vendor_preparation_status,accepted,Acceptée
+vendor_preparation_status,preparing,"En préparation"
+vendor_preparation_status,ready,Prête
+vendor_preparation_status,cancelled,Annulée
+delivery_provider,ovanie,"OVANIE Logistics"
+delivery_provider,seller,"Logistique vendeur"
+delivery_provider,pickup,Retrait
+delivery_provider,partner,"Partenaire logistique"
+delivery_status,pending,"En attente"
+delivery_status,preparing,Préparation
+delivery_status,ready_for_pickup,"Prête pour collecte"
+delivery_status,assigned,"Livreur affecté"
+delivery_status,picked_up,Récupérée
+delivery_status,in_transit,"En transit"
+delivery_status,delivered,Livrée
+delivery_status,late,"En retard"
+delivery_status,failed,"Échec de livraison"
+delivery_status,returned,Retournée
+delivery_status,cancelled,Annulée
+delivery_status,delivery_failed,"Incident bloquant"
+delivery_status,not_required,"Livraison non requise"
+mission_status,planned,Planifiée
+mission_status,assigned,"À accepter"
+mission_status,accepted,Acceptée
+mission_status,collecting,"Collectes en cours"
+mission_status,picked_up,"Chargement terminé"
+mission_status,in_transit,"En route vers le client"
+mission_status,arrived,"Arrivé à destination"
+mission_status,delivered,Livrée
+mission_status,rejected,Refusée
+mission_status,incident,"Incident signalé"
+return_status,pending,"En attente"
+return_status,accepted,Accepté
+return_status,rejected,Refusé
+return_status,closed,Clôturé
+return_status,refunded,Remboursé
+return_logistics_status,pending_pickup,"Collecte retour en attente"
+return_logistics_status,return_pickup_planned,"Collecte retour planifiée"
+return_logistics_status,return_in_transit,"Retour en transit"
+return_logistics_status,return_received,"Retour reçu"
+return_logistics_status,refund_pending,"Remboursement en attente"
+return_logistics_status,refunded,Remboursé
+return_logistics_status,claim_review,"Réclamation en revue"
+return_logistics_status,refund_review,"Remboursement en revue"
+payment_status,pending,"En attente"
+payment_status,processing,"En cours"
+payment_status,paid,Payé
+payment_status,escrow_held,"En séquestre"
+payment_status,released_to_vendor,"Versé au vendeur"
+payment_status,failed,Échoué
+payment_status,cancelled,Annulé
+payment_status,expired,Expiré
+payment_status,refunded,Remboursé
+payment_status,chargeback,Chargeback
+payment_status,disputed,Litige
+payment_method,wave,Wave
+payment_method,mtn_money,"MTN Mobile Money"
+payment_method,orange_money,"Orange Money"
+payment_method,moov_money,"Moov Money"
+payment_method,card,"Carte bancaire"
+payment_method,cash_on_delivery,"Paiement à la livraison"
+payment_method,post_delivery,"Paiement après livraison"
+payment_method,bank_transfer,"Virement bancaire"
+payment_method,cheque,Chèque
+payment_method,manual_proof,"Preuve de paiement manuelle"
+payment_method,paydunya,PayDunya
+payment_method,cinetpay,CinetPay
+payment_method,fedapay,FedaPay
+payment_method,flutterwave,Flutterwave
+payment_method,paystack,Paystack
+payment_method,stripe,Stripe
+payment_method,paypal,PayPal

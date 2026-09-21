@@ -1,0 +1,32 @@
+name: ovanie_commercial
+description: Application mobile OVANIE dédiée aux commerciaux terrain.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  dio: ^5.9.0
+  flutter_secure_storage: ^9.2.4
+  image_picker: ^1.1.2
+  file_picker: ^8.1.7
+  geolocator: ^13.0.2
+  camera: ^0.11.0+2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/ovanie_logo.png
+    - assets/operators/orange.png
+    - assets/operators/mtn.png
+    - assets/operators/moov.png
+    - assets/operators/wave.png

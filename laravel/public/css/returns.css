@@ -1,0 +1,19 @@
+table {
+  width: 100%;
+  background: white;
+  border-radius: 10px;
+}
+
+th, td {
+  padding: 14px;
+}
+
+button {
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.danger {
+  background: #ef4444;
+  color: white;
+}

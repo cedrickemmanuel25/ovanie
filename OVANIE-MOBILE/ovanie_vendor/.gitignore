@@ -1,0 +1,33 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+/build/
+coverage/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Android generated/local
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/google-services.json
+
+# Apple generated/local
+ios/Flutter/ephemeral/
+ios/Pods/
+ios/.symlinks/
+ios/Runner/GoogleService-Info.plist
+macos/Flutter/ephemeral/
+macos/Pods/
+macos/Runner/GoogleService-Info.plist
+
+# OS
+.DS_Store
+Thumbs.db

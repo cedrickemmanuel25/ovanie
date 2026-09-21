@@ -1,0 +1,7 @@
+<form class="ops-filters" method="get"><input type="hidden" name="view" value="{{ $isMap?'map':'list' }}"><label class="ops-search"><x-operations.icon name="search"/><input name="q" value="{{ request('q') }}" placeholder="Rechercher une mission, une commande, un client ou une destination" aria-label="Rechercher une mission"></label><select name="status" data-submit-filter aria-label="Statut"><option value="">Statut</option>
+@foreach(['waiting'=>'En attente','ready'=>'À affecter','assigned'=>'Affectée','route'=>'En transit','delayed'=>'En retard'] as $value=>$label)<option value="{{ $value }}" @selected(request('status')===$value)>{{ $label }}</option>
+@endforeach
+</select><select name="zone" data-submit-filter aria-label="Zone"><option value="">Zone</option>
+@foreach($zones as $zone)<option @selected(request('zone')===$zone)>{{ $zone }}</option>
+@endforeach
+</select><select name="delay" data-submit-filter aria-label="Retard"><option value="">Retard</option><option value="late" @selected(request('delay')==='late')>En retard</option><option value="on_time" @selected(request('delay')==='on_time')>À l’heure</option></select><a class="ops-reset" href="{{ route('logistics.active-deliveries',['view'=>$isMap?'map':'list']) }}"><x-operations.icon name="refresh"/>Réinitialiser les filtres</a></form>

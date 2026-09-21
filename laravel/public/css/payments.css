@@ -1,0 +1,26 @@
+.summary {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 20px;
+}
+
+table {
+  width: 100%;
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+th, td {
+  padding: 14px;
+}
+
+.pending {
+  color: orange;
+  font-weight: bold;
+}
+
+.paid {
+  color: green;
+  font-weight: bold;
+}

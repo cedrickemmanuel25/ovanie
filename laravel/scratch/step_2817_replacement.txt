@@ -1,0 +1,148 @@
+    <header class="ov-header">
+        <div class="ov-header-top ov-wrap">
+
+            {{-- Logo --}}
+            <a href="{{ route('home') }}" class="ov-logo">
+                <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE">
+            </a>
+
+            {{-- Barre de recherche --}}
+            <form action="{{ route('catalog.index') }}" method="GET" class="ov-search">
+                <div class="ov-search-select-wrap">
+                    <select name="category" class="ov-search-select">
+                        <option value="">Toutes catégories</option>
+                        @foreach(\App\Models\Category::where('status', 'actif')->orderBy('name')->get() as $cat)
+                            <option value="{{ $cat->id }}">{{ $cat->name }}</option>
+                        @endforeach
+                    </select>
+                    <svg class="ov-search-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <input type="text" name="search" class="ov-search-input" placeholder="Rechercher un produit, une marque..." value="{{ request('search') }}">
+                <button type="submit" class="ov-search-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </button>
+            </form>
+
+            {{-- Actions (compte, commandes, panier) --}}
+            <div class="ov-actions">
+                <div class="ov-user-dropdown-wrapper">
+                    @guest
+                        <a href="{{ route('login') }}" class="ov-user-block">
+                            <svg class="ov-user-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                            <div class="ov-user-text">
+                                <span class="ov-user-line1">Bonjour, Identifiez-vous</span>
+                                <span class="ov-user-line2">Comptes &#9662;</span>
+                            </div>
+                        </a>
+                        <div class="ov-user-dropdown">
+                            <a href="{{ route('login') }}" style="text-align: center; background: #ff9900; color: #fff !important; border-radius: 4px; margin: 0 15px 10px; padding: 8px; font-weight: bold; border: 1px solid #ff9900; text-decoration: none;">Identifiez-vous</a>
+                            <div style="text-align: center; font-size: 11px; color: #666; margin-bottom: 10px;">Nouveau client ? <a href="{{ route('register') }}" style="display: inline; padding: 0; color: #007185 !important; background: none; text-decoration: none;">Commencer ici.</a></div>
+                            <hr>
+                            <a href="{{ route('login') }}">Mon compte</a>
+                            <a href="{{ route('login') }}">Mes commandes</a>
+                            <a href="{{ route('open-shop') }}">Vendez sur OVANIE</a>
+                        </div>
+                    @endguest
+
+                    @auth
+                        <a href="{{ route('profile.edit') }}" class="ov-user-block">
+                            <svg class="ov-user-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                            <div class="ov-user-text">
+                                <span class="ov-user-line1">{{ now()->hour >= 4 && now()->hour < 18 ? 'Bonjour,' : 'Bonsoir,' }} {{ Str::limit(auth()->user()->first_name ?? auth()->user()->name ?? 'Client', 15) }}</span>
+                                <span class="ov-user-line2">Comptes &#9662;</span>
+                            </div>
+                        </a>
+                        <div class="ov-user-dropdown">
+                            <a href="{{ route('profile.edit') }}">Mon compte</a>
+                            <a href="{{ route('client.orders') }}">Mes commandes</a>
+                            @if(auth()->user()->role === 'vendor' || auth()->user()->shop)
+                                <a href="{{ route('daniel.dashboard') }}">Mon tableau de bord vendeur</a>
+                            @else
+                                <a href="{{ route('open-shop') }}">Vendez sur OVANIE</a>
+                            @endif
+                            <hr>
+                            <a href="{{ route('logout') }}" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">Déconnexion</a>
+                            <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
+                                @csrf
+                            </form>
+                        </div>
+                    @endauth
+                </div>
+
+                <a href="{{ route('orders.index') }}" class="ov-returns-block">
+                    <span class="ov-returns-line1">Retours &</span>
+                    <span class="ov-returns-line2">Commandes</span>
+                </a>
+
+                <a href="{{ route('cart.index') }}" class="ov-cart-block">
+                    <svg class="ov-cart-icon" viewBox="0 0 24 24" fill="none" stroke="#ff8f12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                    <span class="ov-cart-badge" id="cart-count" data-count="{{ $cartCount ?? 0 }}">{{ $cartCount ?? 0 }}</span>
+                </a>
+            </div>
+        </div>
+
+        <nav class="ov-main-nav">
+            <div class="ov-main-nav__inner ov-wrap">
+                <button type="button" class="ov-nav-btn-white" id="desktopMenuToggle">
+                    <svg class="ov-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                    Toutes les Catégories
+                </button>
+                <div class="ov-nav-links">
+                    <a href="{{ route('catalog.index') }}">Meilleures Ventes</a>
+                    <a href="{{ route('catalog.index') }}?promo=vente-flash">Offres du Jour</a>
+                    <a href="{{ route('devis.create') }}">Calculateur Devis IA</a>
+                    <a href="{{ route('catalog.business') }}">OVANIE Business</a>
+                    <a href="{{ route('open-shop') }}">Vendez sur OVANIE</a>
+                    <a href="#" id="openGuideAcheteur" class="ov-nav-guide">Guide d'acheteur</a>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    {{-- ===== MODAL GUIDE D'ACHETEUR ===== --}}
+    <div id="modalGuideAcheteur" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(2,11,24,.68);backdrop-filter:blur(6px);overflow:auto;padding:24px 14px;">
+        <div style="max-width:1760px;min-height:min(760px,calc(100vh - 48px));margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 28px 80px rgba(0,0,0,.38);font-family:'Segoe UI',Arial,sans-serif;color:#061634;display:flex;flex-direction:column;">
+            <style>
+                .ov-guide-hero { background:radial-gradient(circle at 86% 8%, rgba(7,151,223,.32), transparent 28%), linear-gradient(135deg,#020b18 0%,#06245a 58%,#024fc8 100%); color:#fff; padding:24px 74px 22px 34px; position:relative; flex:0 0 auto; }
+                .ov-guide-hero h2 { font-size:clamp(26px,3vw,44px) !important; font-weight:900 !important; color:#fff !important; margin:0 0 8px !important; text-transform:uppercase; letter-spacing:0 !important; line-height:1.02 !important; }
+                .ov-guide-hero h2 span { color:#7dd3fc !important; }
+                .ov-guide-hero p { max-width:720px; font-size:16px !important; color:#dbeafe !important; margin:0 !important; line-height:1.55 !important; }
+                .ov-guide-close { position:absolute; top:18px; right:18px; background:rgba(255,255,255,.13); color:#fff; width:42px; height:42px; border-radius:6px; font-size:24px; border:1px solid rgba(255,255,255,.24); cursor:pointer; line-height:38px; }
+                .ov-guide-cards { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:12px; padding:16px 18px; flex:1 1 auto; background:#f8fbff; }
+                .ov-guide-card { background:#fff; border:1px solid #dbe6f3; border-radius:8px; padding:16px 14px; text-align:left; display:flex; flex-direction:column; align-items:flex-start; min-height:240px; box-shadow:0 10px 24px rgba(10,31,92,.07); }
+                .ov-guide-card svg { flex-shrink:0; width:38px; height:38px; stroke:#024fc8; stroke-width:1.9; fill:none; }
+                .ov-guide-card .ov-icon-fill { fill:#eaf3ff; stroke:#024fc8; }
+                .ov-guide-card h3 { color:#024fc8; font-size:12px; font-weight:900; text-transform:uppercase; margin:12px 0 8px; line-height:1.2; }
+                .ov-guide-card p { color:#475569; font-size:12px; line-height:1.45; margin:0; }
+                .ov-guide-card hr { border:0; border-top:2px solid #f59e0b; width:38px; margin:10px 0; }
+                .ov-guide-card-link { color:#024fc8; font-size:11px; font-weight:800; border-top:1px solid #dbe6f3; padding-top:9px; margin-top:auto; text-decoration:none; line-height:1.25; }
+                .ov-guide-primary-btn { background:#024fc8; color:#fff; padding:8px 10px; border-radius:6px; font-size:11px; line-height:1.15; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; gap:6px; transition:background 0.2s; }
+                .ov-guide-primary-btn:hover { background:#0f2870; }
+                .ov-guide-stats { background:#061634; display:flex; align-items:center; padding:12px 20px; gap:0; flex:0 0 auto; }
+                .ov-guide-contact { background:#024fc8; display:grid; grid-template-columns:1fr auto 1fr; }
+                .ov-guide-badges { background:#fff; padding:12px 24px; display:flex; flex-wrap:wrap; justify-content:center; gap:14px 20px; border-top:1px solid #dbe6f3; flex:0 0 auto; }
+                @media (max-width:980px) {
+                    .ov-guide-cards { grid-template-columns:repeat(2,minmax(0,1fr)); padding:16px; }
+                    .ov-guide-stats { flex-wrap:wrap; padding:14px; }
+                    .ov-guide-stats-brand { flex:1 1 100% !important; margin-bottom:12px; }
+                    .ov-guide-stat { flex:1 1 33.333% !important; padding:6px 8px !important; }
+                    .ov-guide-contact { display:flex; flex-direction:column; }
+                    .ov-guide-contact > div { border-right:0 !important; border-bottom:1px solid rgba(255,255,255,0.15); }
+                }
+                @media (max-width:620px) {
+                    .ov-guide-hero { padding:24px 66px 24px 22px; }
+                    .ov-guide-cards { grid-template-columns:1fr; padding:12px; }
+                    .ov-guide-card { min-height:0; }
+                    .ov-guide-stat { flex:1 1 50% !important; }
+                }
+            </style>
+
+            <div class="ov-guide-hero">
+                <button id="closeGuideAcheteur" style="position:absolute;top:14px;right:18px;background:#0a1f5c;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;border:0;cursor:pointer;line-height:40px;">×</button>
+                <h2 style="font-size:clamp(24px,3vw,42px);font-weight:900;color:#0a1f5c;margin:0 0 4px;text-transform:uppercase;letter-spacing:1.4px;line-height:1;">POURQUOI ACHETER SUR <span style="color:#1a6bff;">OVANIE</span> ?</h2>
+                <p style="font-size:16px;color:#111;margin:0;line-height:1.2;">Achetez vos matériaux, équipements et biens immobiliers <span style="color:#1a6bff;font-weight:700;">en toute confiance.</span></p>
+            </div>
+
+            <div class="ov-guide-cards">
+                <div class="ov-guide-card">
+                    <svg viewBox="0 0 48 48" aria-hidden="true"><path class="ov-icon-fill" d="M24 5 39 11v12c0 10.8-5.6 17.7-15 21-9.4-3.3-15-10.2-15-21V11l15-6Z"/><path d="m16.5 24 5 5 10.5-12" stroke-linecap="round" stroke-linejoin="round"/></svg>

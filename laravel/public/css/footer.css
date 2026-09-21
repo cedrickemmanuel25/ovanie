@@ -1,0 +1,273 @@
+.ovn-footer,
+.ovn-footer * { box-sizing: border-box; }
+
+.ovn-footer {
+    background: linear-gradient(180deg, #062a61 0%, #041d49 100%);
+    color: #fff;
+    font-family: inherit;
+}
+
+.ovn-footer a { text-decoration: none; }
+
+.ovn-footer__grid {
+    display: grid;
+    grid-template-columns: 1.35fr repeat(4, .8fr) 1.2fr;
+    gap: 32px;
+    padding-block: 34px 28px;
+    align-items: start;
+}
+
+.ovn-footer__logo {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.ovn-footer__logo img {
+    width: 168px;
+    height: 58px;
+    object-fit: contain;
+    object-position: left center;
+    display: block;
+}
+
+.ovn-footer__brand > p,
+.ovn-footer__newsletter > p {
+    margin: 0;
+    color: #d6e1f0;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.ovn-footer__brand > p { max-width: 245px; }
+
+.ovn-footer__contact {
+    margin-top: 14px;
+    display: grid;
+    gap: 8px;
+    font-style: normal;
+}
+
+.ovn-footer__contact span,
+.ovn-footer__contact a {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: #e2eaf6;
+    font-size: 10.5px;
+    line-height: 1.45;
+}
+
+.ovn-footer__contact svg {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: #ff6a00;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    margin-top: 1px;
+}
+
+.ovn-footer__socials {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.ovn-footer__socials a {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(255,255,255,.04);
+    transition: transform .16s ease, background .16s ease, border-color .16s ease;
+}
+
+.ovn-footer__socials a:hover {
+    transform: translateY(-1px);
+    background: rgba(255,255,255,.1);
+    border-color: rgba(255,255,255,.34);
+}
+
+.ovn-footer__socials a.is-whatsapp:hover { background: #25d366; border-color: #25d366; }
+.ovn-footer__socials a.is-youtube:hover { background: #ff0000; border-color: #ff0000; }
+.ovn-footer__socials a.is-linkedin:hover { background: #0a66c2; border-color: #0a66c2; }
+.ovn-footer__socials a.is-facebook:hover { background: #1877f2; border-color: #1877f2; }
+
+.ovn-footer__socials svg { width: 15px; height: 15px; }
+
+.ovn-footer__column,
+.ovn-footer__newsletter {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+}
+
+.ovn-footer__column h3,
+.ovn-footer__newsletter h3 {
+    margin: 0 0 4px;
+    color: #fff;
+    font-size: 10.5px;
+    line-height: 1.25;
+    font-weight: 800;
+    letter-spacing: .04em;
+}
+
+.ovn-footer__column a {
+    color: #dce6f4;
+    font-size: 10px;
+    line-height: 1.35;
+    transition: color .15s ease;
+}
+
+.ovn-footer__column a:hover { color: #ffae79; }
+
+.ovn-footer__newsletter form {
+    display: grid;
+    gap: 7px;
+    margin-top: 9px;
+}
+
+.ovn-footer__newsletter input {
+    width: 100%;
+    height: 38px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 6px;
+    padding: 0 12px;
+    background: #fff;
+    color: #17273f;
+    outline: 0;
+    font-size: 11px;
+}
+
+.ovn-footer__newsletter button {
+    height: 36px;
+    border: 0;
+    border-radius: 6px;
+    background: #ff6600;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.ovn-footer__bottom {
+    border-top: 1px solid rgba(255,255,255,.1);
+}
+
+.ovn-footer__bottom-inner {
+    min-height: 58px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 22px;
+    align-items: center;
+}
+
+.ovn-footer__bottom p {
+    margin: 0;
+    color: #cbd8e9;
+    font-size: 9.5px;
+    white-space: nowrap;
+}
+
+.ovn-footer__legal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+.ovn-footer__legal a {
+    color: #cbd8e9;
+    font-size: 9.5px;
+}
+
+.ovn-footer__apps {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+}
+
+.ovn-footer__apps > span:first-child {
+    color: #cbd8e9;
+    font-size: 9px;
+    margin-right: 2px;
+}
+
+.ovn-store-badge {
+    min-width: 112px;
+    min-height: 34px;
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 5px;
+    color: #fff;
+    background: #031630;
+}
+
+.ovn-store-badge.is-disabled { opacity: .75; }
+
+.ovn-store-badge > svg {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 auto;
+    fill: #fff;
+}
+
+.ovn-store-badge span { display: grid; line-height: 1.02; }
+.ovn-store-badge small { color: #cbd8e9; font-size: 6.8px; }
+.ovn-store-badge strong { color: #fff; font-size: 9.5px; }
+
+.ovn-whatsapp-float {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 3500;
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: #25d366;
+    color: #fff;
+    box-shadow: 0 10px 26px rgba(37,211,102,.28);
+    transition: transform .16s ease;
+}
+
+.ovn-whatsapp-float:hover { transform: translateY(-2px) scale(1.02); color: #fff; }
+.ovn-whatsapp-float svg { width: 27px; height: 27px; }
+
+@media (max-width: 1250px) {
+    .ovn-footer__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .ovn-footer__bottom-inner { grid-template-columns: 1fr; padding-block: 14px; }
+    .ovn-footer__legal,
+    .ovn-footer__apps { justify-content: flex-start; flex-wrap: wrap; }
+}
+
+@media (max-width: 760px) {
+    .ovn-footer__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 18px; }
+    .ovn-footer__brand,
+    .ovn-footer__newsletter { grid-column: 1 / -1; }
+    .ovn-footer__apps { gap: 6px; }
+}
+
+@media (max-width: 480px) {
+    /* Colonnes de liens à 2 par ligne au lieu d'un empilement 100% pleine
+       largeur : le footer est deux fois moins long et n'a plus de moitié
+       d'écran vide à droite de chaque lien. */
+    .ovn-footer__grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 22px 14px; }
+    .ovn-footer__brand,
+    .ovn-footer__newsletter { grid-column: 1 / -1; }
+    .ovn-footer__legal { gap: 12px; flex-wrap: wrap; }
+    .ovn-footer__apps > span:first-child { width: 100%; }
+    .ovn-whatsapp-float { right: 14px; bottom: 14px; width: 48px; height: 48px; }
+}

@@ -1,0 +1,68 @@
+.order-filters {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.order-filters select,
+.order-filters input {
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+/* TABLE */
+table {
+  width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+}
+
+thead {
+  background: #3b3bf6;
+  color: #fff;
+}
+
+th, td {
+  padding: 14px;
+}
+
+tbody tr {
+  border-bottom: 1px solid #eee;
+}
+
+tbody tr:hover {
+  background: #f4f6ff;
+}
+
+/* STATUTS */
+.status {
+  font-weight: bold;
+}
+
+.status.en-attente {
+  color: #ff9800;
+}
+
+.status.expedie {
+  color: #2196f3;
+}
+
+.status.livre {
+  color: #4caf50;
+}
+
+.status.annule {
+  color: #f44336;
+}
+
+button {
+  padding: 6px 12px;
+  background: #3b3bf6;
+  border: none;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}

@@ -1,0 +1,7 @@
+@extends('layouts.client')
+@section('title', 'Détail carte cadeau')
+@section('content')
+<section class="cs-page-head"><div><h1>{{ $giftCard->product?->name ?: 'Carte OVANIE' }}</h1><p>{{ $giftCard->code }}</p></div><a class="cs-btn outline" href="{{ route('client.vouchers') }}">Retour aux cartes</a></section>
+<section class="cs-card"><h2>Solde disponible</h2><strong style="font-size:36px;color:#f36600">{{ number_format($giftCard->availableBalance(),0,',',' ') }} FCFA</strong><p>PIN : <strong>{{ $giftCard->plainPin() ?: '••••' }}</strong></p><p>Statut : {{ $giftCard->status }} · Expiration : {{ $giftCard->expires_at?->format('d/m/Y H:i') ?: '—' }}</p>@if($giftCard->product?->is_rechargeable && (int)$giftCard->owner_user_id === (int)auth()->id())<a class="cs-btn" href="{{ route('client.gift-cards.recharge.form',$giftCard) }}">Recharger</a>@endif</section>
+<section class="cs-card" style="margin-top:18px"><div class="cs-section-head"><h2>Historique</h2></div>@forelse($transactions as $tx)<div class="cs-payment-row"><span class="operator">{{ strtoupper(substr($tx->type,0,3)) }}</span><div><strong>{{ $tx->description ?: $tx->type }}</strong><p>{{ $tx->created_at?->format('d/m/Y H:i') }} @if($tx->order_id) · Commande #{{ $tx->order_id }} @endif</p></div><b>{{ (float)$tx->amount>0?'+':'' }}{{ number_format((float)$tx->amount,0,',',' ') }} FCFA</b></div>@empty<div class="cs-empty"><p>Aucun mouvement.</p></div>@endforelse<div style="margin-top:15px">{{ $transactions->links() }}</div></section>
+@endsection

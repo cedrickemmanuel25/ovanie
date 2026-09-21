@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="vehicle" viewBox="0 0 64 104">
+    <g>
+      <rect x="4" y="14" width="8" height="18" rx="4" fill="#1f2937"/>
+      <rect x="52" y="14" width="8" height="18" rx="4" fill="#1f2937"/>
+      <rect x="4" y="61" width="8" height="18" rx="4" fill="#1f2937"/>
+      <rect x="52" y="61" width="8" height="18" rx="4" fill="#1f2937"/>
+      <rect x="4" y="82" width="8" height="18" rx="4" fill="#1f2937"/>
+      <rect x="52" y="82" width="8" height="18" rx="4" fill="#1f2937"/>
+      <path d="M18 5h28c6 0 10 5 10 11v22H8V16C8 10 12 5 18 5z" fill="currentColor" stroke="#ffffff" stroke-width="2"/>
+      <path d="M15 14h34l-4 16H19z" fill="#d9eef7" stroke="#ffffff" stroke-width="1.5"/>
+      <rect x="8" y="37" width="48" height="62" rx="4" fill="currentColor" stroke="#0f2942" stroke-width="1.5"/>
+      <path d="M15 46h34M15 58h34M15 70h34M15 82h34M15 91h34" stroke="#ffffff" stroke-width="1.5" opacity=".70"/>
+      <rect x="25" y="32" width="14" height="8" rx="2" fill="#17212d"/>
+    </g>
+  </symbol>
+</svg>

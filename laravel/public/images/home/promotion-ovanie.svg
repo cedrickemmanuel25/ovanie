@@ -1,0 +1,50 @@
+<svg width="360" height="250" viewBox="0 0 360 250" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Promotions OVANIE</title>
+  <desc id="desc">Illustration professionnelle de deux étiquettes promotionnelles OVANIE avec symbole pourcentage.</desc>
+  <defs>
+    <linearGradient id="orange" x1="62" y1="38" x2="248" y2="202" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF7A1A"/>
+      <stop offset="1" stop-color="#F25B00"/>
+    </linearGradient>
+    <linearGradient id="navy" x1="185" y1="86" x2="296" y2="211" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B4289"/>
+      <stop offset="1" stop-color="#05265D"/>
+    </linearGradient>
+    <filter id="shadow" x="18" y="17" width="324" height="224" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#06275A" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <g opacity="0.65">
+    <circle cx="44" cy="53" r="3" fill="#FFB27D"/>
+    <circle cx="320" cy="64" r="3" fill="#0C4D9E"/>
+    <path d="M306 26V42M298 34H314" stroke="#FF7A1A" stroke-width="3" stroke-linecap="round"/>
+    <path d="M48 196V212M40 204H56" stroke="#0D4D99" stroke-width="3" stroke-linecap="round"/>
+    <path d="M284 210L288 218L297 219L290 225L292 234L284 230L276 234L278 225L271 219L280 218L284 210Z" fill="#FFC39D"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <path d="M61 58C61 48.0589 69.0589 40 79 40H208L259 91V180C259 189.941 250.941 198 241 198H79C69.0589 198 61 189.941 61 180V58Z" fill="url(#orange)"/>
+    <circle cx="215" cy="84" r="13" fill="#FFF3EA"/>
+    <circle cx="215" cy="84" r="5" fill="#F25B00"/>
+
+    <path d="M167 92C167 82.0589 175.059 74 185 74H263L304 115V178C304 187.941 295.941 196 286 196H185C175.059 196 167 187.941 167 178V92Z" fill="url(#navy)"/>
+    <circle cx="266" cy="110" r="11" fill="#EAF2FF"/>
+    <circle cx="266" cy="110" r="4.5" fill="#0B4289"/>
+  </g>
+
+  <g transform="translate(90 82)">
+    <circle cx="28" cy="28" r="17" stroke="white" stroke-width="8"/>
+    <circle cx="78" cy="74" r="17" stroke="white" stroke-width="8"/>
+    <path d="M88 13L19 89" stroke="white" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <path d="M193 140H270" stroke="white" stroke-opacity="0.38" stroke-width="2" stroke-linecap="round"/>
+  <path d="M193 151H252" stroke="white" stroke-opacity="0.26" stroke-width="2" stroke-linecap="round"/>
+
+  <g transform="translate(234 174)">
+    <rect x="0" y="0" width="56" height="22" rx="11" fill="white" fill-opacity="0.94"/>
+    <path d="M14 7.5H18.2L21 11L18.2 14.5H14L11.2 11L14 7.5Z" fill="#FF6500"/>
+    <text x="26" y="14.2" fill="#0A346F" font-family="Arial, Helvetica, sans-serif" font-size="7.5" font-weight="700">OVANIE</text>
+  </g>
+</svg>

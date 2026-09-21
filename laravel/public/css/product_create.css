@@ -1,0 +1,113 @@
+.admin-content {
+  margin-left: 240px;
+  padding: 30px;
+  background: #f9fafb;
+  min-height: 100vh;
+}
+
+/* PAGE HEADER */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.page-header h1 {
+  font-size: 26px;
+  color: #111827;
+}
+
+/* FORM */
+.product-form {
+  max-width: 1000px;
+}
+
+/* SECTION */
+.form-section {
+  background: #fff;
+  padding: 25px;
+  border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.08);
+  margin-bottom: 25px;
+}
+
+.form-section h2 {
+  font-size: 18px;
+  margin-bottom: 15px;
+  color: #1f2937;
+}
+
+/* GROUP */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #d97706;
+}
+
+/* GRID */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+}
+
+/* ACTIONS */
+.form-actions {
+  display: flex;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.btn-primary {
+  background: #d97706;
+  color: #fff;
+  border: none;
+  padding: 14px 22px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: #b45309;
+}
+
+.btn-secondary {
+  background: #e5e7eb;
+  padding: 10px 16px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #111827;
+  font-weight: 600;
+}
+
+.btn-danger {
+  background: #fee2e2;
+  color: #991b1b;
+  border: none;
+  padding: 14px 22px;
+  border-radius: 10px;
+  cursor: pointer;
+}

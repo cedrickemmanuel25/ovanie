@@ -1,0 +1,27 @@
+name: ovanie_vendor
+description: Application mobile officielle OVANIE Vendeur.
+publish_to: "none"
+version: 0.1.11+12
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  dio: ^5.9.0
+  geolocator: 14.0.2
+  image_picker: ^1.2.0
+  file_picker: 11.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/images/operators/

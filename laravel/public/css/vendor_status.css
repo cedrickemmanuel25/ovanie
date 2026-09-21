@@ -1,0 +1,23 @@
+.status-container {
+  padding: 40px;
+  text-align: center;
+}
+
+.status {
+  padding: 30px;
+  border-radius: 16px;
+  margin-bottom: 20px;
+}
+
+.blocked { background: #fde2e2; }
+.active { background: #dcfce7; }
+.suspended { background: #fff3cd; }
+
+button {
+  padding: 12px 25px;
+  background: #f97316;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}

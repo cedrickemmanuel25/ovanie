@@ -1,0 +1,250 @@
+.catalog-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.catalog-tabs,
+.catalog-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.catalog-tab {
+  min-height: 48px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 7px;
+  border: 1px solid var(--ov-line);
+  background: #fff;
+  color: var(--ov-navy);
+  box-shadow: 0 10px 24px rgba(7,23,57,.04);
+  font-weight: 800;
+}
+
+.catalog-tab span {
+  min-width: 34px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #edf1f7;
+  font-size: .86rem;
+}
+
+.catalog-tab i:not([data-lucide]),
+.catalog-tab b {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #0aa65b;
+}
+
+.catalog-tab b {
+  background: var(--ov-orange);
+}
+
+.catalog-tab.active {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--ov-orange-2), var(--ov-orange));
+}
+
+.catalog-tab.active span {
+  color: var(--ov-orange);
+  background: #fff;
+}
+
+.catalog-actions .vd-search {
+  width: min(380px, 44vw);
+}
+
+.product-card {
+  overflow: hidden;
+}
+
+.product-table td strong,
+.product-table td small {
+  display: block;
+}
+
+.product-table td small {
+  margin-top: 7px;
+  color: #566176;
+  line-height: 1.35;
+}
+
+.product-thumb {
+  width: 68px;
+  height: 68px;
+  display: block;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #f1f4f8;
+}
+
+.stock-alert {
+  color: var(--ov-orange) !important;
+  font-weight: 800;
+}
+
+.boost-fire {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--ov-orange);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.boost-fire svg {
+  width: 26px;
+  height: 26px;
+  fill: currentColor;
+}
+
+.boost-fire.active {
+  color: var(--ov-orange);
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.row-actions a,
+.row-actions button {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid #d3dbe8;
+  background: #fff;
+  color: var(--ov-navy);
+  cursor: pointer;
+}
+
+.row-actions button {
+  color: #ff1725;
+  border-color: #ffb7bd;
+}
+
+.row-actions svg {
+  width: 21px;
+  height: 21px;
+}
+
+.product-footer {
+  min-height: 70px;
+  padding: 14px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  color: #566176;
+}
+
+.laravel-pagination nav > div:first-child {
+  display: none;
+}
+
+.laravel-pagination nav > div:last-child {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.laravel-pagination nav span,
+.laravel-pagination nav a {
+  min-width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid #d7dfeb;
+  text-decoration: none;
+  background: #fff;
+}
+
+.laravel-pagination nav [aria-current="page"] span {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--ov-orange-2), var(--ov-orange));
+}
+
+.boost-modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(7,23,57,.42);
+}
+
+.boost-modal {
+  width: min(540px, 100%);
+  padding: 28px;
+  position: relative;
+}
+
+.boost-modal-close {
+  position: absolute;
+  right: 18px;
+  top: 12px;
+  border: 0;
+  background: transparent;
+  font-size: 2rem;
+  color: #667085;
+  cursor: pointer;
+}
+
+.boost-modal h3 {
+  margin: 0 0 14px;
+  color: var(--ov-navy);
+}
+
+.boost-modal label {
+  display: block;
+  margin: 14px 0 8px;
+  font-weight: 800;
+}
+
+.boost-modal .vd-btn {
+  margin-top: 18px;
+}
+
+.form-alert {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  font-weight: 650;
+}
+
+.form-alert.error { color: #b4232c; background: #ffe8eb; }
+.form-alert.success { color: #08753c; background: #e8f7ef; }
+
+@media (max-width: 980px) {
+  .catalog-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .catalog-actions .vd-search {
+    width: 100%;
+  }
+}

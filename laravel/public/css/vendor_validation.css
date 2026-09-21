@@ -1,0 +1,14 @@
+.pending {
+  color: orange;
+  font-weight: bold;
+}
+
+button {
+  padding: 8px 14px;
+  border-radius: 6px;
+}
+
+.danger {
+  background: crimson;
+  color: white;
+}

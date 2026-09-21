@@ -1,0 +1,5130 @@
+:root {
+    --ov-navy: #031b46;
+    --ov-navy-2: #001a45;
+    --ov-blue: #052d70;
+    --ov-orange: #ff6600;
+    --ov-orange-2: #f25c05;
+    --ov-red: #e60012;
+    --ov-bg: #f5f6f8;
+    --ov-line: #dfe4ea;
+    --ov-text: #0b1630;
+    --ov-muted: #667085;
+}
+
+
+/* ========================================================================== */
+/* PAGE BASE                                                                  */
+/* ========================================================================== */
+
+body {
+    background: var(--ov-bg);
+}
+
+.ovanie-home--mockup,
+.ovanie-home--mockup * {
+    box-sizing: border-box;
+}
+
+.ovanie-home--mockup {
+    --hero-ambient-rgb: 49, 93, 139;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    background: var(--ov-bg);
+    color: var(--ov-text);
+    font-family: Inter, Arial, sans-serif;
+}
+
+.ovanie-home--mockup::before {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    top: var(--hero-ambient-start, 245px);
+    left: 0;
+    right: 0;
+    height: 700px;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse at 18% 0%, rgba(var(--hero-ambient-rgb), .96) 0%, rgba(var(--hero-ambient-rgb), .66) 34%, transparent 68%),
+        linear-gradient(180deg, rgba(var(--hero-ambient-rgb), .92) 0%, rgba(var(--hero-ambient-rgb), .58) 42%, rgba(245, 246, 248, .84) 76%, var(--ov-bg) 100%);
+    transition: background .35s ease;
+}
+
+/* La bannière suit les proportions réelles de l'image afin de ne jamais la recadrer. */
+@media (min-width: 721px) {
+    .ovanie-home--mockup .ovanie-hero {
+        width: 100%;
+        height: auto !important;
+        min-height: 0 !important;
+        aspect-ratio: var(--hero-aspect, 1536 / 568);
+        background-size: cover !important;
+        background-position: center !important;
+    }
+}
+
+.ovanie-home--mockup > section {
+    position: relative;
+    z-index: 1;
+}
+
+.ovanie-home--mockup a {
+    text-decoration: none;
+}
+
+/* ========================================================================== */
+/* HEADER : VERSION COMPACTE COMME LA MAQUETTE                                */
+/* ========================================================================== */
+
+.ovanie-header {
+    background: linear-gradient(180deg, #00163b 0%, #00122f 100%) !important;
+    box-shadow: none !important;
+}
+
+.ovanie-header__wrap {
+    width: min(calc(100% - 64px), 1480px) !important;
+}
+
+.ovanie-header__main {
+    height: 64px !important;
+    grid-template-columns: 305px minmax(460px, 1fr) 380px !important;
+    gap: 16px !important;
+}
+
+.ovanie-header__logo img {
+    width: 145px !important;
+    max-height: 50px;
+    object-fit: contain;
+}
+
+/* Téléphone : animation continue, visible et discrète */
+.ovanie-header__phone {
+    max-width: 156px !important;
+    animation: ovHomePhoneFloat 1.6s ease-in-out infinite !important;
+    transform-origin: center center;
+    will-change: transform;
+}
+
+.ovanie-header__phone-icon {
+    position: relative;
+    width: 32px !important;
+    height: 32px !important;
+    background: rgba(255, 102, 0, .10) !important;
+    color: #fff !important;
+    border: 1px solid rgba(255, 255, 255, .18);
+    box-shadow: 0 0 0 0 rgba(255, 102, 0, .35) !important;
+    animation: ovHomePhonePulse 1.25s ease-out infinite !important;
+}
+
+.ovanie-header__phone-icon::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border: 1px solid rgba(255, 102, 0, .55);
+    border-radius: 999px;
+    pointer-events: none;
+    animation: ovHomePhoneRing 1.25s ease-out infinite !important;
+}
+
+.ovanie-header__phone-icon svg,
+.ovanie-header__phone-icon i {
+    width: 20px !important;
+    height: 20px !important;
+    animation: ovHomePhoneShake .82s ease-in-out infinite !important;
+    transform-origin: center center;
+}
+
+.ovanie-header__phone-label {
+    font-size: 10px !important;
+    color: rgba(255, 255, 255, .82) !important;
+}
+
+.ovanie-header__phone-number {
+    font-size: 13px !important;
+    letter-spacing: .2px !important;
+    animation: ovHomePhoneGlow 1.25s ease-in-out infinite alternate !important;
+}
+
+@keyframes ovHomePhoneFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+}
+
+@keyframes ovHomePhoneShake {
+    0%, 100% { transform: rotate(-10deg); }
+    20% { transform: rotate(11deg); }
+    40% { transform: rotate(-8deg); }
+    60% { transform: rotate(8deg); }
+    80% { transform: rotate(-4deg); }
+}
+
+@keyframes ovHomePhonePulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 102, 0, .40); }
+    70% { box-shadow: 0 0 0 9px rgba(255, 102, 0, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 102, 0, 0); }
+}
+
+@keyframes ovHomePhoneRing {
+    0% { transform: scale(.82); opacity: .85; }
+    75%, 100% { transform: scale(1.30); opacity: 0; }
+}
+
+@keyframes ovHomePhoneGlow {
+    from { text-shadow: 0 0 0 rgba(255, 102, 0, 0); }
+    to { text-shadow: 0 0 10px rgba(255, 102, 0, .55); }
+}
+
+/* Recherche marketplace : plus nette, mieux structurée et plus premium */
+.ovanie-search {
+    min-height: 44px !important;
+    height: 44px !important;
+    display: grid !important;
+    grid-template-columns: 170px minmax(220px, 1fr) 52px !important;
+    border-radius: 9px !important;
+    overflow: hidden !important;
+    background: #fff !important;
+    border: 1px solid rgba(255, 255, 255, .32) !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .22) !important;
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease !important;
+}
+
+.ovanie-search:focus-within {
+    border-color: rgba(255, 102, 0, .95) !important;
+    box-shadow: 0 0 0 3px rgba(255, 102, 0, .18), 0 10px 28px rgba(0, 0, 0, .26) !important;
+    transform: translateY(-1px);
+}
+
+.ovanie-search select {
+    width: 170px !important;
+    min-width: 170px !important;
+    height: 100% !important;
+    padding: 0 38px 0 16px !important;
+    border: 0 !important;
+    border-right: 1px solid #e4e7ec !important;
+    border-radius: 0 !important;
+    background-color: #f8fafc !important;
+    color: #101828 !important;
+    font-size: 11.5px !important;
+    font-weight: 800 !important;
+    cursor: pointer !important;
+}
+
+.ovanie-search input {
+    height: 100% !important;
+    min-width: 0 !important;
+    padding: 0 18px !important;
+    border: 0 !important;
+    background: #fff !important;
+    color: #101828 !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+}
+
+.ovanie-search input::placeholder {
+    color: #98a2b3 !important;
+    font-weight: 600 !important;
+}
+
+.ovanie-search button {
+    width: 52px !important;
+    min-width: 52px !important;
+    height: 100% !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: linear-gradient(180deg, #ff710f 0%, #f45a00 100%) !important;
+    color: #fff !important;
+    box-shadow: inset 1px 0 0 rgba(0, 0, 0, .06) !important;
+    transition: filter .18s ease, transform .18s ease !important;
+}
+
+.ovanie-search button:hover {
+    filter: brightness(1.06) !important;
+}
+
+.ovanie-search button:active {
+    transform: scale(.97);
+}
+
+.ovanie-search button svg,
+.ovanie-search button i {
+    width: 24px !important;
+    height: 24px !important;
+    stroke-width: 2.4 !important;
+}
+
+.ovanie-header__actions {
+    gap: 14px !important;
+}
+
+.ovanie-account__small,
+.ovanie-action__small {
+    font-size: 9px !important;
+}
+
+.ovanie-account__strong,
+.ovanie-action__strong {
+    font-size: 11px !important;
+}
+
+.ovanie-cart svg,
+.ovanie-cart i {
+    width: 30px !important;
+    height: 30px !important;
+}
+
+.ovanie-nav {
+    min-height: 42px !important;
+    height: 42px !important;
+    border-top: 1px solid rgba(255, 255, 255, .07) !important;
+    gap: 0 !important;
+    justify-content: space-between !important;
+}
+
+.ovanie-nav__categories,
+.ovanie-nav__link,
+.ovanie-nav-dropdown__trigger,
+.ovanie-nav__link--button {
+    height: 42px !important;
+    padding: 0 14px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+}
+
+.ovanie-nav__categories {
+    padding-left: 0 !important;
+}
+
+.ovanie-nav__delivery-bubble {
+    height: 32px !important;
+    padding: 0 20px !important;
+    border-radius: 5px !important;
+    background: var(--ov-orange) !important;
+    border: 0 !important;
+    color: #fff !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+}
+
+.ovanie-nav__new {
+    background: #64c800 !important;
+    color: #fff !important;
+    border-radius: 4px !important;
+    font-size: 9px !important;
+    padding: 2px 7px !important;
+}
+
+/* ========================================================================== */
+/* HERO                                                                       */
+/* ========================================================================== */
+
+.ovanie-hero {
+    position: relative;
+    min-height: 230px;
+    height: 230px;
+    background-image: var(--hero-image);
+    background-size: cover;
+    background-position: center 58%;
+    overflow: hidden;
+}
+
+.ovanie-hero__overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(0, 0, 0, .76) 0%, rgba(0, 0, 0, .52) 25%, rgba(0, 0, 0, .12) 55%, transparent 100%);
+}
+
+.ovanie-hero__content {
+    position: relative;
+    z-index: 2;
+    width: min(calc(100% - 80px), 1450px);
+    height: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+}
+
+.ovanie-hero__text {
+    width: 370px;
+    color: #fff;
+}
+
+.ovanie-hero__text h1 {
+    margin: 0 0 10px;
+    font-size: clamp(30px, 3vw, 48px);
+    line-height: .98;
+    letter-spacing: -1.4px;
+    font-weight: 900;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+}
+
+.ovanie-hero__text h1 span {
+    color: var(--ov-orange);
+}
+
+.ovanie-hero__text p {
+    max-width: 310px;
+    margin: 0 0 14px;
+    font-size: 14px;
+    line-height: 1.35;
+    font-weight: 500;
+}
+
+.ovanie-hero__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 190px;
+    height: 42px;
+    padding: 0 22px;
+    border-radius: 5px;
+    background: var(--ov-orange);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    box-shadow: 0 8px 18px rgba(255, 102, 0, .24);
+}
+
+/* ========================================================================== */
+/* TRUST BAR                                                                  */
+/* ========================================================================== */
+
+.ovanie-trust {
+    position: relative;
+    z-index: 10;
+    width: min(calc(100% - 280px), 1100px);
+    min-height: 50px;
+    margin: -12px auto 8px;
+    padding: 8px 26px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    background: #fff;
+    border: 1px solid #d9dee7;
+    border-radius: 14px;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, .12);
+}
+
+.ovanie-trust__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 18px;
+    min-width: 0;
+    border-right: 1px solid #e6e8ed;
+}
+
+.ovanie-trust__item:last-child {
+    border-right: 0;
+}
+
+.ovanie-trust__icon {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    color: var(--ov-navy);
+}
+
+.ovanie-trust__icon svg,
+.ovanie-trust__icon i {
+    width: 27px;
+    height: 27px;
+    stroke-width: 1.7;
+}
+
+.ovanie-trust__item strong,
+.ovanie-trust__item span {
+    display: block;
+}
+
+.ovanie-trust__item strong {
+    font-size: 11px;
+    line-height: 1.15;
+    color: #13203a;
+}
+
+.ovanie-trust__item span {
+    margin-top: 2px;
+    font-size: 9.5px;
+    line-height: 1.15;
+    color: #22304f;
+}
+
+/* ========================================================================== */
+/* DISCOVERY                                                                  */
+/* ========================================================================== */
+
+.ovanie-discovery {
+    width: min(calc(100% - 70px), 1450px);
+    margin: 0 auto 6px;
+    display: grid;
+    grid-template-columns: .92fr 1.22fr 1.25fr;
+    gap: 8px;
+    position: relative;
+    z-index: 2;
+}
+
+.ovanie-feature-card {
+    min-height: 178px;
+    padding: 10px 12px 7px;
+    background: #fff;
+    border: 1px solid #d9dee7;
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.ovanie-feature-card > h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: #142554;
+    font-weight: 900;
+}
+
+.ovanie-feature-card--ia {
+    display: grid;
+    grid-template-columns: 48% 52%;
+    align-items: stretch;
+    padding: 0;
+}
+
+.ovanie-feature-card__ia-media {
+    min-width: 0;
+    overflow: hidden;
+    background: #eef7ff;
+}
+
+.ovanie-feature-card__ia-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+
+.ovanie-feature-card__ia-copy {
+    padding: 12px 12px 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.ovanie-feature-card__title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ovanie-feature-card__title-row h3 {
+    margin: 0;
+    color: #16275e;
+    font-size: 15px;
+    font-weight: 900;
+}
+
+.ovanie-feature-card__title-row span {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: #1758ff;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 900;
+}
+
+.ovanie-feature-card__ia-copy h4 {
+    margin: 24px 0 6px;
+    font-size: 17px;
+    color: #142554;
+}
+
+.ovanie-feature-card__ia-copy p {
+    margin: 0;
+    font-size: 10.5px;
+    line-height: 1.35;
+    color: #21324e;
+}
+
+.ovanie-feature-card__ia-copy > a {
+    margin-top: auto;
+    color: #0057e6;
+    font-size: 10px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.ovanie-feature-card__ia-copy > a svg,
+.ovanie-feature-card__ia-copy > a i {
+    width: 13px;
+    height: 13px;
+}
+
+.ovanie-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.ovanie-mini-card {
+    min-height: 57px;
+    display: grid;
+    grid-template-columns: 42% 58%;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid #e4e7ec;
+    border-radius: 6px;
+    background: #fff;
+    color: #111827;
+}
+
+.ovanie-mini-card img {
+    width: 100%;
+    height: 57px;
+    object-fit: cover;
+    background: #f6f7f8;
+}
+
+.ovanie-mini-card span {
+    min-width: 0;
+    padding: 5px 8px;
+}
+
+.ovanie-mini-card strong,
+.ovanie-mini-card small {
+    display: block;
+}
+
+.ovanie-mini-card strong {
+    font-size: 9.2px;
+    line-height: 1.08;
+    font-weight: 800;
+}
+
+.ovanie-mini-card small {
+    margin-top: 3px;
+    font-size: 8px;
+    line-height: 1.1;
+    color: #344054;
+}
+
+.ovanie-feature-card__link {
+    margin-top: 7px;
+    color: #0758e5;
+    font-size: 10px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.ovanie-feature-card__link svg,
+.ovanie-feature-card__link i {
+    width: 13px;
+    height: 13px;
+}
+
+/* ========================================================================== */
+/* BUSINESS STRIP                                                             */
+/* ========================================================================== */
+
+.ovanie-business-strip {
+    width: min(calc(100% - 70px), 1450px);
+    min-height: 54px;
+    margin: 0 auto 6px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.ovanie-business-strip__seller,
+.ovanie-business-strip__delivery {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 24px;
+    color: #fff;
+}
+
+.ovanie-business-strip__seller {
+    background: linear-gradient(90deg, #00194a, #06256a);
+}
+
+.ovanie-business-strip__delivery {
+    background: linear-gradient(90deg, #ef5d00, #ff6d00);
+}
+
+.ovanie-business-strip__icon {
+    display: grid;
+    place-items: center;
+}
+
+.ovanie-business-strip__icon svg,
+.ovanie-business-strip__icon i {
+    width: 34px;
+    height: 34px;
+}
+
+.ovanie-business-strip strong,
+.ovanie-business-strip small {
+    display: block;
+}
+
+.ovanie-business-strip strong {
+    font-size: 14px;
+    line-height: 1.05;
+}
+
+.ovanie-business-strip small {
+    margin-top: 2px;
+    font-size: 9px;
+    opacity: .92;
+}
+
+.ovanie-business-strip a {
+    min-width: 150px;
+    height: 28px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 3px;
+    color: #fff;
+    font-size: 9.5px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.ovanie-business-strip__seller a {
+    background: #fff;
+    color: #19305a;
+}
+
+.ovanie-business-strip__delivery a {
+    min-width: auto;
+    background: transparent;
+}
+
+.ovanie-business-strip a svg,
+.ovanie-business-strip a i {
+    width: 13px;
+    height: 13px;
+}
+
+/* ========================================================================== */
+/* COMMERCE GRID                                                              */
+/* ========================================================================== */
+
+.ovanie-commerce-grid {
+    width: min(calc(100% - 70px), 1450px);
+    margin: 0 auto 8px;
+    display: grid;
+    grid-template-columns: 1.02fr .84fr 1.06fr;
+    gap: 7px;
+}
+
+.ovanie-commerce-panel {
+    min-width: 0;
+    height: 210px;
+    background: #fff;
+    border: 1px solid #d7dce4;
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.ovanie-commerce-panel--black {
+    border: 2px solid #111;
+}
+
+.ovanie-commerce-panel__head {
+    height: 35px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #e7e9ed;
+    white-space: nowrap;
+}
+
+.ovanie-commerce-panel--black .ovanie-commerce-panel__head {
+    background: #111;
+    color: #fff;
+    border-bottom: 0;
+}
+
+.ovanie-commerce-panel__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: #10204a;
+}
+
+.ovanie-commerce-panel--flash .ovanie-commerce-panel__title {
+    color: #f15f0a;
+}
+
+.ovanie-commerce-panel--black .ovanie-commerce-panel__title {
+    color: #fff;
+}
+
+.ovanie-commerce-panel__title strong {
+    font-size: 11px;
+    font-weight: 900;
+}
+
+.ovanie-commerce-panel__title svg,
+.ovanie-commerce-panel__title i {
+    width: 16px;
+    height: 16px;
+}
+
+.ovanie-commerce-panel__title span {
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: #ed1c24;
+    color: #fff;
+    font-size: 8px;
+    font-weight: 900;
+}
+
+.ovanie-commerce-panel__timer {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.ovanie-commerce-panel__timer > span {
+    font-size: 7.5px;
+    color: #ef5b0a;
+    font-weight: 800;
+}
+
+.ovanie-flash-timer {
+    min-width: 86px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    background: #f24e00;
+    color: #fff;
+    font-size: 9px;
+    letter-spacing: .5px;
+    text-align: center;
+}
+
+.ovanie-commerce-panel__head > a {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 8px;
+    font-weight: 800;
+    color: #0d2a66;
+}
+
+.ovanie-commerce-panel--black .ovanie-commerce-panel__head > a {
+    color: #fff;
+}
+
+.ovanie-commerce-panel__head > a svg,
+.ovanie-commerce-panel__head > a i {
+    width: 11px;
+    height: 11px;
+}
+
+.ovanie-mini-product-row {
+    height: calc(100% - 35px);
+    padding: 7px 7px 6px;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    scroll-snap-type: x mandatory;
+}
+
+.ovanie-mini-product-row::-webkit-scrollbar {
+    display: none;
+}
+
+.ovanie-mini-product-card {
+    flex: 0 0 calc((100% - 24px) / 5);
+    min-width: 0;
+    height: 100%;
+    border: 1px solid #e2e6ec;
+    border-radius: 5px;
+    overflow: hidden;
+    background: #fff;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+}
+
+.ovanie-commerce-panel--best .ovanie-mini-product-card {
+    flex-basis: calc((100% - 18px) / 4);
+}
+
+.ovanie-mini-product-card__media {
+    position: relative;
+    height: 76px;
+    display: block;
+    overflow: hidden;
+    background: #f7f8f9;
+}
+
+.ovanie-mini-product-card__media img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+}
+
+.ovanie-mini-product-card__media > button {
+    position: absolute;
+    z-index: 3;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: 0;
+    background: #fff;
+    border-radius: 50%;
+    color: #24324a;
+}
+
+.ovanie-mini-product-card__media > button svg,
+.ovanie-mini-product-card__media > button i {
+    width: 12px;
+    height: 12px;
+}
+
+.ovanie-mini-product-card__badge {
+    position: absolute;
+    z-index: 2;
+    top: 4px;
+    left: 4px;
+    padding: 3px 5px;
+    border-radius: 3px;
+    background: #ee5c09;
+    color: #fff;
+    font-size: 5.8px;
+    line-height: 1;
+    font-weight: 900;
+}
+
+.ovanie-mini-product-card__badge.black {
+    background: #111;
+}
+
+.ovanie-mini-product-card__body {
+    flex: 1;
+    min-height: 0;
+    padding: 5px 6px 6px;
+    display: flex;
+    flex-direction: column;
+}
+
+.ovanie-mini-product-card__name {
+    min-height: 22px;
+    color: #151b28;
+    font-size: 7.5px;
+    line-height: 1.22;
+    font-weight: 700;
+    overflow: hidden;
+}
+
+.ovanie-mini-product-card__rating {
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.ovanie-mini-product-card__rating span {
+    color: #ff8500;
+    font-size: 7px;
+    letter-spacing: -.6px;
+}
+
+.ovanie-mini-product-card__rating small {
+    color: #7b8494;
+    font-size: 5.8px;
+}
+
+.ovanie-mini-product-card__old {
+    margin-top: 1px;
+    color: #8b929e;
+    font-size: 6.5px;
+    text-decoration: line-through;
+}
+
+.ovanie-mini-product-card__price {
+    margin-top: 1px;
+    color: #ef5b08;
+    font-size: 9px;
+    line-height: 1.1;
+    font-weight: 900;
+}
+
+.ovanie-mini-product-card__price.red {
+    color: #e30016;
+}
+
+.ovanie-mini-product-card__body form,
+.ovanie-mini-product-card__buy {
+    margin-top: auto;
+}
+
+.ovanie-mini-product-card__body button,
+.ovanie-mini-product-card__buy {
+    width: 100%;
+    height: 20px;
+    border: 0;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ef5d08;
+    color: #fff;
+    font-size: 7px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.ovanie-mini-product-card__body button.outline,
+.ovanie-mini-product-card__buy.outline {
+    border: 1px solid #9ba3af;
+    background: #fff;
+    color: #172033;
+}
+
+.ovanie-mini-product-card__body button.black-buy,
+.ovanie-mini-product-card__buy.black-buy {
+    background: #e30016;
+}
+
+/* ========================================================================== */
+/* SERVICES                                                                   */
+/* ========================================================================== */
+
+.ovanie-service-ribbon {
+    width: min(calc(100% - 70px), 1450px);
+    margin: 0 auto 8px;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 5px;
+}
+
+.ovanie-service-ribbon__item {
+    min-height: 58px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #dfe3ea;
+    border-radius: 6px;
+    background: #fff;
+    color: #0c1e48;
+}
+
+.ovanie-service-ribbon__item > svg,
+.ovanie-service-ribbon__item > i {
+    flex: 0 0 auto;
+    width: 25px;
+    height: 25px;
+    color: #072d74;
+    stroke-width: 1.7;
+}
+
+.ovanie-service-ribbon__item strong,
+.ovanie-service-ribbon__item small {
+    display: block;
+}
+
+.ovanie-service-ribbon__item strong {
+    font-size: 9px;
+    line-height: 1.1;
+}
+
+.ovanie-service-ribbon__item small {
+    margin-top: 3px;
+    font-size: 7px;
+    line-height: 1.2;
+    color: #344054;
+}
+
+/* ========================================================================== */
+/* FOOTER COMPACT                                                             */
+/* ========================================================================== */
+
+.ov-footer {
+    padding-top: 10px !important;
+    background: linear-gradient(180deg, #001b45 0%, #001431 100%) !important;
+}
+
+.ov-footer__inner {
+    width: min(calc(100% - 100px), 1400px) !important;
+    padding: 0 0 8px !important;
+    grid-template-columns: 1.25fr .72fr .78fr .84fr .8fr !important;
+    gap: 26px !important;
+}
+
+.ov-footer__brand img {
+    width: 130px !important;
+}
+
+.ov-footer__brand p {
+    max-width: 240px !important;
+    margin: 6px 0 !important;
+    font-size: 8px !important;
+    line-height: 1.25 !important;
+}
+
+.ov-footer__contact {
+    gap: 3px !important;
+}
+
+.ov-footer__contact a,
+.ov-footer__contact span {
+    font-size: 7.5px !important;
+}
+
+.ov-footer__socials {
+    margin-top: 6px !important;
+    gap: 6px !important;
+}
+
+.ov-footer__socials a {
+    width: 24px !important;
+    height: 24px !important;
+}
+
+.ov-footer__socials a svg {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+.ov-footer__col h4 {
+    margin: 0 0 7px !important;
+    font-size: 9px !important;
+}
+
+.ov-footer__col nav {
+    gap: 3px !important;
+}
+
+.ov-footer__col a {
+    font-size: 7.5px !important;
+    line-height: 1.25 !important;
+}
+
+.ov-footer__payments {
+    margin-top: 6px !important;
+    gap: 4px !important;
+}
+
+.ov-footer__payments img {
+    max-height: 18px !important;
+    width: auto !important;
+}
+
+.ov-footer__bottom {
+    width: min(calc(100% - 100px), 1400px) !important;
+    min-height: 24px !important;
+    padding: 5px 0 !important;
+    font-size: 7px !important;
+}
+
+.ov-whatsapp-float {
+    width: 52px !important;
+    height: 52px !important;
+    right: 22px !important;
+    bottom: 22px !important;
+}
+
+/* ========================================================================== */
+/* RESPONSIVE                                                                 */
+/* ========================================================================== */
+
+@media (max-width: 1280px) {
+    .ovanie-header__wrap,
+    .ovanie-hero__content,
+    .ovanie-discovery,
+    .ovanie-business-strip,
+    .ovanie-commerce-grid,
+    .ovanie-service-ribbon {
+        width: min(calc(100% - 36px), 1180px) !important;
+    }
+
+    .ovanie-header__main {
+        grid-template-columns: 250px minmax(420px, 1fr) 310px !important;
+    }
+
+    .ovanie-header__logo img {
+        width: 125px !important;
+    }
+
+    .ovanie-header__phone {
+        max-width: 120px !important;
+    }
+
+    .ovanie-nav__link,
+    .ovanie-nav__categories {
+        padding-inline: 8px !important;
+        font-size: 9.5px !important;
+    }
+
+    .ovanie-trust {
+        width: min(calc(100% - 160px), 980px);
+    }
+
+    .ovanie-commerce-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .ovanie-commerce-panel--black {
+        grid-column: 1 / -1;
+    }
+
+    .ovanie-commerce-panel--black .ovanie-mini-product-card {
+        flex-basis: calc((100% - 24px) / 5);
+    }
+
+    .ovanie-service-ribbon {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 980px) {
+    .ovanie-header__main {
+        height: 58px !important;
+        grid-template-columns: auto minmax(0, 1fr) auto !important;
+    }
+
+    .ovanie-header__phone,
+    .ovanie-header__actions .ovanie-action,
+    .ovanie-nav {
+        display: none !important;
+    }
+
+    .ovanie-search {
+        grid-column: 2;
+        width: 100%;
+    }
+
+    .ovanie-search select {
+        display: none;
+    }
+
+    .ovanie-header__actions {
+        display: flex !important;
+    }
+
+    .ovanie-account {
+        display: none !important;
+    }
+
+    .ovanie-hero {
+        height: 210px;
+        min-height: 210px;
+    }
+
+    .ovanie-trust {
+        width: calc(100% - 28px);
+        padding-inline: 8px;
+    }
+
+    .ovanie-trust__item {
+        padding-inline: 8px;
+    }
+
+    .ovanie-discovery {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .ovanie-feature-card--ia {
+        grid-column: 1 / -1;
+        min-height: 150px;
+    }
+
+    .ovanie-business-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .ovanie-commerce-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ovanie-commerce-panel--black {
+        grid-column: auto;
+    }
+
+    .ovanie-service-ribbon {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .ovanie-header__wrap,
+    .ovanie-hero__content,
+    .ovanie-discovery,
+    .ovanie-business-strip,
+    .ovanie-commerce-grid,
+    .ovanie-service-ribbon {
+        width: calc(100% - 20px) !important;
+    }
+
+    .ovanie-header__logo img {
+        width: 94px !important;
+    }
+
+    .ovanie-header__main {
+        gap: 8px !important;
+    }
+
+    .ovanie-search {
+        height: 36px !important;
+        min-height: 36px !important;
+    }
+
+    .ovanie-search input {
+        font-size: 10px !important;
+    }
+
+    .ovanie-search button {
+        width: 40px !important;
+        min-width: 40px !important;
+    }
+
+    .ovanie-hero {
+        height: 190px;
+        min-height: 190px;
+        background-position: 62% center;
+    }
+
+    .ovanie-hero__overlay {
+        background: linear-gradient(90deg, rgba(0, 0, 0, .82) 0%, rgba(0, 0, 0, .62) 48%, rgba(0, 0, 0, .10) 100%);
+    }
+
+    .ovanie-hero__text {
+        width: 230px;
+    }
+
+    .ovanie-hero__text h1 {
+        font-size: 28px;
+    }
+
+    .ovanie-hero__text p {
+        max-width: 220px;
+        font-size: 11px;
+    }
+
+    .ovanie-hero__btn {
+        min-width: 150px;
+        height: 36px;
+        font-size: 11px;
+    }
+
+    .ovanie-trust {
+        width: calc(100% - 20px);
+        margin-top: 6px;
+        border-radius: 8px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0;
+    }
+
+    .ovanie-trust__item {
+        min-height: 46px;
+        border-right: 0;
+        border-bottom: 1px solid #eceef2;
+    }
+
+    .ovanie-trust__item:nth-child(odd) {
+        border-right: 1px solid #eceef2;
+    }
+
+    .ovanie-trust__item:nth-child(n+3) {
+        border-bottom: 0;
+    }
+
+    .ovanie-discovery {
+        grid-template-columns: 1fr;
+        margin-top: 8px;
+    }
+
+    .ovanie-feature-card--ia {
+        grid-column: auto;
+    }
+
+    .ovanie-business-strip__seller,
+    .ovanie-business-strip__delivery {
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+        padding-inline: 12px;
+    }
+
+    .ovanie-business-strip a {
+        grid-column: 2;
+        justify-self: start;
+        min-width: 125px;
+    }
+
+    .ovanie-commerce-panel {
+        height: 224px;
+    }
+
+    .ovanie-mini-product-card,
+    .ovanie-commerce-panel--best .ovanie-mini-product-card,
+    .ovanie-commerce-panel--black .ovanie-mini-product-card {
+        flex-basis: 31%;
+    }
+
+    .ovanie-commerce-panel__head {
+        gap: 6px;
+    }
+
+    .ovanie-commerce-panel__title strong {
+        font-size: 9px;
+    }
+
+    .ovanie-commerce-panel__timer > span {
+        display: none;
+    }
+
+    .ovanie-service-ribbon {
+        grid-template-columns: 1fr;
+    }
+
+    .ov-footer__inner {
+        width: calc(100% - 30px) !important;
+        grid-template-columns: 1fr 1fr !important;
+    }
+
+    .ov-footer__brand {
+        grid-column: 1 / -1;
+    }
+
+    .ov-footer__bottom {
+        width: calc(100% - 30px) !important;
+    }
+}
+
+/* ========================================================================== */
+/* CORRECTIFS NAVBAR FINAUX                                                    */
+/* ========================================================================== */
+@media (min-width: 981px) and (max-width: 1280px) {
+    .ovanie-search {
+        grid-template-columns: 145px minmax(180px, 1fr) 48px !important;
+        height: 42px !important;
+        min-height: 42px !important;
+    }
+
+    .ovanie-search select {
+        width: 145px !important;
+        min-width: 145px !important;
+        font-size: 10.5px !important;
+        padding-left: 12px !important;
+    }
+
+    .ovanie-search input {
+        font-size: 11.5px !important;
+        padding-inline: 14px !important;
+    }
+
+    .ovanie-search button {
+        width: 48px !important;
+        min-width: 48px !important;
+    }
+}
+
+@media (max-width: 980px) {
+    .ovanie-search {
+        grid-template-columns: minmax(0, 1fr) 46px !important;
+        height: 40px !important;
+        min-height: 40px !important;
+        border-radius: 8px !important;
+    }
+
+    .ovanie-search select {
+        display: none !important;
+    }
+
+    .ovanie-search input {
+        font-size: 11px !important;
+        padding-inline: 13px !important;
+    }
+
+    .ovanie-search button {
+        width: 46px !important;
+        min-width: 46px !important;
+    }
+}
+
+@media (max-width: 720px) {
+    .ovanie-search {
+        height: 36px !important;
+        min-height: 36px !important;
+        border-radius: 7px !important;
+    }
+
+    .ovanie-search input {
+        font-size: 10px !important;
+        padding-inline: 10px !important;
+    }
+
+    .ovanie-search button {
+        width: 40px !important;
+        min-width: 40px !important;
+    }
+
+    .ovanie-search button svg,
+    .ovanie-search button i {
+        width: 20px !important;
+        height: 20px !important;
+    }
+}
+
+/* ========================================================================== */
+/* AJUSTEMENTS FINAUX MAQUETTE : SEARCH + 3 CARTES + FOOTER                  */
+/* ========================================================================== */
+
+/* Barre de recherche : bouton parfaitement centré et intégré au champ. */
+.ovanie-search {
+    position: relative !important;
+    align-items: stretch !important;
+}
+
+.ovanie-search button {
+    align-self: stretch !important;
+    justify-self: stretch !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: 0 !important;
+    position: relative !important;
+    inset: auto !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+}
+
+.ovanie-search button svg,
+.ovanie-search button i {
+    display: block !important;
+    margin: 0 auto !important;
+    transform: none !important;
+}
+
+/* Les trois blocs découverte retrouvent les proportions compactes de la maquette. */
+.ovanie-discovery {
+    width: min(calc(100% - 82px), 1450px) !important;
+    grid-template-columns: .94fr 1.05fr 1.12fr !important;
+    gap: 10px !important;
+    margin-bottom: 6px !important;
+    align-items: stretch !important;
+}
+
+.ovanie-feature-card {
+    height: 176px !important;
+    min-height: 176px !important;
+    max-height: 176px !important;
+    padding: 8px 10px 6px !important;
+    border-radius: 6px !important;
+}
+
+.ovanie-feature-card > h3 {
+    margin: 0 0 6px !important;
+    font-size: 13px !important;
+    line-height: 1.05 !important;
+}
+
+.ovanie-feature-card--ia {
+    height: 176px !important;
+    min-height: 176px !important;
+    max-height: 176px !important;
+    grid-template-columns: 46% 54% !important;
+    padding: 0 !important;
+    align-items: center !important;
+}
+
+.ovanie-feature-card__ia-media {
+    height: 100% !important;
+    min-height: 0 !important;
+    display: grid !important;
+    place-items: center !important;
+    padding: 10px !important;
+    background: #f5f8fc !important;
+}
+
+.ovanie-feature-card__ia-media img {
+    width: 138px !important;
+    height: 138px !important;
+    max-width: 100% !important;
+    max-height: 138px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    object-position: center !important;
+}
+
+.ovanie-feature-card__ia-copy {
+    height: 100% !important;
+    padding: 10px 10px 7px !important;
+}
+
+.ovanie-feature-card__title-row h3 {
+    font-size: 13px !important;
+    line-height: 1.05 !important;
+}
+
+.ovanie-feature-card__title-row span {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 9px !important;
+}
+
+.ovanie-feature-card__ia-copy h4 {
+    margin: 18px 0 4px !important;
+    font-size: 15px !important;
+    line-height: 1.05 !important;
+}
+
+.ovanie-feature-card__ia-copy p {
+    font-size: 9.2px !important;
+    line-height: 1.25 !important;
+}
+
+.ovanie-feature-card__ia-copy > a,
+.ovanie-feature-card__link {
+    font-size: 9px !important;
+}
+
+.ovanie-mini-grid {
+    gap: 5px !important;
+}
+
+.ovanie-mini-card {
+    min-height: 58px !important;
+    height: 58px !important;
+    max-height: 58px !important;
+    grid-template-columns: 43% 57% !important;
+    border-radius: 5px !important;
+}
+
+.ovanie-mini-card img {
+    width: 100% !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    max-height: 58px !important;
+    object-fit: contain !important;
+    object-position: center !important;
+    background: #f7f8fa !important;
+}
+
+.ovanie-mini-card span {
+    padding: 4px 6px !important;
+}
+
+.ovanie-mini-card strong {
+    font-size: 8.7px !important;
+    line-height: 1.05 !important;
+}
+
+.ovanie-mini-card small {
+    margin-top: 2px !important;
+    font-size: 7.4px !important;
+    line-height: 1.05 !important;
+}
+
+.ovanie-feature-card__link {
+    margin-top: 5px !important;
+}
+
+/* La maquette n'affiche pas la barre "Retour en haut" entre la page et le footer. */
+.ov-scroll-top {
+    display: none !important;
+}
+
+/* Footer de la maquette : 6 colonnes, newsletter, stores et ligne basse compacte. */
+.ov-footer {
+    padding-top: 0 !important;
+    background: linear-gradient(180deg, #001b46 0%, #001437 100%) !important;
+}
+
+.ov-footer__inner {
+    width: min(calc(100% - 80px), 1450px) !important;
+    margin: 0 auto !important;
+    padding: 16px 0 12px !important;
+    display: grid !important;
+    grid-template-columns: 1.25fr .72fr .75fr .82fr .74fr 1.15fr !important;
+    gap: 24px !important;
+    align-items: start !important;
+}
+
+.ov-footer__brand img {
+    width: 118px !important;
+    margin-bottom: 6px !important;
+}
+
+.ov-footer__brand p {
+    max-width: 245px !important;
+    margin: 0 0 7px !important;
+    font-size: 8px !important;
+    line-height: 1.3 !important;
+}
+
+.ov-footer__contact {
+    gap: 4px !important;
+}
+
+.ov-footer__contact a,
+.ov-footer__contact span {
+    font-size: 7.5px !important;
+    line-height: 1.2 !important;
+}
+
+.ov-footer__icon {
+    width: 12px !important;
+    height: 12px !important;
+}
+
+.ov-footer__socials {
+    margin-top: 7px !important;
+    gap: 6px !important;
+}
+
+.ov-footer__socials a {
+    width: 24px !important;
+    height: 24px !important;
+}
+
+.ov-footer__socials a svg {
+    width: 13px !important;
+    height: 13px !important;
+}
+
+.ov-footer__col h4 {
+    margin: 0 0 7px !important;
+    font-size: 9px !important;
+    line-height: 1.15 !important;
+}
+
+.ov-footer__col nav {
+    gap: 3px !important;
+}
+
+.ov-footer__col a {
+    font-size: 7.5px !important;
+    line-height: 1.2 !important;
+}
+
+.ov-footer__payments {
+    margin-top: 7px !important;
+    gap: 4px !important;
+}
+
+.ov-footer__payments img {
+    height: 18px !important;
+    max-height: 18px !important;
+    max-width: 42px !important;
+    border-radius: 3px !important;
+    padding: 2px 3px !important;
+}
+
+.ov-footer__newsletter p {
+    margin: 0 0 7px !important;
+    color: #d3deec !important;
+    font-size: 7.5px !important;
+    line-height: 1.2 !important;
+}
+
+.ov-footer__newsletter-form {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 72px !important;
+    height: 30px !important;
+    background: #fff !important;
+    border-radius: 3px !important;
+    overflow: hidden !important;
+}
+
+.ov-footer__newsletter-form input {
+    min-width: 0 !important;
+    width: 100% !important;
+    border: 0 !important;
+    outline: 0 !important;
+    padding: 0 8px !important;
+    color: #172033 !important;
+    background: #fff !important;
+    font-size: 7.5px !important;
+}
+
+.ov-footer__newsletter-form button {
+    border: 0 !important;
+    padding: 0 7px !important;
+    background: linear-gradient(180deg, #ff750f 0%, #f35d00 100%) !important;
+    color: #fff !important;
+    font-size: 7.4px !important;
+    font-weight: 800 !important;
+    cursor: pointer !important;
+}
+
+.ov-footer__stores {
+    margin-top: 7px !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+}
+
+.ov-store-badge {
+    min-height: 31px !important;
+    padding: 4px 6px !important;
+    border-radius: 4px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    background: #050505 !important;
+    border: 1px solid rgba(255,255,255,.25) !important;
+    color: #fff !important;
+}
+
+.ov-store-badge__icon {
+    flex: 0 0 auto !important;
+    min-width: 17px !important;
+    color: #fff !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+    text-align: center !important;
+}
+
+.ov-store-badge span:last-child {
+    min-width: 0 !important;
+    display: grid !important;
+    line-height: 1 !important;
+}
+
+.ov-store-badge small,
+.ov-store-badge strong {
+    display: block !important;
+    color: #fff !important;
+}
+
+.ov-store-badge small {
+    font-size: 5.3px !important;
+    font-weight: 500 !important;
+}
+
+.ov-store-badge strong {
+    margin-top: 2px !important;
+    font-size: 7px !important;
+    white-space: nowrap !important;
+}
+
+.ov-footer__bottom {
+    width: min(calc(100% - 80px), 1450px) !important;
+    min-height: 28px !important;
+    padding: 7px 0 8px !important;
+    font-size: 6.8px !important;
+    align-items: center !important;
+}
+
+.ov-footer__bottom-links {
+    gap: 12px !important;
+}
+
+@media (max-width: 1180px) {
+    .ovanie-discovery {
+        width: calc(100% - 40px) !important;
+    }
+
+    .ov-footer__inner {
+        width: calc(100% - 40px) !important;
+        grid-template-columns: 1.3fr repeat(3, .8fr) 1.1fr !important;
+    }
+
+    .ov-footer__newsletter {
+        grid-column: 2 / -1 !important;
+    }
+}
+
+@media (max-width: 980px) {
+    .ovanie-feature-card {
+        height: 164px !important;
+        min-height: 164px !important;
+        max-height: 164px !important;
+    }
+
+    .ovanie-feature-card--ia {
+        height: 164px !important;
+        min-height: 164px !important;
+        max-height: 164px !important;
+    }
+
+    .ovanie-feature-card__ia-media img {
+        width: 122px !important;
+        height: 122px !important;
+        max-height: 122px !important;
+    }
+
+    .ovanie-mini-card,
+    .ovanie-mini-card img {
+        height: 53px !important;
+        min-height: 53px !important;
+        max-height: 53px !important;
+    }
+
+    .ov-footer__inner {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
+    .ov-footer__brand,
+    .ov-footer__newsletter {
+        grid-column: auto !important;
+    }
+}
+
+@media (max-width: 720px) {
+    .ovanie-discovery {
+        width: calc(100% - 20px) !important;
+        grid-template-columns: 1fr !important;
+    }
+
+    .ovanie-feature-card,
+    .ovanie-feature-card--ia {
+        height: auto !important;
+        min-height: 150px !important;
+        max-height: none !important;
+    }
+
+    .ovanie-feature-card--ia {
+        grid-template-columns: 42% 58% !important;
+    }
+
+    .ovanie-feature-card__ia-media img {
+        width: 112px !important;
+        height: 112px !important;
+        max-height: 112px !important;
+    }
+
+    .ov-footer__inner {
+        width: calc(100% - 28px) !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 18px 14px !important;
+    }
+
+    .ov-footer__brand,
+    .ov-footer__newsletter {
+        grid-column: 1 / -1 !important;
+    }
+
+    .ov-footer__newsletter-form {
+        max-width: 430px !important;
+    }
+
+    .ov-footer__stores {
+        max-width: 300px !important;
+    }
+
+    .ov-footer__bottom {
+        width: calc(100% - 28px) !important;
+    }
+}
+
+/* ========================================================================== */
+/* CORRECTIONS V3 : HERO COMPLET + CATEGORIES LISIBLES + FOOTER MAQUETTE     */
+/* ========================================================================== */
+
+/* -------------------------------------------------------------------------- */
+/* HERO : empêcher le titre et le bouton d'être coupés                        */
+/* -------------------------------------------------------------------------- */
+.ovanie-home--mockup .ovanie-hero {
+    height: 268px !important;
+    min-height: 268px !important;
+    overflow: hidden !important;
+    background-position: center 56% !important;
+}
+
+.ovanie-home--mockup .ovanie-hero__content {
+    height: 100% !important;
+    min-height: 0 !important;
+    padding-top: 16px !important;
+    padding-bottom: 20px !important;
+    box-sizing: border-box !important;
+    align-items: center !important;
+}
+
+.ovanie-home--mockup .ovanie-hero__text {
+    width: 430px !important;
+    max-width: 43vw !important;
+    padding-top: 0 !important;
+    transform: none !important;
+}
+
+.ovanie-home--mockup .ovanie-hero__text h1 {
+    margin: 0 0 10px !important;
+    font-size: clamp(34px, 2.75vw, 44px) !important;
+    line-height: .98 !important;
+    letter-spacing: -1px !important;
+}
+
+.ovanie-home--mockup .ovanie-hero__text p {
+    max-width: 320px !important;
+    margin: 0 0 13px !important;
+    font-size: 13.5px !important;
+    line-height: 1.3 !important;
+}
+
+.ovanie-home--mockup .ovanie-hero__btn {
+    min-width: 178px !important;
+    height: 38px !important;
+    padding: 0 19px !important;
+    font-size: 12px !important;
+}
+
+.ovanie-home--mockup .ovanie-trust {
+    margin-top: -15px !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3 CARTES : compactes mais avec libellés toujours visibles                  */
+/* -------------------------------------------------------------------------- */
+.ovanie-home--mockup .ovanie-discovery {
+    grid-template-columns: .92fr 1.13fr 1.18fr !important;
+    gap: 10px !important;
+}
+
+.ovanie-home--mockup .ovanie-feature-card,
+.ovanie-home--mockup .ovanie-feature-card--ia {
+    height: 188px !important;
+    min-height: 188px !important;
+    max-height: 188px !important;
+}
+
+.ovanie-home--mockup .ovanie-feature-card {
+    padding: 8px 10px 6px !important;
+}
+
+.ovanie-home--mockup .ovanie-feature-card > h3 {
+    margin-bottom: 7px !important;
+    font-size: 13.5px !important;
+}
+
+.ovanie-home--mockup .ovanie-mini-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-rows: repeat(2, 64px) !important;
+    gap: 6px !important;
+}
+
+.ovanie-home--mockup .ovanie-mini-card {
+    display: grid !important;
+    grid-template-columns: 39% minmax(0, 61%) !important;
+    align-items: stretch !important;
+    height: 64px !important;
+    min-height: 64px !important;
+    max-height: 64px !important;
+    overflow: hidden !important;
+}
+
+.ovanie-home--mockup .ovanie-mini-card img {
+    width: 100% !important;
+    height: 64px !important;
+    min-height: 64px !important;
+    max-height: 64px !important;
+    object-fit: contain !important;
+    object-position: center !important;
+}
+
+.ovanie-home--mockup .ovanie-mini-card span {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+    min-width: 0 !important;
+    padding: 5px 7px !important;
+    color: #101828 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    overflow: hidden !important;
+}
+
+.ovanie-home--mockup .ovanie-mini-card strong {
+    display: block !important;
+    width: 100% !important;
+    color: #101828 !important;
+    font-size: 9.5px !important;
+    line-height: 1.12 !important;
+    font-weight: 850 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+.ovanie-home--mockup .ovanie-mini-card small {
+    display: block !important;
+    width: 100% !important;
+    margin-top: 3px !important;
+    color: #344054 !important;
+    font-size: 7.8px !important;
+    line-height: 1.08 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+.ovanie-home--mockup .ovanie-feature-card__link {
+    margin-top: 5px !important;
+    font-size: 9.2px !important;
+}
+
+.ovanie-home--mockup .ovanie-feature-card--ia {
+    grid-template-columns: 46% 54% !important;
+}
+
+.ovanie-home--mockup .ovanie-feature-card__ia-media img {
+    width: 144px !important;
+    height: 144px !important;
+    max-height: 144px !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* FOOTER : proportions et lisibilité proches de la maquette                  */
+/* -------------------------------------------------------------------------- */
+.ov-footer {
+    background: #001b49 !important;
+}
+
+.ov-footer__inner {
+    width: min(calc(100% - 72px), 1460px) !important;
+    padding: 18px 0 14px !important;
+    grid-template-columns: 1.28fr .72fr .78fr .86fr .76fr 1.22fr !important;
+    gap: 26px !important;
+}
+
+.ov-footer__brand img {
+    width: 132px !important;
+    margin-bottom: 7px !important;
+}
+
+.ov-footer__brand p {
+    max-width: 260px !important;
+    margin-bottom: 8px !important;
+    font-size: 8.8px !important;
+    line-height: 1.35 !important;
+}
+
+.ov-footer__contact {
+    gap: 5px !important;
+}
+
+.ov-footer__contact a,
+.ov-footer__contact span {
+    font-size: 8.2px !important;
+    line-height: 1.25 !important;
+}
+
+.ov-footer__col h4 {
+    margin-bottom: 8px !important;
+    font-size: 10.2px !important;
+    line-height: 1.15 !important;
+}
+
+.ov-footer__col nav {
+    gap: 4px !important;
+}
+
+.ov-footer__col a {
+    font-size: 8.3px !important;
+    line-height: 1.25 !important;
+}
+
+.ov-footer__socials {
+    margin-top: 8px !important;
+}
+
+.ov-footer__socials a {
+    width: 25px !important;
+    height: 25px !important;
+}
+
+.ov-footer__payments {
+    margin-top: 8px !important;
+    flex-wrap: nowrap !important;
+}
+
+.ov-footer__payments img {
+    height: 19px !important;
+    max-height: 19px !important;
+    max-width: 45px !important;
+}
+
+.ov-footer__newsletter p {
+    margin: 0 0 8px !important;
+    font-size: 8.2px !important;
+}
+
+.ov-footer__newsletter-form {
+    display: flex !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    height: 34px !important;
+    background: #fff !important;
+    border-radius: 4px !important;
+    overflow: hidden !important;
+}
+
+.ov-footer__newsletter-form input {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    height: 34px !important;
+    padding: 0 10px !important;
+    border: 0 !important;
+    font-size: 8.2px !important;
+    line-height: 34px !important;
+}
+
+.ov-footer__newsletter-form button {
+    flex: 0 0 88px !important;
+    width: 88px !important;
+    min-width: 88px !important;
+    height: 34px !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    border-radius: 0 !important;
+    font-size: 8.2px !important;
+    line-height: 34px !important;
+}
+
+.ov-footer__stores {
+    margin-top: 8px !important;
+    gap: 6px !important;
+}
+
+.ov-store-badge {
+    min-height: 34px !important;
+    padding: 5px 7px !important;
+}
+
+.ov-store-badge small {
+    font-size: 5.8px !important;
+}
+
+.ov-store-badge strong {
+    font-size: 7.5px !important;
+}
+
+.ov-footer__bottom {
+    width: min(calc(100% - 72px), 1460px) !important;
+    min-height: 30px !important;
+    padding: 8px 0 !important;
+    font-size: 7.2px !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Responsive ciblé                                                           */
+/* -------------------------------------------------------------------------- */
+@media (max-width: 1180px) {
+    .ovanie-home--mockup .ovanie-hero {
+        height: 250px !important;
+        min-height: 250px !important;
+    }
+
+    .ovanie-home--mockup .ovanie-hero__text {
+        width: 390px !important;
+        max-width: 48vw !important;
+    }
+
+    .ovanie-home--mockup .ovanie-hero__text h1 {
+        font-size: clamp(31px, 3.1vw, 40px) !important;
+    }
+
+    .ovanie-home--mockup .ovanie-feature-card,
+    .ovanie-home--mockup .ovanie-feature-card--ia {
+        height: 184px !important;
+        min-height: 184px !important;
+        max-height: 184px !important;
+    }
+}
+
+@media (max-width: 980px) {
+    .ovanie-home--mockup .ovanie-hero {
+        height: 238px !important;
+        min-height: 238px !important;
+    }
+
+    .ovanie-home--mockup .ovanie-discovery {
+        grid-template-columns: 1fr 1fr !important;
+    }
+
+    .ovanie-home--mockup .ovanie-feature-card--ia {
+        grid-column: 1 / -1 !important;
+    }
+
+    .ovanie-home--mockup .ovanie-mini-card strong {
+        font-size: 9px !important;
+    }
+
+    .ovanie-home--mockup .ovanie-mini-card small {
+        font-size: 7.5px !important;
+    }
+}
+
+@media (max-width: 720px) {
+    .ovanie-home--mockup .ovanie-hero {
+        height: 252px !important;
+        min-height: 252px !important;
+        background-position: 62% center !important;
+    }
+
+    .ovanie-home--mockup .ovanie-hero__content {
+        padding: 18px 18px 22px !important;
+    }
+
+    .ovanie-home--mockup .ovanie-hero__text {
+        width: 76% !important;
+        max-width: 76% !important;
+    }
+
+    .ovanie-home--mockup .ovanie-hero__text h1 {
+        font-size: 31px !important;
+        line-height: 1 !important;
+    }
+
+    .ovanie-home--mockup .ovanie-discovery {
+        grid-template-columns: 1fr !important;
+        width: calc(100% - 24px) !important;
+    }
+
+    .ovanie-home--mockup .ovanie-feature-card,
+    .ovanie-home--mockup .ovanie-feature-card--ia {
+        height: auto !important;
+        min-height: 180px !important;
+        max-height: none !important;
+    }
+
+    .ov-footer__inner {
+        width: calc(100% - 28px) !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 22px 18px !important;
+    }
+
+    .ov-footer__brand,
+    .ov-footer__newsletter {
+        grid-column: 1 / -1 !important;
+    }
+
+    .ov-footer__newsletter-form {
+        max-width: 420px !important;
+    }
+
+    .ov-footer__bottom {
+        width: calc(100% - 28px) !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 6px !important;
+    }
+}
+
+/* =========================================================
+   OVANIE — CORRECTION BADGES OFFRE FLASH / BLACK FRIDAY
+   Évite le chevauchement entre le badge et le bouton favori.
+   ========================================================= */
+
+.ovanie-mini-product-card__media {
+    position: relative;
+}
+
+.ovanie-mini-product-card__badge {
+    top: 5px;
+    left: 5px;
+    right: auto;
+    z-index: 4;
+    max-width: calc(100% - 40px);
+    min-height: 17px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 6.2px;
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: .01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+}
+
+.ovanie-mini-product-card__media > button {
+    top: 4px;
+    right: 4px;
+    left: auto;
+    z-index: 6;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    flex: 0 0 22px;
+    padding: 0;
+    border: 1px solid rgba(9, 32, 70, .12);
+    box-shadow: 0 2px 6px rgba(9, 32, 70, .10);
+}
+
+.ovanie-mini-product-card__media > button svg,
+.ovanie-mini-product-card__media > button i {
+    width: 12px;
+    height: 12px;
+    pointer-events: none;
+}
+
+/* OFFRE FLASH : badge orange compact */
+.ovanie-commerce-panel--flash .ovanie-mini-product-card__badge {
+    background: #ff5a00;
+    color: #fff;
+}
+
+/* BLACK FRIDAY : badge noir compact */
+.ovanie-commerce-panel--black .ovanie-mini-product-card__badge.black {
+    background: #111;
+    color: #fff;
+}
+
+/* Sur les cartes très étroites, on réduit encore légèrement le badge */
+@media (max-width: 1500px) {
+    .ovanie-mini-product-card__badge {
+        max-width: calc(100% - 38px);
+        padding: 3px 5px;
+        font-size: 5.8px;
+    }
+
+    .ovanie-mini-product-card__media > button {
+        width: 21px;
+        height: 21px;
+        min-width: 21px;
+    }
+}
+
+@media (max-width: 700px) {
+    .ovanie-mini-product-card__badge {
+        top: 5px;
+        left: 5px;
+        max-width: calc(100% - 42px);
+        min-height: 18px;
+        padding: 4px 6px;
+        font-size: 6.5px;
+    }
+
+    .ovanie-mini-product-card__media > button {
+        top: 4px;
+        right: 4px;
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+    }
+
+    .ovanie-mini-product-card__media > button svg,
+    .ovanie-mini-product-card__media > button i {
+        width: 13px;
+        height: 13px;
+    }
+}
+
+
+/* =========================================================
+   OVANIE — CARTES PRODUITS ADAPTATIVES + BADGES COMPLETS
+   ========================================================= */
+
+/* Les badges restent lisibles en entier. */
+.ovanie-mini-product-card__badge,
+.ovanie-commerce-panel--flash .ovanie-mini-product-card__badge,
+.ovanie-commerce-panel--black .ovanie-mini-product-card__badge.black {
+    top: 5px !important;
+    left: 5px !important;
+    right: auto !important;
+    width: auto !important;
+    max-width: calc(100% - 31px) !important;
+    min-height: 15px !important;
+    padding: 3px 4px !important;
+    border-radius: 3px !important;
+    font-size: 5.4px !important;
+    line-height: 1 !important;
+    font-weight: 900 !important;
+    letter-spacing: 0 !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    box-sizing: border-box !important;
+}
+
+/* Le coeur est légèrement plus compact pour laisser la place au badge. */
+.ovanie-mini-product-card__media > button {
+    top: 4px !important;
+    right: 4px !important;
+    width: 19px !important;
+    height: 19px !important;
+    min-width: 19px !important;
+    z-index: 7 !important;
+}
+
+.ovanie-mini-product-card__media > button svg,
+.ovanie-mini-product-card__media > button i {
+    width: 11px !important;
+    height: 11px !important;
+}
+
+/* Densité adaptative : aucune zone vide si une campagne contient moins de produits. */
+.ovanie-mini-product-row.count-1 .ovanie-mini-product-card {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+}
+
+.ovanie-mini-product-row.count-2 .ovanie-mini-product-card {
+    flex: 0 0 calc((100% - 6px) / 2) !important;
+    max-width: calc((100% - 6px) / 2) !important;
+}
+
+.ovanie-mini-product-row.count-3 .ovanie-mini-product-card {
+    flex: 0 0 calc((100% - 12px) / 3) !important;
+    max-width: calc((100% - 12px) / 3) !important;
+}
+
+.ovanie-mini-product-row.count-4 .ovanie-mini-product-card {
+    flex: 0 0 calc((100% - 18px) / 4) !important;
+    max-width: calc((100% - 18px) / 4) !important;
+}
+
+.ovanie-mini-product-row.count-5 .ovanie-mini-product-card {
+    flex: 0 0 calc((100% - 24px) / 5) !important;
+    max-width: calc((100% - 24px) / 5) !important;
+}
+
+/* Black Friday : avec 1 à 3 produits, les cartes remplissent le panneau tout en restant équilibrées. */
+.ovanie-commerce-panel--black .ovanie-mini-product-row.count-1 .ovanie-mini-product-card {
+    flex-basis: 100% !important;
+    max-width: 100% !important;
+}
+
+.ovanie-commerce-panel--black .ovanie-mini-product-row.count-2 .ovanie-mini-product-card {
+    flex-basis: calc((100% - 8px) / 2) !important;
+    max-width: calc((100% - 8px) / 2) !important;
+}
+
+.ovanie-commerce-panel--black .ovanie-mini-product-row.count-3 .ovanie-mini-product-card {
+    flex-basis: calc((100% - 12px) / 3) !important;
+    max-width: calc((100% - 12px) / 3) !important;
+}
+
+/* Sur les cartes élargies (1 à 3 produits), on donne un peu plus de place à l'image. */
+.ovanie-commerce-panel--black .ovanie-mini-product-row.count-1 .ovanie-mini-product-card__media,
+.ovanie-commerce-panel--black .ovanie-mini-product-row.count-2 .ovanie-mini-product-card__media,
+.ovanie-commerce-panel--black .ovanie-mini-product-row.count-3 .ovanie-mini-product-card__media {
+    height: 88px !important;
+}
+
+@media (max-width: 700px) {
+    /* Sur mobile, on garde des cartes de rail compactes et scrollables. */
+    .ovanie-mini-product-row.count-1 .ovanie-mini-product-card,
+    .ovanie-mini-product-row.count-2 .ovanie-mini-product-card,
+    .ovanie-mini-product-row.count-3 .ovanie-mini-product-card,
+    .ovanie-mini-product-row.count-4 .ovanie-mini-product-card,
+    .ovanie-mini-product-row.count-5 .ovanie-mini-product-card,
+    .ovanie-commerce-panel--black .ovanie-mini-product-row.count-1 .ovanie-mini-product-card,
+    .ovanie-commerce-panel--black .ovanie-mini-product-row.count-2 .ovanie-mini-product-card,
+    .ovanie-commerce-panel--black .ovanie-mini-product-row.count-3 .ovanie-mini-product-card {
+        flex: 0 0 42% !important;
+        max-width: 42% !important;
+    }
+
+    .ovanie-mini-product-card__badge,
+    .ovanie-commerce-panel--flash .ovanie-mini-product-card__badge,
+    .ovanie-commerce-panel--black .ovanie-mini-product-card__badge.black {
+        max-width: calc(100% - 34px) !important;
+        font-size: 6px !important;
+        padding: 3px 5px !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE — AJUSTEMENTS IA, NEWSLETTER ET COULEURS RÉSEAUX                    */
+/* ========================================================================== */
+
+/* La miniature IA et son contenu restent côte à côte ; le titre reste sur une ligne. */
+.ovanie-feature-card--ia {
+    grid-template-columns: 41% 59% !important;
+}
+
+.ovanie-feature-card__title-row {
+    min-width: 0 !important;
+    gap: 6px !important;
+}
+
+.ovanie-feature-card__title-row h3 {
+    min-width: 0 !important;
+    margin: 0 !important;
+    font-size: 12.4px !important;
+    line-height: 1.05 !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+
+.ovanie-feature-card__title-row span {
+    width: 25px !important;
+    height: 25px !important;
+    flex: 0 0 25px !important;
+    font-size: 9px !important;
+}
+
+/* Réseaux sociaux : couleurs de marque distinctes et lisibles. */
+.ov-footer__socials {
+    gap: 7px !important;
+}
+
+.ov-footer__socials .ov-social {
+    width: 28px !important;
+    height: 28px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    color: #fff !important;
+    border: 1px solid rgba(255,255,255,.18) !important;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .18) !important;
+    transition: transform .18s ease, box-shadow .18s ease !important;
+}
+
+.ov-footer__socials .ov-social:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, .24) !important;
+}
+
+.ov-footer__socials .ov-social svg {
+    width: 15px !important;
+    height: 15px !important;
+    color: #fff !important;
+}
+
+.ov-social--facebook {
+    background: #1877f2 !important;
+}
+
+.ov-social--instagram {
+    background: radial-gradient(circle at 30% 107%, #fdf497 0 5%, #fd5949 42%, #d6249f 65%, #285aeb 100%) !important;
+}
+
+.ov-social--youtube {
+    background: #ff0000 !important;
+}
+
+.ov-social--tiktok {
+    background: #000 !important;
+}
+
+.ov-social--whatsapp {
+    background: #25d366 !important;
+}
+
+/* Newsletter professionnelle et fonctionnelle. */
+.ov-footer__newsletter {
+    align-self: start !important;
+}
+
+.ov-footer__newsletter-head {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    margin-bottom: 9px !important;
+}
+
+.ov-footer__newsletter-head h4 {
+    margin: 0 0 3px !important;
+}
+
+.ov-footer__newsletter-head p {
+    margin: 0 !important;
+    color: #c9d7ea !important;
+    font-size: 8px !important;
+    line-height: 1.3 !important;
+}
+
+.ov-footer__newsletter-icon {
+    width: 29px !important;
+    height: 29px !important;
+    flex: 0 0 29px !important;
+    display: grid !important;
+    place-items: center !important;
+    border-radius: 8px !important;
+    background: rgba(255, 102, 0, .15) !important;
+    color: #ff6a00 !important;
+    border: 1px solid rgba(255, 106, 0, .28) !important;
+}
+
+.ov-footer__newsletter-icon svg,
+.ov-footer__newsletter-icon i {
+    width: 15px !important;
+    height: 15px !important;
+}
+
+.ov-footer__newsletter-form {
+    display: flex !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    height: 36px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border-radius: 7px !important;
+    background: #fff !important;
+    border: 1px solid rgba(255,255,255,.55) !important;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .12) !important;
+}
+
+.ov-footer__newsletter-input {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 7px !important;
+    padding: 0 10px !important;
+    background: #fff !important;
+}
+
+.ov-footer__newsletter-input svg,
+.ov-footer__newsletter-input i {
+    width: 14px !important;
+    height: 14px !important;
+    flex: 0 0 14px !important;
+    color: #667085 !important;
+}
+
+.ov-footer__newsletter-form .ov-footer__newsletter-input input {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    padding: 0 !important;
+    border: 0 !important;
+    outline: 0 !important;
+    background: transparent !important;
+    color: #101828 !important;
+    font-size: 8.5px !important;
+    box-shadow: none !important;
+}
+
+.ov-footer__newsletter-form button {
+    flex: 0 0 88px !important;
+    width: 88px !important;
+    height: 100% !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: linear-gradient(180deg, #ff780f 0%, #f15a00 100%) !important;
+    color: #fff !important;
+    font-size: 8px !important;
+    font-weight: 900 !important;
+    cursor: pointer !important;
+    transition: filter .18s ease !important;
+}
+
+.ov-footer__newsletter-form button:hover {
+    filter: brightness(.96) !important;
+}
+
+.ov-footer__newsletter-feedback {
+    margin: 7px 0 0 !important;
+    padding: 6px 8px !important;
+    border-radius: 5px !important;
+    font-size: 7.5px !important;
+    line-height: 1.3 !important;
+}
+
+.ov-footer__newsletter-feedback.is-success {
+    background: rgba(37, 211, 102, .12) !important;
+    color: #9cf0bc !important;
+    border: 1px solid rgba(37, 211, 102, .24) !important;
+}
+
+.ov-footer__newsletter-feedback.is-error {
+    background: rgba(239, 68, 68, .12) !important;
+    color: #fecaca !important;
+    border: 1px solid rgba(239, 68, 68, .24) !important;
+}
+
+@media (max-width: 1100px) {
+    .ovanie-feature-card__title-row h3 {
+        font-size: 11px !important;
+    }
+}
+
+@media (max-width: 700px) {
+    .ovanie-feature-card--ia {
+        grid-template-columns: 40% 60% !important;
+    }
+
+    .ovanie-feature-card__title-row h3 {
+        font-size: 10.5px !important;
+    }
+
+    .ov-footer__newsletter-form {
+        height: 42px !important;
+    }
+
+    .ov-footer__newsletter-form button {
+        flex-basis: 104px !important;
+        width: 104px !important;
+        font-size: 9px !important;
+    }
+}
+
+
+/* ========================================================================== */
+/* OVANIE — FIX RECHERCHE UNIQUE + NEWSLETTER LISIBLE                        */
+/* ========================================================================== */
+
+/* Une seule loupe dans la barre : celle du bouton orange. */
+.ovanie-search .ovanie-search__field-icon,
+.ovanie-search[data-smart-search] .ovanie-search__field-icon {
+    display: none !important;
+}
+
+.ovanie-search .ovanie-search__field,
+.ovanie-search[data-smart-search] .ovanie-search__field {
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    background: #fff !important;
+}
+
+.ovanie-search .ovanie-search__field input,
+.ovanie-search[data-smart-search] .ovanie-search__field input {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding-left: 18px !important;
+    padding-right: 42px !important;
+}
+
+.ovanie-search .ovanie-search__submit,
+.ovanie-search[data-smart-search] .ovanie-search__submit {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Le footer réserve davantage d'espace à la newsletter. */
+.ov-footer__inner {
+    grid-template-columns: 1.22fr .68fr .72fr .80fr .72fr 1.48fr !important;
+    gap: 20px !important;
+}
+
+.ov-footer__newsletter {
+    min-width: 0 !important;
+}
+
+.ov-footer__newsletter-head > div {
+    min-width: 0 !important;
+}
+
+.ov-footer__newsletter-head p {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+
+.ov-footer__newsletter-form {
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+.ov-footer__newsletter-input {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    padding-left: 11px !important;
+    padding-right: 8px !important;
+}
+
+.ov-footer__newsletter-form .ov-footer__newsletter-input input {
+    min-width: 0 !important;
+    width: 100% !important;
+    font-size: 9px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+
+.ov-footer__newsletter-form .ov-footer__newsletter-input input::placeholder {
+    color: #667085 !important;
+    opacity: 1 !important;
+}
+
+.ov-footer__newsletter-form button {
+    flex: 0 0 78px !important;
+    width: 78px !important;
+    min-width: 78px !important;
+    font-size: 8.3px !important;
+    white-space: nowrap !important;
+}
+
+@media (max-width: 1180px) {
+    .ov-footer__inner {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
+    .ov-footer__newsletter {
+        grid-column: span 2 !important;
+    }
+}
+
+@media (max-width: 760px) {
+    .ov-footer__newsletter {
+        grid-column: auto !important;
+    }
+
+    .ov-footer__newsletter-form {
+        height: 42px !important;
+    }
+
+    .ov-footer__newsletter-form button {
+        flex-basis: 96px !important;
+        width: 96px !important;
+        min-width: 96px !important;
+        font-size: 9px !important;
+    }
+
+    .ov-footer__newsletter-form .ov-footer__newsletter-input input {
+        font-size: 10px !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE ACCUEIL — INTÉGRATION BACKEND V2                                   */
+/* ========================================================================== */
+
+/* Média produit : lien image + bouton favori séparés, HTML valide. */
+.ovanie-mini-product-card__media {
+    position: relative !important;
+    display: block !important;
+    overflow: hidden !important;
+}
+
+.ovanie-mini-product-card__media-link {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.ovanie-mini-product-card__media-link img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    object-position: center !important;
+}
+
+.ovanie-favorite-toggle {
+    position: absolute !important;
+    top: 6px !important;
+    right: 6px !important;
+    z-index: 8 !important;
+    width: 25px !important;
+    height: 25px !important;
+    border: 1px solid #d9e1ec !important;
+    border-radius: 999px !important;
+    background: rgba(255,255,255,.96) !important;
+    color: #64748b !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    box-shadow: 0 2px 8px rgba(2, 11, 28, .10) !important;
+}
+
+.ovanie-favorite-toggle svg {
+    width: 14px !important;
+    height: 14px !important;
+    pointer-events: none !important;
+}
+
+.ovanie-favorite-toggle.is-active {
+    color: #ef4444 !important;
+    border-color: rgba(239, 68, 68, .28) !important;
+    background: #fff1f2 !important;
+}
+
+.ovanie-favorite-toggle.is-active svg {
+    fill: currentColor !important;
+}
+
+.ovanie-favorite-toggle:disabled {
+    opacity: .55 !important;
+    cursor: wait !important;
+}
+
+.ovanie-flash-timer.is-inactive {
+    background: #64748b !important;
+    color: #fff !important;
+    letter-spacing: .02em !important;
+}
+
+/* Toast discret pour panier/favoris. */
+.ovanie-home-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    z-index: 10000;
+    transform: translate(-50%, 18px);
+    opacity: 0;
+    pointer-events: none;
+    min-width: 240px;
+    max-width: min(90vw, 460px);
+    padding: 12px 16px;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+    box-shadow: 0 14px 34px rgba(2, 11, 28, .26);
+    transition: opacity .2s ease, transform .2s ease;
+}
+
+.ovanie-home-toast.is-visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.ovanie-home-toast.is-success {
+    background: #0f7a45;
+}
+
+.ovanie-home-toast.is-error {
+    background: #b42318;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Newsletter professionnelle : colonne large, champ lisible, bouton stable.  */
+/* -------------------------------------------------------------------------- */
+.ov-footer__inner {
+    grid-template-columns: 1.18fr .72fr .78fr .88fr .82fr 1.58fr !important;
+    gap: 24px !important;
+    align-items: start !important;
+}
+
+.ov-footer__newsletter {
+    min-width: 0 !important;
+    width: 100% !important;
+}
+
+.ov-footer__newsletter-head {
+    display: grid !important;
+    grid-template-columns: 32px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    align-items: start !important;
+    margin-bottom: 12px !important;
+}
+
+.ov-footer__newsletter-head h4 {
+    margin: 0 0 4px !important;
+    font-size: 13px !important;
+    line-height: 1.15 !important;
+}
+
+.ov-footer__newsletter-head p {
+    margin: 0 !important;
+    font-size: 9.5px !important;
+    line-height: 1.4 !important;
+    color: #c7d4e8 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+}
+
+.ov-footer__newsletter-form {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 96px !important;
+    width: 100% !important;
+    height: 42px !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 1px solid rgba(255,255,255,.42) !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    background: #fff !important;
+    box-shadow: 0 8px 22px rgba(0,0,0,.14) !important;
+}
+
+.ov-footer__newsletter-input {
+    min-width: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+    display: block !important;
+}
+
+.ov-footer__newsletter-form .ov-footer__newsletter-input input {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 100% !important;
+    padding: 0 14px !important;
+    margin: 0 !important;
+    border: 0 !important;
+    outline: 0 !important;
+    background: #fff !important;
+    color: #101828 !important;
+    font-size: 11px !important;
+    line-height: 42px !important;
+    box-shadow: none !important;
+    white-space: nowrap !important;
+    text-overflow: clip !important;
+    overflow: hidden !important;
+}
+
+.ov-footer__newsletter-form .ov-footer__newsletter-input input::placeholder {
+    color: #667085 !important;
+    opacity: 1 !important;
+}
+
+.ov-footer__newsletter-form button {
+    width: 96px !important;
+    min-width: 96px !important;
+    height: 42px !important;
+    padding: 0 10px !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: linear-gradient(180deg, #ff780f 0%, #f15a00 100%) !important;
+    color: #fff !important;
+    font-size: 10px !important;
+    font-weight: 900 !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+}
+
+.ov-footer__newsletter-form button:disabled {
+    opacity: .65 !important;
+    cursor: wait !important;
+}
+
+.ov-footer__newsletter-feedback-wrap {
+    min-height: 0 !important;
+}
+
+.ov-footer__newsletter-feedback {
+    margin: 7px 0 0 !important;
+    padding: 6px 8px !important;
+    font-size: 8.5px !important;
+    line-height: 1.35 !important;
+}
+
+@media (max-width: 1250px) {
+    .ov-footer__inner {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
+    .ov-footer__newsletter {
+        grid-column: span 2 !important;
+    }
+}
+
+@media (max-width: 760px) {
+    .ov-footer__inner {
+        grid-template-columns: 1fr !important;
+    }
+
+    .ov-footer__newsletter {
+        grid-column: auto !important;
+    }
+
+    .ov-footer__newsletter-form {
+        grid-template-columns: minmax(0, 1fr) 106px !important;
+        height: 44px !important;
+    }
+
+    .ov-footer__newsletter-form button {
+        width: 106px !important;
+        min-width: 106px !important;
+        height: 44px !important;
+        font-size: 10.5px !important;
+    }
+
+    .ov-footer__newsletter-form .ov-footer__newsletter-input input {
+        font-size: 11px !important;
+        line-height: 44px !important;
+    }
+}
+
+.ovanie-campaign-empty {
+    flex: 1 1 100%;
+    min-height: 175px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+    padding: 18px;
+    color: #475467;
+    background: #f8fafc;
+    border: 1px dashed #cfd8e6;
+    border-radius: 8px;
+}
+
+.ovanie-campaign-empty svg {
+    width: 24px;
+    height: 24px;
+    color: #ff6a00;
+}
+
+.ovanie-campaign-empty strong {
+    font-size: 12px;
+    color: #101828;
+}
+
+.ovanie-campaign-empty span {
+    max-width: 240px;
+    font-size: 9px;
+    line-height: 1.4;
+}
+
+.ovanie-commerce-panel--black .ovanie-campaign-empty.is-dark {
+    background: #171717;
+    border-color: #3f3f46;
+    color: #d4d4d8;
+}
+
+.ovanie-commerce-panel--black .ovanie-campaign-empty.is-dark strong {
+    color: #fff;
+}
+
+.ovanie-backend-campaign {
+    position: relative;
+    min-height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 12px 20px;
+    margin: 8px 0;
+    overflow: hidden;
+    border-radius: 8px;
+    background:
+        linear-gradient(90deg, rgba(2,11,28,.96), rgba(5,54,125,.88)),
+        var(--campaign-image, none) center/cover no-repeat;
+    color: #fff;
+}
+
+.ovanie-backend-campaign__copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ovanie-backend-campaign__copy strong {
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.ovanie-backend-campaign__copy span {
+    font-size: 10px;
+    color: #dbe8ff;
+}
+
+.ovanie-backend-campaign > a {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 13px;
+    border-radius: 6px;
+    background: #ff6a00;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 900;
+}
+
+.ovanie-backend-campaign > a svg {
+    width: 14px;
+    height: 14px;
+}
+
+@media (max-width: 700px) {
+    .ovanie-backend-campaign {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px;
+    }
+}
+
+.ov-store-badge.is-disabled {
+    opacity: .72;
+    cursor: default;
+    filter: grayscale(.18);
+}
+
+
+/* ========================================================================== */
+/* FOOTER NEWSLETTER V3 — version propre et alignée sur la maquette           */
+/* ========================================================================== */
+
+.ov-footer__inner {
+    grid-template-columns: 1.18fr .76fr .78fr .86fr .82fr 1.52fr !important;
+    gap: 22px !important;
+    align-items: start !important;
+}
+
+.ov-footer__newsletter {
+    min-width: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.ov-footer__newsletter-copy {
+    margin: 0 0 12px !important;
+}
+
+.ov-footer__newsletter-copy h4 {
+    margin: 0 0 6px !important;
+    color: #fff !important;
+    font-size: 15px !important;
+    font-weight: 900 !important;
+    line-height: 1.15 !important;
+    letter-spacing: 0 !important;
+}
+
+.ov-footer__newsletter-copy p {
+    margin: 0 !important;
+    max-width: 360px !important;
+    color: #d8e2f0 !important;
+    font-size: 10.5px !important;
+    line-height: 1.45 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+}
+
+.ov-footer__newsletter-form {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 96px !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 44px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255, 255, 255, .42) !important;
+    border-radius: 8px !important;
+    background: #fff !important;
+    box-shadow: 0 7px 18px rgba(0, 0, 0, .16) !important;
+}
+
+.ov-footer__newsletter-form > input[type="email"] {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 44px !important;
+    margin: 0 !important;
+    padding: 0 14px !important;
+    border: 0 !important;
+    outline: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #101828 !important;
+    font-family: inherit !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    line-height: 44px !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+.ov-footer__newsletter-form > input[type="email"]::placeholder {
+    color: #667085 !important;
+    opacity: 1 !important;
+}
+
+.ov-footer__newsletter-form > input[type="email"]:focus {
+    box-shadow: inset 0 0 0 2px rgba(255, 106, 0, .18) !important;
+}
+
+.ov-footer__newsletter-form > button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 96px !important;
+    min-width: 96px !important;
+    height: 44px !important;
+    margin: 0 !important;
+    padding: 0 12px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: linear-gradient(180deg, #ff790f 0%, #f15a00 100%) !important;
+    color: #fff !important;
+    font-family: inherit !important;
+    font-size: 10.5px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+    transition: filter .18s ease, transform .18s ease !important;
+}
+
+.ov-footer__newsletter-form > button:hover {
+    filter: brightness(1.05) !important;
+}
+
+.ov-footer__newsletter-form > button:active {
+    transform: translateY(1px) !important;
+}
+
+.ov-footer__newsletter-feedback-wrap {
+    min-height: 0 !important;
+}
+
+.ov-footer__newsletter-feedback {
+    margin: 7px 0 0 !important;
+    padding: 6px 8px !important;
+    border-radius: 6px !important;
+    font-size: 9px !important;
+    line-height: 1.35 !important;
+}
+
+.ov-footer__stores {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-top: 10px !important;
+}
+
+.ov-footer__stores .ov-store-badge {
+    min-width: 0 !important;
+    height: 42px !important;
+    padding: 6px 9px !important;
+    border-radius: 6px !important;
+}
+
+.ov-footer__stores .ov-store-badge small {
+    font-size: 7px !important;
+    line-height: 1.05 !important;
+}
+
+.ov-footer__stores .ov-store-badge strong {
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+}
+
+@media (max-width: 1250px) {
+    .ov-footer__inner {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
+    .ov-footer__newsletter {
+        grid-column: span 2 !important;
+    }
+}
+
+@media (max-width: 760px) {
+    .ov-footer__inner {
+        grid-template-columns: 1fr !important;
+        gap: 18px !important;
+    }
+
+    .ov-footer__newsletter {
+        grid-column: auto !important;
+    }
+
+    .ov-footer__newsletter-form {
+        grid-template-columns: minmax(0, 1fr) 100px !important;
+        height: 46px !important;
+    }
+
+    .ov-footer__newsletter-form > input[type="email"] {
+        height: 46px !important;
+        line-height: 46px !important;
+        font-size: 12px !important;
+    }
+
+    .ov-footer__newsletter-form > button {
+        width: 100px !important;
+        min-width: 100px !important;
+        height: 46px !important;
+        font-size: 11px !important;
+    }
+}
+
+@media (max-width: 420px) {
+    .ov-footer__newsletter-form {
+        grid-template-columns: minmax(0, 1fr) 90px !important;
+    }
+
+    .ov-footer__newsletter-form > button {
+        width: 90px !important;
+        min-width: 90px !important;
+        padding-inline: 8px !important;
+        font-size: 10px !important;
+    }
+
+    .ov-footer__newsletter-form > input[type="email"] {
+        padding-inline: 11px !important;
+        font-size: 11px !important;
+    }
+}
+
+/* ========================================================================== */
+/* NEWSLETTER V4 — composant isolé, calé sur la maquette                     */
+/* ========================================================================== */
+
+footer.ov-footer .ov-newsletter-v4 {
+    min-width: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    align-self: start !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__copy {
+    margin: 0 0 8px !important;
+    padding: 0 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__title {
+    margin: 0 0 5px !important;
+    padding: 0 !important;
+    color: #ffffff !important;
+    font-size: 10.5px !important;
+    font-weight: 800 !important;
+    line-height: 1.15 !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    white-space: nowrap !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__text {
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #d7e1ef !important;
+    font-size: 8px !important;
+    font-weight: 400 !important;
+    line-height: 1.3 !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__form {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 86px !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 31px !important;
+    min-height: 31px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255, 255, 255, .72) !important;
+    border-radius: 3px !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__input {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 29px !important;
+    min-height: 29px !important;
+    margin: 0 !important;
+    padding: 0 10px !important;
+    border: 0 !important;
+    outline: 0 !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    color: #172033 !important;
+    font-family: inherit !important;
+    font-size: 8px !important;
+    font-weight: 500 !important;
+    line-height: 29px !important;
+    text-align: left !important;
+    box-shadow: none !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__input::placeholder {
+    color: #78859a !important;
+    opacity: 1 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__input:focus {
+    box-shadow: inset 0 0 0 1px rgba(255, 106, 0, .3) !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__button {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 86px !important;
+    min-width: 86px !important;
+    max-width: 86px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #f56700 !important;
+    color: #ffffff !important;
+    font-family: inherit !important;
+    font-size: 8px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+    box-shadow: none !important;
+    transform: none !important;
+    transition: background-color .16s ease !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__button:hover {
+    background: #ff7515 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__button:disabled {
+    opacity: .65 !important;
+    cursor: wait !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__feedback {
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__feedback p {
+    margin: 5px 0 0 !important;
+    padding: 5px 7px !important;
+    border-radius: 4px !important;
+    font-size: 7px !important;
+    line-height: 1.25 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__feedback .is-success {
+    background: rgba(19, 175, 98, .15) !important;
+    color: #c9ffe2 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__feedback .is-error {
+    background: rgba(220, 38, 38, .18) !important;
+    color: #ffd2d2 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__stores {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+    width: 100% !important;
+    margin: 7px 0 0 !important;
+    padding: 0 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__store {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    min-width: 0 !important;
+    height: 29px !important;
+    min-height: 29px !important;
+    margin: 0 !important;
+    padding: 4px 7px !important;
+    gap: 6px !important;
+    border: 1px solid rgba(255, 255, 255, .28) !important;
+    border-radius: 3px !important;
+    background: #050505 !important;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    font-size: inherit !important;
+    line-height: 1 !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__store.is-disabled {
+    opacity: .88 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__store-icon {
+    flex: 0 0 15px !important;
+    width: 15px !important;
+    min-width: 15px !important;
+    color: #ffffff !important;
+    font-size: 12px !important;
+    line-height: 1 !important;
+    text-align: center !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__store-copy {
+    min-width: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 1px !important;
+    color: #ffffff !important;
+    overflow: hidden !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__store-copy small,
+footer.ov-footer .ov-newsletter-v4__store-copy strong {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #ffffff !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__store-copy small {
+    font-size: 5px !important;
+    font-weight: 500 !important;
+    line-height: 1 !important;
+}
+
+footer.ov-footer .ov-newsletter-v4__store-copy strong {
+    font-size: 7.1px !important;
+    font-weight: 800 !important;
+    line-height: 1.05 !important;
+}
+
+@media (max-width: 1250px) {
+    footer.ov-footer .ov-newsletter-v4 {
+        grid-column: span 2 !important;
+        max-width: 520px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__form {
+        grid-template-columns: minmax(0, 1fr) 100px !important;
+        height: 36px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__input {
+        height: 34px !important;
+        min-height: 34px !important;
+        line-height: 34px !important;
+        font-size: 9px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__button {
+        width: 100px !important;
+        min-width: 100px !important;
+        max-width: 100px !important;
+        height: 35px !important;
+        min-height: 35px !important;
+        font-size: 9px !important;
+    }
+}
+
+@media (max-width: 760px) {
+    footer.ov-footer .ov-newsletter-v4 {
+        grid-column: auto !important;
+        max-width: 100% !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__title {
+        font-size: 15px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__text {
+        font-size: 11px !important;
+        white-space: normal !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__form {
+        grid-template-columns: minmax(0, 1fr) 108px !important;
+        height: 44px !important;
+        border-radius: 6px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__input {
+        height: 42px !important;
+        min-height: 42px !important;
+        line-height: 42px !important;
+        padding-inline: 12px !important;
+        font-size: 12px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__button {
+        width: 108px !important;
+        min-width: 108px !important;
+        max-width: 108px !important;
+        height: 43px !important;
+        min-height: 43px !important;
+        font-size: 11px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__stores {
+        max-width: 360px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__store {
+        height: 38px !important;
+        min-height: 38px !important;
+        border-radius: 5px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__store-copy small {
+        font-size: 6px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__store-copy strong {
+        font-size: 8.5px !important;
+    }
+}
+
+@media (max-width: 420px) {
+    footer.ov-footer .ov-newsletter-v4__form {
+        grid-template-columns: minmax(0, 1fr) 92px !important;
+    }
+
+    footer.ov-footer .ov-newsletter-v4__button {
+        width: 92px !important;
+        min-width: 92px !important;
+        max-width: 92px !important;
+        padding-inline: 6px !important;
+        font-size: 10px !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE — NAVBAR RESPONSIVE STABLE (ACCUEIL)                                */
+/* ========================================================================== */
+/*
+ * Cette couche remplace les anciens correctifs contradictoires de la page
+ * d'accueil sans modifier la structure HTML de la navbar.
+ * - Grand écran : 3 zones stables, la recherche ne pousse jamais le panier.
+ * - 981–1280 px : la recherche passe sur une seconde ligne dédiée.
+ * - <= 980 px : le composant mobile V6 de _navbar.blade.php reste maître.
+ */
+
+@media (min-width: 1281px) {
+    html body .ovanie-header .ovanie-header__wrap {
+        width: min(calc(100% - 40px), 1680px) !important;
+        overflow: visible !important;
+    }
+
+    html body .ovanie-header .ovanie-header__main {
+        display: grid !important;
+        grid-template-columns: minmax(350px, 430px) minmax(320px, 1fr) minmax(300px, 330px) !important;
+        grid-template-rows: 76px !important;
+        align-items: center !important;
+        gap: 14px !important;
+        height: 76px !important;
+        min-width: 0 !important;
+        overflow: visible !important;
+    }
+
+    html body .ovanie-header .ovanie-header__logo {
+        grid-column: 1 !important;
+        grid-row: 1 !important;
+        justify-self: start !important;
+    }
+
+    html body .ovanie-header .ovanie-header__phone {
+        grid-column: 1 !important;
+        grid-row: 1 !important;
+        justify-self: end !important;
+        max-width: 182px !important;
+    }
+
+    html body .ovanie-header form.ovanie-search {
+        grid-column: 2 !important;
+        grid-row: 1 !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        grid-template-columns: minmax(145px, 185px) minmax(160px, 1fr) 54px !important;
+    }
+
+    html body .ovanie-header .ovanie-header__actions {
+        grid-column: 3 !important;
+        grid-row: 1 !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        display: grid !important;
+        grid-template-columns: minmax(116px, 1fr) 88px 48px !important;
+        gap: 8px !important;
+        overflow: visible !important;
+    }
+
+    html body .ovanie-header .ovanie-cart {
+        display: inline-flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        width: 48px !important;
+        min-width: 48px !important;
+        max-width: 48px !important;
+        overflow: visible !important;
+    }
+}
+
+@media (min-width: 981px) and (max-width: 1280px) {
+    html body .ovanie-header .ovanie-header__wrap {
+        width: min(calc(100% - 28px), 1240px) !important;
+        overflow: visible !important;
+    }
+
+    html body .ovanie-header .ovanie-header__main {
+        display: grid !important;
+        grid-template-columns: 190px minmax(0, 1fr) 294px !important;
+        grid-template-rows: 52px 46px !important;
+        align-items: center !important;
+        column-gap: 12px !important;
+        row-gap: 7px !important;
+        height: auto !important;
+        min-height: 112px !important;
+        padding: 5px 0 8px !important;
+        overflow: visible !important;
+    }
+
+    html body .ovanie-header .ovanie-header__logo {
+        grid-column: 1 !important;
+        grid-row: 1 !important;
+        justify-self: start !important;
+    }
+
+    html body .ovanie-header .ovanie-header__logo img {
+        width: 170px !important;
+        max-width: 100% !important;
+    }
+
+    html body .ovanie-header .ovanie-header__phone {
+        display: none !important;
+    }
+
+    html body .ovanie-header .ovanie-header__actions {
+        grid-column: 3 !important;
+        grid-row: 1 !important;
+        width: 294px !important;
+        min-width: 294px !important;
+        max-width: 294px !important;
+        display: grid !important;
+        grid-template-columns: minmax(116px, 1fr) 86px 44px !important;
+        gap: 7px !important;
+        justify-self: end !important;
+        overflow: visible !important;
+    }
+
+    html body .ovanie-header form.ovanie-search {
+        position: relative !important;
+        grid-column: 1 / 4 !important;
+        grid-row: 2 !important;
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        height: 46px !important;
+        grid-template-columns: minmax(150px, 190px) minmax(180px, 1fr) 52px !important;
+        z-index: 2 !important;
+        overflow: visible !important;
+    }
+
+    html body .ovanie-header .ovanie-nav {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        scrollbar-width: none !important;
+    }
+
+    html body .ovanie-header .ovanie-nav::-webkit-scrollbar {
+        display: none !important;
+    }
+
+    html body .ovanie-header .ovanie-nav__link,
+    html body .ovanie-header .ovanie-nav__categories {
+        flex: 0 0 auto !important;
+        white-space: nowrap !important;
+    }
+
+    html body .ovanie-header .ovanie-cart {
+        display: inline-flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        width: 44px !important;
+        min-width: 44px !important;
+        max-width: 44px !important;
+        overflow: visible !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE — CORRECTIF RESPONSIVE BANNIÈRES + 3 CARTES PRODUIT + SERVICES      */
+/* ========================================================================== */
+@media (max-width: 980px) {
+    /* Les deux bandeaux BTP et Livraison restent côte à côte en responsive. */
+    .ovanie-business-strip {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        align-items: stretch !important;
+        gap: 0 !important;
+        overflow: hidden !important;
+    }
+
+    .ovanie-business-strip__seller,
+    .ovanie-business-strip__delivery {
+        min-width: 0 !important;
+        display: grid !important;
+        grid-template-columns: auto minmax(0, 1fr) !important;
+        grid-template-rows: auto auto !important;
+        align-items: center !important;
+        column-gap: 6px !important;
+        row-gap: 4px !important;
+        padding: 7px 8px !important;
+    }
+
+    .ovanie-business-strip__icon {
+        grid-column: 1 !important;
+        grid-row: 1 / 3 !important;
+        align-self: center !important;
+    }
+
+    .ovanie-business-strip__icon svg,
+    .ovanie-business-strip__icon i {
+        width: 22px !important;
+        height: 22px !important;
+    }
+
+    .ovanie-business-strip__seller > div,
+    .ovanie-business-strip__delivery > div {
+        grid-column: 2 !important;
+        grid-row: 1 !important;
+        min-width: 0 !important;
+    }
+
+    .ovanie-business-strip strong {
+        font-size: 9px !important;
+        line-height: 1.08 !important;
+        white-space: normal !important;
+    }
+
+    .ovanie-business-strip small {
+        margin-top: 2px !important;
+        font-size: 6.6px !important;
+        line-height: 1.15 !important;
+        white-space: normal !important;
+    }
+
+    .ovanie-business-strip a,
+    .ovanie-business-strip__seller a,
+    .ovanie-business-strip__delivery a {
+        grid-column: 2 !important;
+        grid-row: 2 !important;
+        justify-self: start !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        height: 20px !important;
+        min-height: 20px !important;
+        padding: 0 6px !important;
+        font-size: 6.5px !important;
+        line-height: 1 !important;
+        white-space: nowrap !important;
+    }
+
+    .ovanie-business-strip a svg,
+    .ovanie-business-strip a i {
+        width: 9px !important;
+        height: 9px !important;
+    }
+
+    /* Trois cartes complètes dans la largeur visible du rail. */
+    .ovanie-mini-product-row {
+        gap: 6px !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        scroll-snap-type: x mandatory !important;
+        scroll-padding-inline: 7px !important;
+    }
+
+    .ovanie-mini-product-card,
+    .ovanie-commerce-panel--best .ovanie-mini-product-card,
+    .ovanie-commerce-panel--black .ovanie-mini-product-card,
+    .ovanie-mini-product-row.count-3 .ovanie-mini-product-card,
+    .ovanie-mini-product-row.count-4 .ovanie-mini-product-card,
+    .ovanie-mini-product-row.count-5 .ovanie-mini-product-card,
+    .ovanie-commerce-panel--black .ovanie-mini-product-row.count-3 .ovanie-mini-product-card {
+        flex: 0 0 calc((100% - 12px) / 3) !important;
+        flex-basis: calc((100% - 12px) / 3) !important;
+        width: calc((100% - 12px) / 3) !important;
+        min-width: 0 !important;
+        max-width: calc((100% - 12px) / 3) !important;
+        scroll-snap-align: start !important;
+    }
+
+    /* Si le backend ne fournit que 1 ou 2 produits, ils occupent proprement le rail. */
+    .ovanie-mini-product-row.count-1 .ovanie-mini-product-card,
+    .ovanie-commerce-panel--black .ovanie-mini-product-row.count-1 .ovanie-mini-product-card {
+        flex: 0 0 100% !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .ovanie-mini-product-row.count-2 .ovanie-mini-product-card,
+    .ovanie-commerce-panel--black .ovanie-mini-product-row.count-2 .ovanie-mini-product-card {
+        flex: 0 0 calc((100% - 6px) / 2) !important;
+        width: calc((100% - 6px) / 2) !important;
+        max-width: calc((100% - 6px) / 2) !important;
+    }
+
+    /* La section de services sous les panneaux produit est masquée en responsive. */
+    .ovanie-service-ribbon {
+        display: none !important;
+    }
+}
+
+@media (max-width: 420px) {
+    .ovanie-business-strip__seller,
+    .ovanie-business-strip__delivery {
+        column-gap: 4px !important;
+        padding: 6px !important;
+    }
+
+    .ovanie-business-strip__icon svg,
+    .ovanie-business-strip__icon i {
+        width: 19px !important;
+        height: 19px !important;
+    }
+
+    .ovanie-business-strip strong {
+        font-size: 8px !important;
+    }
+
+    .ovanie-business-strip small {
+        font-size: 5.9px !important;
+    }
+
+    .ovanie-business-strip a,
+    .ovanie-business-strip__seller a,
+    .ovanie-business-strip__delivery a {
+        height: 18px !important;
+        min-height: 18px !important;
+        padding-inline: 5px !important;
+        font-size: 5.9px !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE — FOOTER RESPONSIVE PROFESSIONNEL                                   */
+/* ========================================================================== */
+@media (max-width: 760px) {
+    html body footer.ov-footer {
+        position: relative !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        border-top: 3px solid #ff6500 !important;
+        background: linear-gradient(180deg, #031d49 0%, #001438 100%) !important;
+    }
+
+    html body footer.ov-footer .ov-footer__inner {
+        width: calc(100% - 24px) !important;
+        max-width: 560px !important;
+        margin: 0 auto !important;
+        padding: 16px 0 14px !important;
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 10px !important;
+        align-items: stretch !important;
+    }
+
+    /* Bloc identité : visible, lisible et correctement aligné. */
+    html body footer.ov-footer .ov-footer__brand {
+        grid-column: 1 / -1 !important;
+        display: grid !important;
+        grid-template-columns: 96px minmax(0, 1fr) !important;
+        grid-template-areas:
+            "logo contact"
+            "description description"
+            "socials socials" !important;
+        gap: 8px 12px !important;
+        align-items: start !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 12px !important;
+        border: 1px solid rgba(255, 255, 255, .11) !important;
+        border-radius: 10px !important;
+        background: rgba(255, 255, 255, .045) !important;
+        box-shadow: 0 8px 22px rgba(0, 0, 0, .10) !important;
+        text-align: left !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand > a {
+        grid-area: logo !important;
+        display: flex !important;
+        align-items: flex-start !important;
+        justify-content: flex-start !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand img {
+        display: block !important;
+        width: 96px !important;
+        max-width: 96px !important;
+        height: auto !important;
+        margin: 0 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand p {
+        grid-area: description !important;
+        display: -webkit-box !important;
+        max-width: none !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+        color: #dbe7f5 !important;
+        font-size: 9.5px !important;
+        line-height: 1.45 !important;
+        -webkit-box-orient: vertical !important;
+        -webkit-line-clamp: 2 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact {
+        grid-area: contact !important;
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 5px !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact a,
+    html body footer.ov-footer .ov-footer__contact span {
+        display: flex !important;
+        align-items: flex-start !important;
+        gap: 5px !important;
+        min-width: 0 !important;
+        color: #edf4ff !important;
+        font-size: 8.5px !important;
+        line-height: 1.25 !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+    }
+
+    html body footer.ov-footer .ov-footer__icon {
+        flex: 0 0 11px !important;
+        width: 11px !important;
+        height: 11px !important;
+        margin-top: 1px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__socials {
+        grid-area: socials !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 7px !important;
+        margin: 2px 0 0 !important;
+        padding-top: 8px !important;
+        border-top: 1px solid rgba(255, 255, 255, .09) !important;
+    }
+
+    html body footer.ov-footer .ov-footer__socials a {
+        width: 28px !important;
+        height: 28px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__socials a svg {
+        width: 14px !important;
+        height: 14px !important;
+    }
+
+    /* Les quatre rubriques deviennent une grille 2 × 2 équilibrée. */
+    html body footer.ov-footer .ov-footer__col:not([data-ovanie-newsletter]) {
+        min-width: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 11px !important;
+        border: 1px solid rgba(255, 255, 255, .10) !important;
+        border-radius: 9px !important;
+        background: rgba(255, 255, 255, .035) !important;
+        text-align: left !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col:not([data-ovanie-newsletter]) h4 {
+        position: relative !important;
+        margin: 0 0 8px !important;
+        padding-bottom: 7px !important;
+        color: #fff !important;
+        font-size: 10.5px !important;
+        font-weight: 800 !important;
+        line-height: 1.2 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col:not([data-ovanie-newsletter]) h4::after {
+        content: "" !important;
+        position: absolute !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        width: 26px !important;
+        height: 2px !important;
+        border-radius: 999px !important;
+        background: #ff6500 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col nav {
+        display: grid !important;
+        gap: 5px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col nav a {
+        color: #dbe7f5 !important;
+        font-size: 8.6px !important;
+        line-height: 1.3 !important;
+        overflow-wrap: anywhere !important;
+    }
+
+    html body footer.ov-footer .ov-footer__payments {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        gap: 4px !important;
+        margin-top: 9px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__payments img {
+        width: auto !important;
+        height: 17px !important;
+        max-height: 17px !important;
+        max-width: 38px !important;
+        padding: 1px 2px !important;
+        border-radius: 3px !important;
+        background: #fff !important;
+    }
+
+    /* Newsletter : carte pleine largeur, séparée des liens. */
+    html body footer.ov-footer [data-ovanie-newsletter] {
+        grid-column: 1 / -1 !important;
+        min-width: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 12px !important;
+        border: 1px solid rgba(255, 255, 255, .12) !important;
+        border-radius: 10px !important;
+        background: rgba(255, 255, 255, .055) !important;
+        box-sizing: border-box !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__title {
+        margin: 0 0 3px !important;
+        color: #fff !important;
+        font-size: 14px !important;
+        font-weight: 800 !important;
+        line-height: 1.2 !important;
+        white-space: normal !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__subtitle {
+        margin: 0 0 9px !important;
+        color: #d7e3f2 !important;
+        font-size: 9.5px !important;
+        line-height: 1.35 !important;
+        white-space: normal !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__control {
+        width: 100% !important;
+        height: 40px !important;
+        min-height: 40px !important;
+        border-radius: 6px !important;
+        overflow: hidden !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__input {
+        height: 38px !important;
+        min-height: 38px !important;
+        padding: 0 11px !important;
+        font-size: 10.5px !important;
+        line-height: 38px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__submit {
+        flex: 0 0 96px !important;
+        width: 96px !important;
+        min-width: 96px !important;
+        max-width: 96px !important;
+        height: 39px !important;
+        min-height: 39px !important;
+        padding: 0 8px !important;
+        font-size: 10px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__stores {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px !important;
+        margin-top: 8px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__store {
+        height: 36px !important;
+        min-height: 36px !important;
+        padding: 4px 8px !important;
+        border-radius: 5px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__store-icon {
+        flex-basis: 15px !important;
+        width: 15px !important;
+        font-size: 12px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__store-copy small {
+        font-size: 6.5px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__store-copy strong {
+        font-size: 8.5px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom {
+        width: calc(100% - 24px) !important;
+        max-width: 560px !important;
+        min-height: 0 !important;
+        margin: 0 auto !important;
+        padding: 10px 0 12px !important;
+        display: grid !important;
+        gap: 6px !important;
+        justify-items: center !important;
+        border-top: 1px solid rgba(255, 255, 255, .10) !important;
+        color: #bfcde0 !important;
+        text-align: center !important;
+        font-size: 8px !important;
+        line-height: 1.3 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom-links {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        gap: 4px 10px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom-links a {
+        font-size: 7.8px !important;
+        line-height: 1.25 !important;
+    }
+
+    html body .ov-whatsapp-float {
+        width: 44px !important;
+        height: 44px !important;
+        right: 12px !important;
+        bottom: 12px !important;
+    }
+
+    html body .ov-whatsapp-float svg {
+        width: 23px !important;
+        height: 23px !important;
+    }
+}
+
+@media (max-width: 390px) {
+    html body footer.ov-footer .ov-footer__inner {
+        width: calc(100% - 16px) !important;
+        gap: 8px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand {
+        grid-template-columns: 84px minmax(0, 1fr) !important;
+        gap: 7px 10px !important;
+        padding: 10px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand img {
+        width: 84px !important;
+        max-width: 84px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact a,
+    html body footer.ov-footer .ov-footer__contact span {
+        font-size: 8px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col:not([data-ovanie-newsletter]) {
+        padding: 9px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col:not([data-ovanie-newsletter]) h4 {
+        font-size: 9.7px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col nav a {
+        font-size: 8px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] {
+        padding: 10px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom {
+        width: calc(100% - 16px) !important;
+    }
+}
+
+/* Priorité finale : préserver l'image hero complète sur les écrans larges. */
+@media (min-width: 721px) {
+    html body .ovanie-home--mockup > .ovanie-hero {
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        aspect-ratio: var(--hero-aspect, 1536 / 568) !important;
+        background-size: cover !important;
+        background-position: center !important;
+    }
+}
+
+/* Sur grand écran, les contenus utilisent la largeur disponible sans larges bandes latérales. */
+@media (min-width: 1281px) {
+    html body .ovanie-home--mockup .ovanie-discovery,
+    html body .ovanie-home--mockup .ovanie-business-strip,
+    html body .ovanie-home--mockup .ovanie-commerce-grid,
+    html body .ovanie-home--mockup .ovanie-service-ribbon {
+        width: calc(100% - 32px) !important;
+        max-width: none !important;
+    }
+
+    html body .ov-footer__inner,
+    html body .ov-footer__bottom {
+        width: calc(100% - 32px) !important;
+        max-width: none !important;
+    }
+}
+
+@media (max-width: 340px) {
+    html body footer.ov-footer .ov-footer__inner {
+        grid-template-columns: 1fr !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand,
+    html body footer.ov-footer [data-ovanie-newsletter] {
+        grid-column: 1 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand {
+        grid-template-columns: 76px minmax(0, 1fr) !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand img {
+        width: 76px !important;
+        max-width: 76px !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE — FOOTER MOBILE COMPACT : icônes centrées + hauteur réduite          */
+/* ========================================================================== */
+@media (max-width: 760px) {
+    html body footer.ov-footer .ov-footer__inner {
+        width: calc(100% - 18px) !important;
+        padding: 10px 0 8px !important;
+        gap: 6px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand {
+        grid-template-columns: 88px minmax(0, 1fr) !important;
+        gap: 5px 9px !important;
+        padding: 8px 9px !important;
+        border-radius: 8px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand img {
+        width: 88px !important;
+        max-width: 88px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand p {
+        font-size: 8.7px !important;
+        line-height: 1.3 !important;
+        -webkit-line-clamp: 1 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact {
+        gap: 3px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact a,
+    html body footer.ov-footer .ov-footer__contact span {
+        gap: 4px !important;
+        font-size: 7.8px !important;
+        line-height: 1.15 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__icon {
+        flex-basis: 10px !important;
+        width: 10px !important;
+        height: 10px !important;
+    }
+
+    /* Icônes sociales parfaitement centrées. */
+    html body footer.ov-footer .ov-footer__socials {
+        justify-content: center !important;
+        gap: 6px !important;
+        margin: 0 !important;
+        padding-top: 6px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__socials a {
+        width: 25px !important;
+        height: 25px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    html body footer.ov-footer .ov-footer__socials a svg {
+        width: 12px !important;
+        height: 12px !important;
+        display: block !important;
+        margin: auto !important;
+    }
+
+    /* Cartes de liens plus basses et plus serrées. */
+    html body footer.ov-footer .ov-footer__col:not([data-ovanie-newsletter]) {
+        padding: 7px 8px !important;
+        border-radius: 7px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col:not([data-ovanie-newsletter]) h4 {
+        margin: 0 0 5px !important;
+        padding-bottom: 4px !important;
+        font-size: 9.6px !important;
+        line-height: 1.1 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col:not([data-ovanie-newsletter]) h4::after {
+        width: 22px !important;
+        height: 2px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col nav {
+        gap: 3px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col nav a {
+        font-size: 7.8px !important;
+        line-height: 1.16 !important;
+    }
+
+    /* Logos de paiement centrés dans leur carte. */
+    html body footer.ov-footer .ov-footer__payments {
+        justify-content: center !important;
+        gap: 3px !important;
+        margin-top: 5px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__payments img {
+        height: 15px !important;
+        max-height: 15px !important;
+        max-width: 34px !important;
+    }
+
+    /* Newsletter plus compacte. */
+    html body footer.ov-footer [data-ovanie-newsletter] {
+        padding: 8px 9px !important;
+        border-radius: 8px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__title {
+        margin-bottom: 2px !important;
+        font-size: 12px !important;
+        line-height: 1.1 !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__subtitle {
+        margin-bottom: 5px !important;
+        font-size: 8.5px !important;
+        line-height: 1.2 !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__control {
+        height: 34px !important;
+        min-height: 34px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__input {
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 0 9px !important;
+        font-size: 9.5px !important;
+        line-height: 32px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__submit {
+        flex: 0 0 82px !important;
+        width: 82px !important;
+        min-width: 82px !important;
+        max-width: 82px !important;
+        height: 33px !important;
+        min-height: 33px !important;
+        font-size: 9px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__stores {
+        gap: 6px !important;
+        margin-top: 5px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__store {
+        height: 30px !important;
+        min-height: 30px !important;
+        padding: 3px 7px !important;
+        justify-content: center !important;
+        gap: 5px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__store-icon {
+        flex-basis: 13px !important;
+        width: 13px !important;
+        text-align: center !important;
+        font-size: 10px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__store-copy {
+        align-items: flex-start !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__store-copy small {
+        font-size: 5.8px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] .ovn-newsletter__store-copy strong {
+        font-size: 7.6px !important;
+    }
+
+    /* Bas de footer moins haut. */
+    html body footer.ov-footer .ov-footer__bottom {
+        width: calc(100% - 18px) !important;
+        padding: 6px 0 7px !important;
+        gap: 3px !important;
+        font-size: 7.2px !important;
+        line-height: 1.2 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom-links {
+        gap: 2px 8px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom-links a {
+        font-size: 6.9px !important;
+        line-height: 1.15 !important;
+    }
+
+    html body .ov-whatsapp-float {
+        width: 40px !important;
+        height: 40px !important;
+        right: 9px !important;
+        bottom: 9px !important;
+    }
+
+    html body .ov-whatsapp-float svg {
+        width: 21px !important;
+        height: 21px !important;
+    }
+}
+
+@media (max-width: 390px) {
+    html body footer.ov-footer .ov-footer__inner {
+        width: calc(100% - 12px) !important;
+        gap: 5px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand {
+        grid-template-columns: 78px minmax(0, 1fr) !important;
+        padding: 7px 8px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand img {
+        width: 78px !important;
+        max-width: 78px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__col:not([data-ovanie-newsletter]) {
+        padding: 6px 7px !important;
+    }
+
+    html body footer.ov-footer [data-ovanie-newsletter] {
+        padding: 7px 8px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom {
+        width: calc(100% - 12px) !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE — FOOTER MOBILE : contacts sur une seule ligne                      */
+/* ========================================================================== */
+@media (max-width: 760px) {
+    html body footer.ov-footer .ov-footer__brand {
+        grid-template-areas:
+            "logo description"
+            "contact contact"
+            "socials socials" !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact {
+        width: 100% !important;
+        display: grid !important;
+        grid-template-columns: max-content max-content minmax(0, 1fr) !important;
+        align-items: center !important;
+        justify-content: center !important;
+        column-gap: 8px !important;
+        row-gap: 0 !important;
+        margin: 0 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact a,
+    html body footer.ov-footer .ov-footer__contact span {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 3px !important;
+        min-width: 0 !important;
+        white-space: nowrap !important;
+        overflow-wrap: normal !important;
+        font-size: 7.3px !important;
+        line-height: 1 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact a:last-child {
+        justify-self: start !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact .ov-footer__icon {
+        flex: 0 0 9px !important;
+        width: 9px !important;
+        height: 9px !important;
+        margin: 0 !important;
+    }
+}
+
+@media (max-width: 390px) {
+    html body footer.ov-footer .ov-footer__contact {
+        column-gap: 5px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact a,
+    html body footer.ov-footer .ov-footer__contact span {
+        gap: 2px !important;
+        font-size: 6.7px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact .ov-footer__icon {
+        flex-basis: 8px !important;
+        width: 8px !important;
+        height: 8px !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE — FOOTER MOBILE : hiérarchie du bloc marque                         */
+/* ========================================================================== */
+@media (max-width: 760px) {
+    html body footer.ov-footer .ov-footer__brand {
+        grid-template-columns: minmax(0, 1fr) !important;
+        grid-template-areas:
+            "logo"
+            "contact"
+            "description"
+            "socials" !important;
+        justify-items: center !important;
+        text-align: center !important;
+        gap: 5px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand > a {
+        grid-area: logo !important;
+        width: 100% !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+
+    html body footer.ov-footer .ov-footer__brand p {
+        grid-area: description !important;
+        width: 100% !important;
+        max-width: 360px !important;
+        margin: 0 auto !important;
+        text-align: center !important;
+        font-size: 8.2px !important;
+        line-height: 1.25 !important;
+        -webkit-line-clamp: 2 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact {
+        grid-area: contact !important;
+        width: 100% !important;
+        justify-content: center !important;
+        margin: 0 auto !important;
+    }
+
+    html body footer.ov-footer .ov-footer__socials {
+        grid-area: socials !important;
+        width: 100% !important;
+        justify-content: center !important;
+        padding-top: 2px !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE — FOOTER MOBILE : ligne de contact réellement centrée               */
+/* ========================================================================== */
+@media (max-width: 760px) {
+    html body footer.ov-footer .ov-footer__contact {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
+        gap: 8px !important;
+        text-align: center !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact > span,
+    html body footer.ov-footer .ov-footer__contact > a,
+    html body footer.ov-footer .ov-footer__contact a:last-child {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        justify-self: auto !important;
+        flex: 0 0 auto !important;
+        margin: 0 !important;
+        white-space: nowrap !important;
+        text-align: center !important;
+    }
+}
+
+@media (max-width: 390px) {
+    html body footer.ov-footer .ov-footer__contact {
+        gap: 5px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__contact > span,
+    html body footer.ov-footer .ov-footer__contact > a {
+        font-size: 6.4px !important;
+    }
+}
+
+/* ========================================================================== */
+/* OVANIE — CORRECTION FINALE NAVBAR MOBILE + PIED DE PAGE LÉGAL              */
+/* ========================================================================== */
+
+/*
+ * Le header mobile utilise deux lignes réelles :
+ * 1) menu + logo + compte + panier
+ * 2) recherche
+ * Une ancienne règle home.css imposait encore 58px de hauteur au conteneur,
+ * ce qui faisait déborder la recherche sur le Hero. Cette couche finale force
+ * le header à réserver physiquement toute la hauteur de ses deux lignes.
+ */
+@media (max-width: 980px) {
+    html body header.ovanie-header {
+        position: relative !important;
+        display: block !important;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+    }
+
+    html body header.ovanie-header .ovanie-header__wrap {
+        display: block !important;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+    }
+
+    html body header.ovanie-header .ovanie-header__main {
+        display: grid !important;
+        grid-template-columns: 42px minmax(86px, 118px) minmax(0, 1fr) 42px !important;
+        grid-template-rows: 42px 44px !important;
+        column-gap: 8px !important;
+        row-gap: 8px !important;
+        align-items: center !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 112px !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 8px 0 10px !important;
+        box-sizing: border-box !important;
+        overflow: visible !important;
+    }
+
+    html body header.ovanie-header form.ovanie-search {
+        position: relative !important;
+        grid-column: 1 / 5 !important;
+        grid-row: 2 !important;
+        align-self: stretch !important;
+        width: 100% !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        max-height: 44px !important;
+        margin: 0 !important;
+        transform: none !important;
+        z-index: 5 !important;
+    }
+
+    html body .ovanie-home--mockup > .ovanie-hero,
+    html body main .ovanie-hero {
+        margin-top: 0 !important;
+    }
+}
+
+@media (max-width: 520px) {
+    html body header.ovanie-header .ovanie-header__main {
+        grid-template-columns: 38px minmax(78px, 102px) minmax(0, 1fr) 38px !important;
+        grid-template-rows: 38px 42px !important;
+        column-gap: 6px !important;
+        row-gap: 7px !important;
+        min-height: 102px !important;
+        padding: 7px 0 8px !important;
+    }
+
+    html body header.ovanie-header form.ovanie-search {
+        height: 42px !important;
+        min-height: 42px !important;
+        max-height: 42px !important;
+    }
+}
+
+/* Bas du footer : plus lisible, plus court et mieux hiérarchisé. */
+html body footer.ov-footer .ov-footer__bottom {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 14px !important;
+}
+
+html body footer.ov-footer .ov-footer__copyright {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 7px !important;
+    margin: 0 !important;
+    color: rgba(255, 255, 255, .78) !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+}
+
+html body footer.ov-footer .ov-footer__copyright-separator {
+    color: rgba(255, 255, 255, .35) !important;
+}
+
+html body footer.ov-footer .ov-footer__bottom-links {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: wrap !important;
+    gap: 0 !important;
+    margin: 0 !important;
+}
+
+html body footer.ov-footer .ov-footer__bottom-links a {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    color: rgba(255, 255, 255, .78) !important;
+    font-weight: 600 !important;
+    text-decoration: none !important;
+    white-space: nowrap !important;
+}
+
+html body footer.ov-footer .ov-footer__bottom-links a + a::before {
+    content: "" !important;
+    display: inline-block !important;
+    width: 1px !important;
+    height: .85em !important;
+    margin: 0 9px !important;
+    background: rgba(255, 255, 255, .28) !important;
+}
+
+html body footer.ov-footer .ov-footer__bottom-links a:hover {
+    color: #ffffff !important;
+}
+
+@media (max-width: 760px) {
+    html body footer.ov-footer .ov-footer__bottom {
+        width: calc(100% - 18px) !important;
+        min-height: 0 !important;
+        padding: 7px 0 8px !important;
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        justify-items: center !important;
+        gap: 4px !important;
+        text-align: center !important;
+        border-top-color: rgba(255, 255, 255, .12) !important;
+    }
+
+    html body footer.ov-footer .ov-footer__copyright {
+        justify-content: center !important;
+        gap: 5px !important;
+        font-size: 7.5px !important;
+        line-height: 1.2 !important;
+        white-space: nowrap !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom-links {
+        justify-content: center !important;
+        flex-wrap: nowrap !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom-links a {
+        font-size: 7px !important;
+        line-height: 1.15 !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom-links a + a::before {
+        height: .9em !important;
+        margin: 0 6px !important;
+    }
+}
+
+@media (max-width: 390px) {
+    html body footer.ov-footer .ov-footer__copyright {
+        font-size: 6.8px !important;
+        gap: 4px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom-links a {
+        font-size: 6.4px !important;
+    }
+
+    html body footer.ov-footer .ov-footer__bottom-links a + a::before {
+        margin: 0 4px !important;
+    }
+}

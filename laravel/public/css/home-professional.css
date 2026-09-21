@@ -1,0 +1,763 @@
+:root {
+    --ov-navy-950: #031b45;
+    --ov-navy-900: #05265e;
+    --ov-navy-800: #0a3a7d;
+    --ov-orange: #ff6600;
+    --ov-orange-600: #ed5f00;
+    --ov-text: #0d2444;
+    --ov-muted: #6a778c;
+    --ov-border: #e1e7ef;
+    --ov-bg: #f6f8fb;
+    --ov-panel: #ffffff;
+    --ov-radius-lg: 14px;
+}
+
+.ov-home,
+.ov-home * { box-sizing: border-box; }
+
+.ov-home {
+    padding: 16px 0 22px;
+    background: var(--ov-bg);
+    color: var(--ov-text);
+}
+
+.ov-home a { color: inherit; text-decoration: none; }
+.ov-home img { display: block; max-width: 100%; }
+
+.ov-shell {
+    width: min(100% - 40px, 1500px);
+    margin-inline: auto;
+}
+
+.ov-panel {
+    background: var(--ov-panel);
+    border: 1px solid var(--ov-border);
+    border-radius: var(--ov-radius-lg);
+}
+
+.ov-section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 14px;
+}
+
+.ov-section-head h2 {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.2;
+    letter-spacing: -.015em;
+    color: var(--ov-text);
+}
+
+.ov-section-head > a,
+.ov-section-head__title + a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    color: #314969;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.ov-section-head__title { min-width: 0; }
+.ov-section-head__title h2 { margin-bottom: 3px; }
+.ov-section-head__title small,
+.ov-section-head__title p {
+    margin: 0;
+    color: var(--ov-muted);
+    font-size: 10px;
+}
+
+.ov-kicker,
+.ov-eyebrow {
+    display: inline-block;
+    color: var(--ov-orange);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
+
+.ov-btn {
+    min-height: 42px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 11.5px;
+    font-weight: 850;
+    transition: transform .16s ease, background .16s ease, border-color .16s ease;
+}
+.ov-btn:hover { transform: translateY(-1px); }
+.ov-btn--orange { background: var(--ov-orange); color: #fff !important; }
+.ov-btn--orange:hover { background: var(--ov-orange-600); }
+.ov-btn--compact { min-height: 38px; padding-inline: 14px; }
+.ov-btn--outline-light { color: #fff !important; border-color: rgba(255,255,255,.7); background: rgba(4,28,66,.16); }
+.ov-btn--outline-dark { color: var(--ov-navy-900) !important; border-color: #a9b9cf; background: #fff; }
+.ov-btn--white { color: var(--ov-navy-900) !important; background: #fff; }
+
+/* Hero */
+.ov-hero {
+    position: relative;
+    min-height: 405px;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 270px;
+    gap: 28px;
+    align-items: center;
+    padding: 30px 30px 28px;
+    border-radius: 12px;
+    background: var(--ov-navy-950);
+}
+
+.ov-hero__background,
+.ov-hero__overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+.ov-hero__background { object-fit: cover; object-position: center; }
+.ov-hero__overlay {
+    background: linear-gradient(90deg, rgba(3,27,69,.98) 0%, rgba(3,27,69,.91) 36%, rgba(3,27,69,.35) 64%, rgba(3,27,69,.05) 100%);
+}
+
+.ov-hero__copy,
+.ov-hero__stats { position: relative; z-index: 2; }
+.ov-hero__copy { max-width: 585px; color: #fff; }
+.ov-hero__copy .ov-eyebrow { color: #ff9b58; margin-bottom: 12px; }
+.ov-hero__copy h1 {
+    margin: 0;
+    color: #fff;
+    font-size: clamp(44px, 4.2vw, 68px);
+    line-height: .99;
+    letter-spacing: -.046em;
+    font-weight: 900;
+}
+.ov-hero__copy h1 em { color: var(--ov-orange); font-style: normal; }
+.ov-hero__copy > p {
+    max-width: 510px;
+    margin: 17px 0 0;
+    color: rgba(255,255,255,.92);
+    font-size: 13px;
+    line-height: 1.55;
+}
+.ov-hero__actions { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 22px; }
+.ov-hero__support { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 18px; }
+.ov-hero__support a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+.ov-hero__support svg {
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.ov-hero__support .ov-hero__whatsapp {
+    color: #ffffff;
+}
+.ov-hero__support .ov-whatsapp-brand {
+    width: 18px;
+    height: 18px;
+    fill: #25D366;
+    stroke: none;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,.12));
+}
+.ov-hero__stats { display: grid; gap: 9px; width: 100%; }
+.ov-stat {
+    min-height: 68px;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 11px 13px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.96);
+    border: 1px solid rgba(255,255,255,.7);
+    box-shadow: 0 8px 24px rgba(3, 22, 51, .15);
+}
+.ov-stat__icon {
+    width: 40px; height: 40px; display: grid; place-items: center; border-radius: 9px; background: #fff2e8; color: var(--ov-orange);
+}
+.ov-stat__icon svg {
+    width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.ov-stat strong { display: block; color: #0c2446; font-size: 15px; line-height: 1.15; }
+.ov-stat small { display: block; margin-top: 4px; color: var(--ov-muted); font-size: 9.5px; line-height: 1.25; }
+
+/* Categories */
+.ov-category-section {
+    margin-top: 14px;
+    padding: 18px;
+}
+.ov-category-grid {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 11px;
+}
+.ov-category-card {
+    min-width: 0;
+    min-height: 176px;
+    padding: 8px 8px 11px;
+    border: 1px solid var(--ov-border);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    background: #fff;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.ov-category-card:hover {
+    transform: translateY(-2px);
+    border-color: #bfcfe3;
+    box-shadow: 0 10px 26px rgba(5, 36, 83, .08);
+}
+.ov-category-visual {
+    width: 100%;
+    height: 106px;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    padding: 5px;
+    border-radius: 8px;
+    background: #fbfcfe;
+    border: 1px solid #eef2f6;
+}
+.ov-category-visual img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: 148px;
+    max-height: 96px;
+    object-fit: contain;
+    object-position: center;
+}
+.ov-category-card strong {
+    min-height: 38px;
+    margin-top: 8px;
+    display: grid;
+    place-items: center;
+    padding: 0 3px;
+    color: #0d274d;
+    font-size: 10.8px;
+    line-height: 1.28;
+    text-align: center;
+}
+.ov-category-arrow {
+    margin-top: auto;
+    padding-top: 5px;
+    color: var(--ov-navy-800);
+    font-size: 13px;
+    text-align: center;
+}
+
+/* Commerce */
+.ov-commerce-row { margin-top: 14px; display: grid; grid-template-columns: 232px minmax(0,1fr) 320px; gap: 14px; align-items: stretch; }
+.ov-promotion-card {
+    position: relative;
+    overflow: hidden;
+    min-height: 355px;
+    padding: 18px;
+    border: 1px solid #123a70;
+    border-radius: var(--ov-radius-lg);
+    background: linear-gradient(155deg, #061d42 0%, #0a3774 72%, #0b4b96 100%);
+    box-shadow: 0 12px 28px rgba(5,36,83,.13);
+}
+.ov-promotion-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 90% 8%, rgba(255,255,255,.14), transparent 38%);
+    pointer-events: none;
+}
+.ov-promotion-card__content { position: relative; z-index: 2; min-height: 100%; display: flex; flex-direction: column; }
+.ov-promotion-card .ov-kicker { color: #ff8a3d; }
+.ov-promotion-card h2 {
+    margin: 8px 0 5px;
+    color: #fff;
+    font-size: 20px;
+    line-height: 1.2;
+    font-weight: 850;
+}
+.ov-promotion-card p { margin: 0; color: #d9e5f5; font-size: 10.5px; line-height: 1.5; }
+.ov-promotion-card__visual {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+    margin: 4px auto 2px;
+    object-fit: contain;
+    filter: drop-shadow(0 10px 18px rgba(0,0,0,.16));
+    pointer-events: none;
+}
+.ov-promotion-card .ov-btn { width: 100%; flex: 0 0 auto; border: 1px solid rgba(255,255,255,.18); box-shadow: 0 8px 18px rgba(0,0,0,.13); }
+
+.ov-flash-panel,
+.ov-best-panel { padding: 16px; }
+.ov-product-grid { display: grid; gap: 10px; }
+.ov-product-grid--3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.ov-product-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--ov-border);
+    border-radius: 10px;
+    background: #fff;
+}
+.ov-product-card__image {
+    aspect-ratio: 1 / 1;
+    padding: 12px;
+    display: grid;
+    place-items: center;
+    background: #f8fafc;
+}
+.ov-product-card__image img { width: 100%; height: 100%; object-fit: contain; }
+.ov-product-card__body { padding: 12px; }
+.ov-product-card__name {
+    min-height: 36px;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    color: #102748 !important;
+    font-size: 11.5px;
+    line-height: 1.35;
+    font-weight: 760;
+}
+.ov-product-price { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
+.ov-product-price strong,
+.ov-product-card--compact strong { color: var(--ov-navy-950); font-size: 12.5px; }
+.ov-product-price span { margin-left: auto; color: #e64e2c; font-size: 10px; font-weight: 900; }
+.ov-old-price { display: block; margin-top: 2px; color: #97a4b6; font-size: 9px; text-decoration: line-through; }
+.ov-product-card__cta {
+    min-height: 32px;
+    margin-top: 10px;
+    display: grid;
+    place-items: center;
+    border: 1px solid #ffc7a4;
+    border-radius: 7px;
+    color: var(--ov-orange) !important;
+    font-size: 10px;
+    font-weight: 800;
+}
+.ov-product-card__cta:hover { background: #fff5ee; }
+.ov-product-card__rating { display: flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--ov-muted); font-size: 9px; }
+.ov-best-list { display: grid; }
+.ov-best-item {
+    min-height: 64px;
+    display: grid;
+    grid-template-columns: 54px minmax(0,1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 7px 0;
+    border-top: 1px solid #edf0f4;
+}
+.ov-best-item:first-child { border-top: 0; padding-top: 2px; }
+.ov-best-item__image { width: 54px; height: 54px; padding: 5px; border-radius: 8px; border: 1px solid #e9edf3; background: #f8fafc; }
+.ov-best-item__image img { width: 100%; height: 100%; object-fit: contain; }
+.ov-best-item__content { min-width: 0; }
+.ov-best-item__content strong { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: #102748; font-size: 10.5px; line-height: 1.3; }
+.ov-best-item__content b { display: block; margin-top: 4px; color: var(--ov-navy-950); font-size: 11.5px; }
+.ov-best-item__content small { display: flex; align-items: center; gap: 4px; margin-top: 3px; color: var(--ov-muted); font-size: 9px; }
+.ov-star { color: #f5a600; }
+
+/* Feature */
+.ov-feature-section { margin-top: 14px; padding: 14px; display: grid; grid-template-columns: 250px minmax(0,1fr); gap: 13px; }
+.ov-feature-intro { padding: 14px 8px 14px 7px; }
+.ov-feature-intro h2 { margin: 7px 0 0; color: #0d274d; font-size: 19px; line-height: 1.25; }
+.ov-feature-intro p { margin: 11px 0 18px; color: var(--ov-muted); font-size: 11px; line-height: 1.55; }
+.ov-feature-products { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+.ov-event-section { overflow: hidden; }
+.ov-event-intro { border-radius: 10px; background: linear-gradient(145deg, #fff7f1, #fff); }
+.ov-event-section.is-black-friday .ov-event-intro { color: #fff; background: linear-gradient(145deg, #090b10, #242832); }
+.ov-event-section.is-black-friday .ov-event-intro h2,
+.ov-event-section.is-black-friday .ov-event-intro p,
+.ov-event-section.is-black-friday .ov-event-intro .ov-kicker { color: #fff; }
+.ov-event-section.is-black-friday .ov-event-intro .ov-btn { border-color: #ff6400; color: #fff !important; }
+.ov-event-section.has-no-offers { grid-template-columns: 1fr; }
+.ov-event-section.has-no-offers .ov-event-intro {
+    min-height: 190px;
+    padding: 22px 24px;
+    background: linear-gradient(135deg, #fff8f3, #fff 72%);
+}
+.ov-event-section.has-no-offers .ov-event-intro p { max-width: 520px; }
+.ov-event-section.has-no-offers .ov-feature-products { display: none; }
+.ov-countdown { margin: 14px 0 16px; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; }
+.ov-countdown > span { min-width: 0; padding: 8px 3px; border: 1px solid #f2d3bd; border-radius: 8px; background: #fff; text-align: center; }
+.ov-countdown b { display: block; color: var(--ov-orange); font-size: 17px; line-height: 1; }
+.ov-countdown small { display: block; margin-top: 5px; color: #66758a; font-size: 7px; text-transform: uppercase; letter-spacing: .03em; }
+.ov-countdown.is-finished { opacity: .55; }
+.ov-product-card--compact .ov-product-card__image { aspect-ratio: 1.08 / 1; }
+.ov-feature-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.ov-feature-bottom small { display: flex; gap: 4px; align-items: center; margin-top: 4px; color: var(--ov-muted); font-size: 9px; }
+.ov-plus-button { width: 29px; height: 29px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid #d7e0eb; border-radius: 7px; color: var(--ov-navy-800) !important; font-weight: 800; }
+
+/* Gift cards */
+.ov-gift-section { margin-top: 14px; padding: 17px 18px 18px; }
+.ov-gift-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.ov-gift-card {
+    min-height: 190px;
+    display: grid;
+    grid-template-columns: minmax(0,.95fr) minmax(150px,1.05fr);
+    gap: 12px;
+    align-items: center;
+    padding: 14px;
+    border: 1px solid var(--ov-border);
+    border-radius: 10px;
+    background: #fff;
+    transition: transform .16s ease, box-shadow .16s ease;
+}
+.ov-gift-card:hover { transform: translateY(-1px); box-shadow: 0 7px 18px rgba(5,36,83,.07); }
+.ov-gift-card__copy small { display: block; margin-bottom: 6px; color: #7c899b; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; font-weight: 800; }
+.ov-gift-card__copy h3 { margin: 0; color: #0c274d; font-size: 15px; }
+.ov-gift-card__copy p { margin: 7px 0; color: var(--ov-muted); font-size: 10px; line-height: 1.45; }
+.ov-gift-card__copy strong { display: block; margin: 7px 0; color: #0c274d; font-size: 10.5px; }
+.ov-gift-card__copy > span:last-child { color: var(--ov-navy-800); font-size: 10px; font-weight: 800; }
+.ov-gift-card__visual { min-width: 0; height: 140px; display: grid; place-items: center; overflow: hidden; border-radius: 9px; background: #f8fafc; }
+.ov-gift-card__visual img { width: 100%; height: 100%; object-fit: contain; object-position: center; }
+
+/* Benefits */
+.ov-benefits-section { margin-top: 14px; padding: 17px 18px 18px; }
+.ov-benefit-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; }
+.ov-benefit {
+    min-height: 106px;
+    display: grid;
+    grid-template-columns: 40px minmax(0,1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 13px;
+    border: 1px solid var(--ov-border);
+    border-radius: 10px;
+    color: inherit;
+    text-decoration: none;
+}
+.ov-benefit:hover { border-color: #ffb588; box-shadow: 0 7px 18px rgba(5,36,83,.06); }
+.ov-benefit > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; border: 1px solid #d6e0ec; color: var(--ov-orange); }
+.ov-benefit svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ov-benefit strong { display: block; color: #102748; font-size: 10.5px; }
+.ov-benefit p { margin: 5px 0 0; color: var(--ov-muted); font-size: 9px; line-height: 1.45; }
+
+/* OVANIE Pro — structure fidèle à la maquette */
+.ov-business {
+    position: relative;
+    min-height: 276px;
+    margin-top: 14px;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    align-items: center;
+    padding: 26px 24px 26px 30px;
+    border-radius: 12px;
+    background: #05265d;
+    color: #fff;
+    isolation: isolate;
+}
+.ov-business__background {
+    position: absolute;
+    inset: 0;
+    z-index: -3;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 57% 44%;
+}
+.ov-business__overlay {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background:
+        linear-gradient(90deg,
+            rgba(3, 30, 75, .99) 0%,
+            rgba(3, 35, 86, .96) 35%,
+            rgba(4, 45, 100, .72) 52%,
+            rgba(4, 45, 100, .20) 67%,
+            rgba(4, 40, 92, .55) 100%),
+        linear-gradient(0deg, rgba(2, 24, 60, .10), rgba(2, 24, 60, .10));
+}
+.ov-business__copy {
+    position: relative;
+    z-index: 2;
+    width: min(55%, 590px);
+    min-width: 480px;
+    align-self: center;
+}
+.ov-business__copy .ov-eyebrow {
+    color: #ff9b58;
+    margin-bottom: 9px;
+}
+.ov-business__copy h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 34px;
+    line-height: 1.04;
+    letter-spacing: -.025em;
+}
+.ov-business__copy p {
+    max-width: 530px;
+    margin: 11px 0 0;
+    color: rgba(255,255,255,.92);
+    font-size: 11.5px;
+    line-height: 1.55;
+}
+.ov-business__copy ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    list-style: none;
+    padding: 0;
+    margin: 15px 0 19px;
+}
+.ov-business__copy li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+}
+.ov-business__copy li span {
+    width: 14px;
+    height: 14px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,.72);
+    border-radius: 50%;
+    font-size: 8px;
+}
+.ov-business__cards {
+    position: relative;
+    z-index: 3;
+    width: 100%;
+    display: grid;
+    gap: 9px;
+    justify-self: end;
+}
+.ov-business-card {
+    min-height: 61px;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 10px 13px;
+    border: 1px solid rgba(255,255,255,.78);
+    border-radius: 9px;
+    background: rgba(255,255,255,.96);
+    color: #0d274d !important;
+    box-shadow: 0 8px 20px rgba(2, 22, 51, .12);
+    backdrop-filter: blur(2px);
+}
+.ov-business-card > span {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: #fff1e7;
+    color: var(--ov-orange);
+}
+.ov-business-card svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.ov-business-card strong { display: block; font-size: 10.5px; }
+.ov-business-card small { display: block; margin-top: 3px; color: var(--ov-muted); font-size: 8.8px; }
+
+/* Help */
+.ov-help-strip { margin-top: 14px; display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr; gap: 10px; }
+.ov-help-intro,
+.ov-help-card { min-height: 96px; border: 1px solid var(--ov-border); border-radius: 10px; background: #fff; }
+.ov-help-intro { padding: 15px; }
+.ov-help-intro h2 { margin: 0; color: #102748; font-size: 14px; }
+.ov-help-intro p { margin: 7px 0 0; color: var(--ov-muted); font-size: 9px; line-height: 1.45; }
+.ov-help-card { display: grid; grid-template-columns: 38px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 13px; }
+.ov-help-card > span { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; border: 1px solid #d8e1ec; color: var(--ov-orange); }
+.ov-help-card svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ov-help-card strong { display: block; color: #102748; font-size: 10.5px; }
+.ov-help-card small { display: block; margin-top: 3px; color: var(--ov-muted); font-size: 8.5px; line-height: 1.35; }
+.ov-help-card > b { color: #75849a; font-size: 13px; }
+.ov-help-card--whatsapp { border-color: #aee1be; }
+.ov-help-card--whatsapp > .ov-whatsapp-icon { color: #25d366; border-color: #aee1be; }
+.ov-help-card--whatsapp .ov-whatsapp-icon svg { fill: currentColor; stroke: none; width: 22px; height: 22px; }
+
+@media (max-width: 1280px) {
+    .ov-category-grid { grid-template-columns: repeat(4, minmax(0,1fr)); }
+    .ov-commerce-row { grid-template-columns: 210px minmax(0,1fr) 290px; }
+    .ov-benefit-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .ov-gift-grid { grid-template-columns: 1fr; }
+    .ov-gift-card { grid-template-columns: minmax(0,1fr) 260px; }
+}
+
+@media (max-width: 1000px) {
+    .ov-hero { grid-template-columns: 1fr; }
+    .ov-hero__stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .ov-commerce-row { grid-template-columns: 1fr; }
+    .ov-promotion-card { min-height: 220px; }
+    .ov-feature-section { grid-template-columns: 1fr; }
+    .ov-feature-products { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .ov-business {
+        min-height: 350px;
+        grid-template-columns: minmax(0, 1fr) 280px;
+        padding: 24px;
+    }
+    .ov-business__copy { width: min(58%, 560px); min-width: 0; }
+    .ov-business__background { object-position: 58% center; }
+    .ov-help-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+
+@media (max-width: 680px) {
+    .ov-shell { width: min(100% - 22px, 1500px); }
+    .ov-home { padding: 8px 0 14px; }
+    .ov-hero { min-height: auto; padding: 22px 18px; }
+    .ov-hero__copy h1 { font-size: 39px; }
+    /* Boutons "Acheter maintenant" / "Vendre sur OVANIE" sur une seule ligne. */
+    .ov-hero__actions { flex-wrap: nowrap; gap: 8px; }
+    .ov-hero__actions .ov-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 0 8px;
+        font-size: 10px;
+        white-space: nowrap;
+    }
+    /* Hero stats : grille compacte 2x2 (comme un condensé de la colonne
+       verticale du web) plutôt qu'un empilement plein-largeur trop long. */
+    .ov-hero__stats { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+    .ov-stat { min-height: 56px; padding: 8px 10px; }
+    .ov-stat__icon { width: 32px; height: 32px; }
+    .ov-stat__icon svg { width: 18px; height: 18px; }
+    .ov-stat strong { font-size: 12.5px; }
+    .ov-stat small { font-size: 8.5px; }
+
+    /* Mobile density: tighten panel/section spacing to feel more app-like */
+    .ov-panel { padding: 12px; }
+    .ov-category-section,
+    .ov-commerce-row,
+    .ov-feature-section,
+    .ov-gift-section,
+    .ov-benefits-section,
+    .ov-business,
+    .ov-help-strip { margin-top: 10px; }
+    .ov-section-head { margin-bottom: 10px; gap: 10px; }
+    .ov-section-head h2 { font-size: 15px; }
+
+    /* Categories: 2 blocs de 4 (colonne gauche = 4 premières catégories,
+       colonne droite = 4 suivantes) au lieu d'une grille remplie ligne par
+       ligne. */
+    .ov-category-grid {
+        grid-template-columns: repeat(2, minmax(0,1fr));
+        grid-template-rows: repeat(4, auto);
+        grid-auto-flow: column;
+        gap: 8px;
+    }
+    .ov-category-card { min-height: 128px; padding: 6px 6px 8px; }
+    .ov-category-visual { height: 78px; padding: 0; border: 0; background: transparent; }
+    .ov-category-visual img { max-width: 100%; max-height: 100%; height: 100%; width: 100%; object-fit: cover; border-radius: 6px; }
+    .ov-category-card strong { min-height: 30px; margin-top: 6px; font-size: 10px; }
+
+    /* Product grids: 2-column instead of collapsing to a single full-width column */
+    .ov-product-grid--3,
+    .ov-feature-products { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+    .ov-product-card__body { padding: 8px; }
+
+    /* Offres du moment : bandeau nettement plus compact sur mobile. */
+    .ov-promotion-card { min-height: 0; padding: 14px; }
+    .ov-promotion-card h2 { font-size: 16px; margin: 6px 0 4px; }
+    .ov-promotion-card p { font-size: 9.5px; }
+    .ov-promotion-card__visual { max-height: 56px; margin: 6px auto; }
+
+    /* Cartes et bons OVANIE : toutes les cartes sur une seule ligne
+       (scroll horizontal) plutôt qu'empilées en plein-largeur. */
+    .ov-gift-grid {
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: 82%;
+        overflow-x: auto;
+        gap: 10px;
+        padding-bottom: 6px;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+    }
+    .ov-gift-card {
+        grid-template-columns: 1fr;
+        scroll-snap-align: start;
+    }
+    .ov-gift-card__visual { height: 150px; }
+
+    /* Les avantages OVANIE : tous les items sur la même ligne (scroll
+       horizontal) au lieu d'une liste empilée. */
+    .ov-benefit-grid {
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: 68%;
+        overflow-x: auto;
+        gap: 10px;
+        padding-bottom: 6px;
+        scroll-snap-type: x mandatory;
+    }
+    .ov-benefit { scroll-snap-align: start; }
+
+    /* OVANIE Pro : on garde la composition du web (bandeau compact, pas
+       un bloc géant) — juste empilé au lieu d'être côte à côte. */
+    .ov-business {
+        min-height: 0;
+        grid-template-columns: 1fr;
+        align-content: start;
+        padding: 20px 16px;
+    }
+    .ov-business__background {
+        object-position: 57% center;
+    }
+    .ov-business__overlay {
+        background: linear-gradient(180deg,
+            rgba(3,30,75,.94) 0%,
+            rgba(3,30,75,.96) 100%);
+    }
+    .ov-business__copy {
+        width: 100%;
+        min-width: 0;
+        padding: 0;
+    }
+    .ov-business__copy h2 { font-size: 26px; }
+    .ov-business__cards {
+        width: 100%;
+        margin-top: 14px;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+    }
+    .ov-business-card { grid-template-columns: 1fr; text-align: center; justify-items: center; padding: 10px 6px; }
+    .ov-business-card > span { margin: 0 auto; }
+
+    /* Besoin d'aide : tout sur la même ligne (scroll horizontal). */
+    .ov-help-strip {
+        grid-template-columns: none;
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 10px;
+        padding-bottom: 6px;
+        scroll-snap-type: x mandatory;
+    }
+    .ov-help-intro,
+    .ov-help-card {
+        flex: 0 0 74%;
+        scroll-snap-align: start;
+    }
+}

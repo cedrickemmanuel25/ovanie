@@ -1,0 +1,17 @@
+@extends('layouts.staff')
+@section('title','Ajouter un vendeur prospecté | OVANIE')
+@section('content')
+<div class="page-header"><div><h1 class="page-title">Ajouter un vendeur prospecté</h1><p class="page-subtitle">Mission : <strong>{{ $mission->commune?->name }}</strong> · {{ $mission->starts_on?->format('d/m/Y') }} au {{ $mission->ends_on?->format('d/m/Y') }}. La commune est verrouillée par votre affectation.</p></div><div class="page-actions"><a class="btn" href="{{ route('commercial.prospecting.areas') }}">Retour à la mission</a></div></div>
+<form class="card" method="POST" action="{{ route('commercial.prospecting.prospects.store') }}">@csrf<input type="hidden" name="mission_id" value="{{ $mission->id }}"><div class="form-grid">
+    <div class="form-group"><label>Commune affectée</label><input value="{{ $mission->commune?->name }}" readonly></div>
+    <div class="form-group"><label>Quartier prospecté *</label><select name="quarter_id" required><option value="">Choisir le quartier</option>@foreach($mission->missionQuarters->sortBy(fn($mq)=>$mq->quarter?->name) as $mq)<option value="{{ $mq->quarter_id }}" @selected((int)old('quarter_id',$selectedQuarterId)===(int)$mq->quarter_id)>{{ $mq->quarter?->name }}{{ $mq->status==='in_progress' ? ' — en cours' : '' }}</option>@endforeach</select><span class="form-help">Seuls les quartiers encore ouverts dans votre mission sont proposés.</span></div>
+    <div class="form-group"><label>Nom du commerce *</label><input name="business_name" required value="{{ old('business_name') }}" placeholder="Ex : Quincaillerie Koné"></div>
+    <div class="form-group"><label>Catégorie</label><input name="category" value="{{ old('category') }}" placeholder="Quincaillerie, ciment, plomberie, peinture…"></div>
+    <div class="form-group"><label>Nom du responsable / contact</label><input name="contact_name" value="{{ old('contact_name') }}"></div>
+    <div class="form-group"><label>Potentiel</label><select name="potential"><option value="high" @selected(old('potential')==='high')>Fort</option><option value="medium" @selected(old('potential','medium')==='medium')>Moyen</option><option value="low" @selected(old('potential')==='low')>Faible</option></select></div>
+    <div class="form-group"><label>Téléphone</label><input name="phone" value="{{ old('phone') }}"></div><div class="form-group"><label>WhatsApp</label><input name="whatsapp" value="{{ old('whatsapp') }}"></div>
+    <div class="form-group full"><label>Adresse / emplacement</label><input name="address" value="{{ old('address') }}" placeholder="Adresse, rue ou description de l’emplacement"></div>
+    <div class="form-group"><label>Repère</label><input name="landmark" value="{{ old('landmark') }}" placeholder="Ex : près du marché, face à…"></div><div class="form-group"><label>Coordonnées GPS</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><input name="latitude" value="{{ old('latitude') }}" placeholder="Latitude"><input name="longitude" value="{{ old('longitude') }}" placeholder="Longitude"></div></div>
+    <div class="form-group full"><label>Notes terrain</label><textarea name="notes" placeholder="Produits vendus, taille du magasin, intérêt pour OVANIE, disponibilité du responsable…">{{ old('notes') }}</textarea></div>
+</div><div style="display:flex;justify-content:flex-end;gap:9px;margin-top:16px"><a class="btn" href="{{ route('commercial.prospecting.areas') }}">Annuler</a><button class="btn btn-orange" type="submit"><i data-lucide="save"></i>Enregistrer le vendeur</button></div></form>
+@endsection

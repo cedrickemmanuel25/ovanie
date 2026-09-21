@@ -1,0 +1,169 @@
+962: <body class="{{ request()->routeIs('home') ? 'ov-home-route' : '' }}">
+963: 
+964:                 <div class="ov-guide-card">
+965:                     <svg viewBox="0 0 48 48" aria-hidden="true"><circle class="ov-icon-fill" cx="20" cy="17" r="8"/><path d="M7 40c2.3-9.4 8.3-14 17-14 3.2 0 6 .6 8.4 1.9"/><circle cx="35" cy="33" r="8"/><path d="m31.5 33 2.5 2.7 5-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+966:                     <h3>VENDEURS VÉRIFIÉS</h3>
+967:                     <p>Les vendeurs sont identifiés et vérifiés avant la mise en ligne de leurs produits et services.</p>
+968:                     <a href="#" class="ov-guide-card-link">Achetez auprès de vendeurs de confiance</a>
+969:                 </div>
+970: 
+971:                 <div class="ov-guide-card">
+972:                     <svg viewBox="0 0 48 48" aria-hidden="true"><path class="ov-icon-fill" d="M6 16h24v16H6z"/><path d="M30 21h7l5 6v5H30V21Z"/><circle cx="15" cy="36" r="3.5"/><circle cx="36" cy="36" r="3.5"/><path d="M10 12h12"/></svg>
+973:                     <h3>LIVRAISON SUIVIE</h3>
+974:                     <p>Suivez vos commandes jusqu’à la livraison grâce aux informations fournies par le vendeur ou le transporteur.</p>
+975:                     <a href="#" class="ov-guide-card-link">Suivi en temps réel</a>
+976:                 </div>
+977: 
+978:                 <div class="ov-guide-card">
+979:                     <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M14 22v-6c0-6 4-10 10-10s10 4 10 10v6"/><rect class="ov-icon-fill" x="10" y="20" width="28" height="22" rx="4"/><circle cx="24" cy="31" r="3"/><path d="M24 34v4" stroke-linecap="round"/></svg>
+980:                     <h3>PAIEMENT SÉCURISÉ</h3>
+981:                     <p>Vos transactions bénéficient d’un environnement sécurisé pour protéger vos données et vos paiements.</p>
+982:                     <a href="#" class="ov-guide-card-link">100% sécurisé</a>
+983:                 </div>
+984: 
+985:                 <div class="ov-guide-card">
+986:                     <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 28v-4c0-9 6-16 14-16s14 7 14 16v4"/><rect class="ov-icon-fill" x="6" y="26" width="8" height="14" rx="4"/><rect class="ov-icon-fill" x="34" y="26" width="8" height="14" rx="4"/><path d="M18 36h8c5 0 8-2.5 8-7"/></svg>
+987:                     <h3>ASSISTANCE 7J/7</h3>
+988:                     <p>Notre équipe est disponible pour vous accompagner avant, pendant et après votre achat.</p>
+989:                     <a href="#" class="ov-guide-card-link">Nous sommes là pour vous</a>
+990:                 </div>
+991: 
+992:                 <div class="ov-guide-card">
+993:                     <svg viewBox="0 0 48 48" aria-hidden="true"><path class="ov-icon-fill" d="M24 13 36 20v14l-12 7-12-7V20l12-7Z"/><path d="m12 20 12 7 12-7M24 27v14"/><path d="M39 14a16 16 0 0 0-23-3"/><path d="m16 5-1 6 6 1M9 34a16 16 0 0 0 23 3"/><path d="m32 43 1-6-6-1"/></svg>
+994:                     <h3>RETOUR & RÉCLAMATION</h3>
+995:                     <p>Une procédure simple permet de signaler un problème et de demander une assistance après réception.</p>
+996:                     <a href="#" class="ov-guide-card-link">OVANIE vous accompagne</a>
+997:                 </div>
+998:             </div>
+999: 
+1000:             <div class="ov-guide-stats">
+1001:                 <div class="ov-guide-stats-brand" style="flex:0 0 220px;">
+1002:                     <div style="display:flex;align-items:center;gap:8px;color:#fff;font-size:20px;font-weight:900;">
+1003:                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2 15 5l4-.5 1.5 3.5 3.5 1.5-.5 4 3 3-3 3 .5 4-3.5 1.5-1.5 3.5-4-.5-3 3-3-3-4 .5-1.5-3.5L0 19.5l3-3-3-3 3.5-1.5L5 8l4 .5 3-3Z" fill="#fff"/><path d="m7 12 3 3 7-8" stroke="#0a1f5c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+1004:                         OVANIE
+1005:                     </div>
+1006:                     <p style="color:#a0b4e0;font-size:11px;line-height:1.35;margin:6px 0 0;">La référence pour vos projets de construction, d'énergie et d'immobilier en Côte d'Ivoire.</p>
+1007:                 </div>
+1008:                 @foreach([['10 000+','PRODUITS','disponibles'],['1 200+','BOUTIQUES','partenaires'],['35 000+','COMMANDES','livrées'],['25 000+','CLIENTS','satisfaits'],['98%','TAUX DE SATISFACTION','de nos clients']] as $stat)
+1009:                     <div class="ov-guide-stat" style="flex:1;text-align:center;border-left:1px solid rgba(255,255,255,0.1);padding:0 10px;">
+1010:                         <div style="color:#fff;font-size:14px;line-height:1;">✓</div>
+1011:                         <div style="color:#f59e0b;font-size:24px;font-weight:900;line-height:1;">{{ $stat[0] }}</div>
+1012:                         <div style="color:#fff;font-size:11px;font-weight:800;text-transform:uppercase;">{{ $stat[1] }}</div>
+1013:                         <div style="color:#a0b4e0;font-size:10px;">{{ $stat[2] }}</div>
+1014:                     </div>
+1015:                 @endforeach
+1016:             </div>
+1017: 
+1018:             <div class="ov-guide-contact">
+1019:                 <div style="padding:12px 24px;border-right:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;gap:12px;">
+1020:                     <svg width="36" height="36" viewBox="0 0 64 64" fill="none"><path d="M12 38v-8c0-14 9-24 20-24s20 10 20 24v8" stroke="#fff" stroke-width="5" stroke-linecap="round"/><rect x="6" y="34" width="14" height="22" rx="6" fill="#fff"/><rect x="44" y="34" width="14" height="22" rx="6" fill="#fff"/></svg>
+1021:                     <div>
+1022:                         <div style="color:#fff;font-weight:800;font-size:14px;">SERVICE CLIENT 7J/7</div>
+1023:                         <p style="color:#a0b4e0;font-size:12px;margin:3px 0 8px;">Nous sommes disponibles pour répondre à toutes vos questions.</p>
+1024:                         <a href="https://wa.me/2250161780000" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:#fff;padding:7px 12px;border-radius:20px;text-decoration:none;font-size:12px;font-weight:700;">
+1025:                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 3.08 5.18 2 2 0 0 1 5.06 3h3a2 2 0 0 1 2 1.72c.12.9.34 1.79.66 2.64a2 2 0 0 1-.45 2.11L9 10.74a16 16 0 0 0 4.26 4.26l1.27-1.27a2 2 0 0 1 2.11-.45c.85.32 1.74.54 2.64.66A2 2 0 0 1 22 16.92z"/></svg>
+1026:                             WhatsApp <strong>0161780000</strong>
+1027:                         </a>
+1028:                     </div>
+1029:                 </div>
+1030:                 <div style="padding:12px 32px;border-right:1px solid rgba(255,255,255,0.15);text-align:center;">
+1031:                     <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE" style="height:42px;width:auto;margin:0 auto 5px;display:block;">
+1032:                     <div style="color:#f59e0b;font-size:11px;font-weight:700;">FAITES DES PROFITS AVEC NOUS</div>
+1033:                     <a href="https://www.ovanie.com" target="_blank" style="color:#a0b4e0;font-size:12px;text-decoration:none;">🌐 www.ovanie.com</a>
+1034:                     <div style="color:#7090c0;font-size:10px;margin-top:2px;">Marketplace BTP • Énergie • Immobilier</div>
+1035:                 </div>
+1036:                 <div style="padding:12px 24px;display:flex;align-items:center;gap:12px;">
+1037:                     <svg width="36" height="36" viewBox="0 0 64 64" fill="none"><path d="M12 38v-8c0-14 9-24 20-24s20 10 20 24v8" stroke="#fff" stroke-width="5" stroke-linecap="round"/><rect x="6" y="34" width="14" height="22" rx="6" fill="#fff"/><rect x="44" y="34" width="14" height="22" rx="6" fill="#fff"/></svg>
+1038:                     <div>
+1039:                         <div style="color:#fff;font-weight:800;font-size:14px;">SERVICE COMMERCIAL 6J/7</div>
+1040:                         <p style="color:#a0b4e0;font-size:12px;margin:3px 0 8px;">Notre équipe commerciale vous accompagne dans vos projets.</p>
+1041:                         <a href="https://wa.me/2250161780101" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:#fff;padding:7px 12px;border-radius:20px;text-decoration:none;font-size:12px;font-weight:700;">
+1042:                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 3.08 5.18 2 2 0 0 1 5.06 3h3a2 2 0 0 1 2 1.72c.12.9.34 1.79.66 2.64a2 2 0 0 1-.45 2.11L9 10.74a16 16 0 0 0 4.26 4.26l1.27-1.27a2 2 0 0 1 2.11-.45c.85.32 1.74.54 2.64.66A2 2 0 0 1 22 16.92z"/></svg>
+1043:                             WhatsApp <strong>0161780101</strong>
+1044:                         </a>
+1045:                     </div>
+1046:                 </div>
+1047:             </div>
+1048: 
+1049:             <div class="ov-guide-badges">
+1050:                 @foreach(['ACHAT 100% SÉCURISÉ','VENDEURS VÉRIFIÉS','GARANTIE ACHETEUR OVANIE','LIVRAISON SUIVIE','ASSISTANCE WHATSAPP'] as $badge)
+1051:                     <span style="display:inline-flex;align-items:center;gap:6px;color:#0a1f5c;font-size:12px;font-weight:700;"><span style="color:#f59e0b;">✓</span>{{ $badge }}</span>
+1052:                 @endforeach
+1053:             </div>
+1054: 
+1055:             <div style="background:#0a1f5c;text-align:center;padding:8px;color:#a0b4e0;font-size:11px;letter-spacing:0.5px;flex:0 0 auto;">
+1056:                 DÉJÀ ADOPTÉ PAR DES PROFESSIONNELS ET PARTICULIERS PARTOUT EN CÔTE D'IVOIRE. 🇨🇮
+1057:             </div>
+1058:         </div>
+1059:     </div>
+1060: 
+1061:     <script>
+1062:     document.getElementById('openGuideAcheteur').addEventListener('click', function(e){
+1063:         e.preventDefault();
+1064:         document.getElementById('modalGuideAcheteur').style.display = 'block';
+1065:         document.body.style.overflow = 'hidden';
+1066:     });
+1067:     document.getElementById('closeGuideAcheteur').addEventListener('click', function(){
+1068:         document.getElementById('modalGuideAcheteur').style.display = 'none';
+1069:         document.body.style.overflow = '';
+1070:     });
+1071:     document.getElementById('modalGuideAcheteur').addEventListener('click', function(e){
+1072:         if(e.target === this){
+1073:             this.style.display = 'none';
+1074:             document.body.style.overflow = '';
+1075:         }
+1076:     });
+1077:     </script>
+1078: 
+1079:     <div class="ov-mobile-overlay" id="mobileMenuOverlay"></div>
+1080: 
+1081:     <aside class="ov-mobile-menu" id="mobileSideMenu" aria-hidden="true">
+1082:         <div class="ov-mobile-menu__top">
+1083:             <strong>Catégories OVANIE</strong>
+1084:             <button type="button" class="ov-mobile-menu__close" id="closeMobileMenu"
+1085:                 aria-label="Fermer le menu">✕</button>
+1086:         </div>
+1087: 
+1088:             <strong>Catégories OVANIE</strong>
+1089:             <button type="button" class="ov-mobile-menu__close" id="closeMobileMenu"
+1090:                 aria-label="Fermer le menu">✕</button>
+1091:         </div>
+1092: 
+1093:         <form action="{{ route('catalog.index') }}" method="GET" class="ov-mobile-search">
+1094:             <input type="text" name="search" placeholder="Rechercher...">
+1095:             <button type="submit">🔍</button>
+1096:         </form>
+1097: 
+1098:         <nav>
+1099:             @guest
+1100:                 <a href="{{ route('login') }}" class="ov-mobile-link">Connexion</a>
+1101:                 <a href="{{ route('register') }}" class="ov-mobile-link">Inscription</a>
+1102:             @endguest
+1103: 
+1104:             <a href="{{ route('catalog.index', ['category' => 'materiaux-gros-oeuvre']) }}" class="ov-mobile-link">🏗️ materiaux-Gros œuvre</a>
+1105:             <a href="{{ route('catalog.index', ['category' => 'materiaux-finition']) }}" class="ov-mobile-link">🧱 matériaux Finition</a>
+1106:             <a href="{{ route('catalog.index', ['category' => 'energie-solaire-domotique']) }}" class="ov-mobile-link">☀️ Énergie solaire/domotique</a>
+1107:             <a href="{{ route('catalog.index', ['category' => 'outillage']) }}" class="ov-mobile-link">🛠️ Outillage</a>
+1108:             <a href="{{ route('catalog.index', ['category' => 'electricite-plomberie']) }}" class="ov-mobile-link">⚡ ELECRITE PLOMBERIE</a>
+1109:             <a href="{{ route('catalog.business') }}" class="ov-mobile-link">💼 OVANIE-BUSINESS</a>
+1110:             <a href="{{ route('catalog.index') }}" class="ov-mobile-link">Nos produits</a>
+1111:             <a href="{{ route('open-shop') }}" class="ov-mobile-link">Vendez sur OVANIE</a>
+1112: 
+1113:             @auth
+1114:                 <a href="{{ route('profile.edit') }}" class="ov-mobile-link">Mon profil</a>
+1115:                 <a href="{{ route('client.dashboard') }}" class="ov-mobile-link">Mon tableau de bord</a>
+1116:             @endauth
+1117: 
+1118:             <a href="{{ route('cart.index') }}" class="ov-mobile-link">Panier <span>({{ $cartCount ?? 0 }})</span></a>
+1119:         </nav>
+1120:     </aside>
+1121: 
+1122:     <main class="ov-page-main">
+1123:         @hasSection('content')
+1124:             @yield('content')
+1125:         @else
+1126:             {{ $slot ?? '' }}
+1127:         @endif
+1128:     </main>
+1129:     <div class="ov-scroll-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
+1130:         ▲ RETOUR EN HAUT

@@ -1,0 +1,2 @@
+@props(['title','subtitle','section','url'=>null])
+<div class="directory-heading"><div><nav class="ops-breadcrumb"><a href="{{ route('logistics.dashboard') }}">Logistique</a><x-operations.icon name="next"/>@if($url)<a href="{{ $url }}">{{ $section }}</a><x-operations.icon name="next"/><span>{{ $title }}</span>@else<span>{{ $section }}</span>@endif</nav><h1>{{ $title }}</h1><p>{{ $subtitle }}</p></div><div class="directory-actions">{{ $slot }}</div></div>

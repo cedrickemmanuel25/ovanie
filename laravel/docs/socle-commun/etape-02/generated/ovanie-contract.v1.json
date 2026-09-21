@@ -1,0 +1,1174 @@
+{
+    "definition_version": "1.0.0",
+    "runtime_enabled": false,
+    "principles": {
+        "laravel_is_source_of_truth": true,
+        "same_field_same_meaning_everywhere": true,
+        "snake_case_for_api_and_storage": true,
+        "codes_are_stable_labels_are_display_only": true,
+        "mobile_and_web_may_differ_in_layout_not_in_business_meaning": true
+    },
+    "enums": {
+        "product_state": {
+            "new": "Neuf",
+            "reconditioned": "Reconditionné",
+            "used": "Occasion"
+        },
+        "commercial_sale_type": {
+            "normal": "Vente normale",
+            "flash_sale": "Vente flash",
+            "black_friday": "Black Friday",
+            "promotion": "Promo spéciale"
+        },
+        "selling_mode": {
+            "unit": "Vente à l’unité",
+            "lot": "Vente par lot",
+            "weight": "Vente au poids",
+            "linear_meter": "Vente au mètre",
+            "surface": "Vente au m²",
+            "volume": "Vente au m³"
+        },
+        "product_unit": {
+            "sac": "Sac",
+            "tonne": "Tonne",
+            "m3": "m³",
+            "m2": "m²",
+            "ml": "Mètre linéaire",
+            "piece": "Pièce",
+            "palette": "Palette",
+            "rouleau": "Rouleau",
+            "seau": "Seau",
+            "carton": "Carton",
+            "paquet": "Paquet",
+            "barre": "Barre",
+            "bidon": "Bidon",
+            "kg": "Kilogramme",
+            "litre": "Litre"
+        },
+        "product_type": {
+            "materiau": "Matériau de construction",
+            "outillage": "Outillage",
+            "equipement": "Équipement",
+            "consommable": "Consommable",
+            "autre": "Autre produit BTP"
+        },
+        "product_availability_status": {
+            "in_stock": "En stock immédiat",
+            "on_order": "Disponible sous commande",
+            "preorder": "Précommande",
+            "out_of_stock": "Rupture temporaire"
+        },
+        "product_publication_status": {
+            "draft": "Brouillon",
+            "pending_logistics": "Logistique à compléter",
+            "active": "En ligne",
+            "inactive": "Hors ligne",
+            "archived": "Archivé"
+        },
+        "seller_type": {
+            "particulier": "Particulier",
+            "entreprise": "Entreprise",
+            "artisan": "Artisan",
+            "grossiste": "Grossiste"
+        },
+        "legal_form": {
+            "sarl": "SARL",
+            "sarlu": "SARLU",
+            "sa": "SA",
+            "sas": "SAS",
+            "ei": "Entreprise individuelle",
+            "cooperative": "Coopérative",
+            "autre": "Autre"
+        },
+        "identity_type": {
+            "cni": "CNI",
+            "passport": "Passeport",
+            "permis": "Permis de conduire",
+            "resident": "Carte de résident"
+        },
+        "shop_logistics_type": {
+            "ovanie": "OVANIE Logistics",
+            "seller": "Logistique vendeur"
+        },
+        "shop_delivery_zone": {
+            "abidjan": "Abidjan",
+            "grand_abidjan": "Grand Abidjan",
+            "national": "Toute la Côte d’Ivoire",
+            "afrique_ouest": "Afrique de l’Ouest"
+        },
+        "vendor_payment_mode": {
+            "post_delivery": "Paiement après livraison (72h)",
+            "weekly": "Paiement hebdomadaire"
+        },
+        "mobile_money_operator": {
+            "orange": "Orange Money",
+            "mtn": "MTN MoMo",
+            "wave": "Wave",
+            "moov": "Moov Money"
+        },
+        "client_gender": {
+            "homme": "Homme",
+            "femme": "Femme",
+            "non_precise": "Ne pas préciser"
+        },
+        "client_account_type": {
+            "particulier": "Particulier — Achats personnels",
+            "professionnel": "Professionnel — Entreprise BTP",
+            "artisan": "Artisan — Indépendant"
+        },
+        "address_type": {
+            "home": "Domicile",
+            "office": "Bureau",
+            "site": "Chantier",
+            "warehouse": "Dépôt",
+            "other": "Autre"
+        },
+        "driver_onboarding_status": {
+            "invited": "Invité",
+            "pending_review": "Dossier à vérifier",
+            "active": "Validé",
+            "suspended": "Suspendu",
+            "rejected": "Refusé"
+        },
+        "driver_availability_status": {
+            "available": "Disponible",
+            "unavailable": "Indisponible",
+            "on_mission": "En mission"
+        },
+        "vehicle_type": {
+            "moto": "Moto",
+            "tricycle": "Tricycle",
+            "pickup": "Pickup",
+            "camion_3t": "Camion 3T",
+            "camion_10t": "Camion 10T"
+        },
+        "week_day": {
+            "lundi": "Lundi",
+            "mardi": "Mardi",
+            "mercredi": "Mercredi",
+            "jeudi": "Jeudi",
+            "vendredi": "Vendredi",
+            "samedi": "Samedi",
+            "dimanche": "Dimanche"
+        },
+        "vendor_preparation_status": {
+            "pending": "Commande reçue",
+            "accepted": "Acceptée",
+            "preparing": "En préparation",
+            "ready": "Prête",
+            "cancelled": "Annulée"
+        },
+        "delivery_provider": {
+            "ovanie": "OVANIE Logistics",
+            "seller": "Logistique vendeur",
+            "pickup": "Retrait",
+            "partner": "Partenaire logistique"
+        },
+        "delivery_status": {
+            "pending": "En attente",
+            "preparing": "Préparation",
+            "ready_for_pickup": "Prête pour collecte",
+            "assigned": "Livreur affecté",
+            "picked_up": "Récupérée",
+            "in_transit": "En transit",
+            "delivered": "Livrée",
+            "late": "En retard",
+            "failed": "Échec de livraison",
+            "returned": "Retournée",
+            "cancelled": "Annulée",
+            "delivery_failed": "Incident bloquant",
+            "not_required": "Livraison non requise"
+        },
+        "mission_status": {
+            "planned": "Planifiée",
+            "assigned": "À accepter",
+            "accepted": "Acceptée",
+            "collecting": "Collectes en cours",
+            "picked_up": "Chargement terminé",
+            "in_transit": "En route vers le client",
+            "arrived": "Arrivé à destination",
+            "delivered": "Livrée",
+            "rejected": "Refusée",
+            "incident": "Incident signalé"
+        },
+        "return_status": {
+            "pending": "En attente",
+            "accepted": "Accepté",
+            "rejected": "Refusé",
+            "closed": "Clôturé",
+            "refunded": "Remboursé"
+        },
+        "return_logistics_status": {
+            "pending_pickup": "Collecte retour en attente",
+            "return_pickup_planned": "Collecte retour planifiée",
+            "return_in_transit": "Retour en transit",
+            "return_received": "Retour reçu",
+            "refund_pending": "Remboursement en attente",
+            "refunded": "Remboursé",
+            "claim_review": "Réclamation en revue",
+            "refund_review": "Remboursement en revue"
+        },
+        "payment_status": {
+            "pending": "En attente",
+            "processing": "En cours",
+            "paid": "Payé",
+            "escrow_held": "En séquestre",
+            "released_to_vendor": "Versé au vendeur",
+            "failed": "Échoué",
+            "cancelled": "Annulé",
+            "expired": "Expiré",
+            "refunded": "Remboursé",
+            "chargeback": "Chargeback",
+            "disputed": "Litige"
+        },
+        "payment_method": {
+            "wave": "Wave",
+            "mtn_money": "MTN Mobile Money",
+            "orange_money": "Orange Money",
+            "moov_money": "Moov Money",
+            "card": "Carte bancaire",
+            "cash_on_delivery": "Paiement à la livraison",
+            "post_delivery": "Paiement après livraison",
+            "bank_transfer": "Virement bancaire",
+            "cheque": "Chèque",
+            "manual_proof": "Preuve de paiement manuelle",
+            "paydunya": "PayDunya",
+            "cinetpay": "CinetPay",
+            "fedapay": "FedaPay",
+            "flutterwave": "Flutterwave",
+            "paystack": "Paystack",
+            "stripe": "Stripe",
+            "paypal": "PayPal"
+        }
+    },
+    "entities": {
+        "product": {
+            "source_model": "App\\Models\\Product",
+            "canonical_fields": {
+                "id": {
+                    "type": "integer",
+                    "required": true,
+                    "storage": "products.id"
+                },
+                "shop_id": {
+                    "type": "integer",
+                    "required": true,
+                    "storage": "products.shop_id"
+                },
+                "category_id": {
+                    "type": "integer",
+                    "required_on_publish": true,
+                    "storage": "products.category_id"
+                },
+                "name": {
+                    "type": "string",
+                    "required_on_publish": true,
+                    "storage": "products.name"
+                },
+                "brand": {
+                    "type": "string|null",
+                    "storage": "products.brand"
+                },
+                "type": {
+                    "type": "enum|null",
+                    "enum": "product_type",
+                    "storage": "products.type"
+                },
+                "product_state": {
+                    "type": "enum",
+                    "enum": "product_state",
+                    "required_on_publish": true,
+                    "storage": "products.product_state"
+                },
+                "short_description": {
+                    "type": "string|null",
+                    "storage": "products.short_description"
+                },
+                "description": {
+                    "type": "string",
+                    "required_on_publish": true,
+                    "storage": "products.description"
+                },
+                "price": {
+                    "type": "integer",
+                    "unit": "FCFA",
+                    "required_on_publish": true,
+                    "storage": "products.price"
+                },
+                "promo_price": {
+                    "type": "integer|null",
+                    "unit": "FCFA",
+                    "storage": "products.promo_price"
+                },
+                "stock": {
+                    "type": "integer",
+                    "required_on_publish": true,
+                    "storage": "products.stock"
+                },
+                "unit": {
+                    "type": "enum",
+                    "enum": "product_unit",
+                    "required_on_publish": true,
+                    "storage": "products.unit"
+                },
+                "unit_label": {
+                    "type": "string|null",
+                    "storage": "products.unit_label"
+                },
+                "min_order_quantity": {
+                    "type": "integer",
+                    "required_on_publish": true,
+                    "storage": "products.min_order_quantity"
+                },
+                "packaging": {
+                    "type": "string|null",
+                    "storage": "products.packaging"
+                },
+                "commercial_sale_type": {
+                    "type": "enum",
+                    "enum": "commercial_sale_type",
+                    "required_on_publish": true,
+                    "target_storage": "products.commercial_sale_type"
+                },
+                "selling_mode": {
+                    "type": "enum",
+                    "enum": "selling_mode",
+                    "required_on_publish": true,
+                    "target_storage": "products.selling_mode"
+                },
+                "availability_status": {
+                    "type": "enum",
+                    "enum": "product_availability_status",
+                    "storage": "products.availability_status"
+                },
+                "publication_status": {
+                    "type": "enum",
+                    "enum": "product_publication_status",
+                    "target_storage": "products.status"
+                },
+                "weight_kg": {
+                    "type": "number",
+                    "required_on_publish": true,
+                    "storage": "products.weight_kg"
+                },
+                "length_cm": {
+                    "type": "number",
+                    "required_on_publish": true,
+                    "storage": "products.length_cm"
+                },
+                "width_cm": {
+                    "type": "number",
+                    "required_on_publish": true,
+                    "storage": "products.width_cm"
+                },
+                "height_cm": {
+                    "type": "number",
+                    "required_on_publish": true,
+                    "storage": "products.height_cm"
+                },
+                "volume_m3": {
+                    "type": "number|null",
+                    "storage": "products.volume_m3"
+                },
+                "fragile": {
+                    "type": "boolean",
+                    "required_on_publish": true,
+                    "storage": "products.fragile"
+                },
+                "requires_unloading": {
+                    "type": "boolean",
+                    "required_on_publish": true,
+                    "storage": "products.requires_unloading"
+                },
+                "unloading_instructions": {
+                    "type": "string|null",
+                    "storage": "products.unloading_instructions"
+                }
+            },
+            "decisions": {
+                "legacy_sale_type_is_split": true,
+                "product_state_must_be_selected_by_all_writers": true,
+                "commercial_and_vendor_writers_share_same_publish_rules": true
+            }
+        },
+        "shop": {
+            "source_model": "App\\Models\\Shop",
+            "canonical_fields": {
+                "seller_type": {
+                    "type": "enum",
+                    "enum": "seller_type",
+                    "required": true,
+                    "storage": "shops.seller_type"
+                },
+                "company_name": {
+                    "type": "string|null",
+                    "required_if": {
+                        "seller_type": "entreprise"
+                    },
+                    "storage": "shops.company_name"
+                },
+                "legal_form": {
+                    "type": "enum|null",
+                    "enum": "legal_form",
+                    "required_if": {
+                        "seller_type": "entreprise"
+                    },
+                    "storage": "shops.legal_form"
+                },
+                "rccm": {
+                    "type": "string|null",
+                    "required_if": {
+                        "seller_type": "entreprise"
+                    },
+                    "storage": "shops.rccm"
+                },
+                "taxpayer_number": {
+                    "type": "string|null",
+                    "required_if": {
+                        "seller_type": "entreprise"
+                    },
+                    "storage": "shops.taxpayer_number"
+                },
+                "rccm_file": {
+                    "type": "file|null",
+                    "required_if": {
+                        "seller_type": "entreprise"
+                    },
+                    "storage": "shops.rccm_file"
+                },
+                "tax_file": {
+                    "type": "file|null",
+                    "required_if": {
+                        "seller_type": "entreprise"
+                    },
+                    "storage": "shops.tax_file"
+                },
+                "name": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.name"
+                },
+                "description": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.description"
+                },
+                "logo": {
+                    "type": "file|null",
+                    "storage": "shops.logo"
+                },
+                "selfie": {
+                    "type": "file",
+                    "required": true,
+                    "storage": "shops.selfie"
+                },
+                "region": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.region"
+                },
+                "city": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.city"
+                },
+                "commune": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.commune"
+                },
+                "commune_id": {
+                    "type": "integer|null",
+                    "storage": "shops.commune_id"
+                },
+                "district": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.district"
+                },
+                "quarter_id": {
+                    "type": "integer|null",
+                    "storage": "shops.quarter_id"
+                },
+                "landmark": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.landmark"
+                },
+                "address": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.address"
+                },
+                "latitude": {
+                    "type": "number|null",
+                    "required_if": {
+                        "logistics_type": "ovanie"
+                    },
+                    "storage": "shops.latitude"
+                },
+                "longitude": {
+                    "type": "number|null",
+                    "required_if": {
+                        "logistics_type": "ovanie"
+                    },
+                    "storage": "shops.longitude"
+                },
+                "main_category": {
+                    "type": "category_slug",
+                    "required": true,
+                    "storage": "shops.main_category"
+                },
+                "delivery_zone": {
+                    "type": "enum",
+                    "enum": "shop_delivery_zone",
+                    "required": true,
+                    "storage": "shops.delivery_zone"
+                },
+                "logistics_type": {
+                    "type": "enum",
+                    "enum": "shop_logistics_type",
+                    "required": true,
+                    "storage": "shops.logistics_type"
+                },
+                "processing_time": {
+                    "type": "string|null",
+                    "storage": "shops.processing_time"
+                },
+                "whatsapp": {
+                    "type": "string|null",
+                    "storage": "shops.whatsapp"
+                },
+                "business_email": {
+                    "type": "email|null",
+                    "storage": "shops.business_email"
+                },
+                "identity_country": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.identity_country"
+                },
+                "identity_type": {
+                    "type": "enum",
+                    "enum": "identity_type",
+                    "required": true,
+                    "storage": "shops.identity_type"
+                },
+                "identity_number": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.identity_number"
+                },
+                "payment_mode": {
+                    "type": "enum",
+                    "enum": "vendor_payment_mode",
+                    "required": true,
+                    "storage": "shops.payment_mode"
+                },
+                "mm_operator": {
+                    "type": "enum",
+                    "enum": "mobile_money_operator",
+                    "required": true,
+                    "storage": "shops.mm_operator"
+                },
+                "mm_number": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.mm_number"
+                },
+                "mm_holder": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "shops.mm_holder"
+                }
+            },
+            "decisions": {
+                "web_vendor_and_commercial_use_same_creation_contract": true,
+                "enterprise_fields_are_mandatory_for_enterprise": true,
+                "seller_type_has_four_official_values": true
+            }
+        },
+        "client": {
+            "source_model": "App\\Models\\User",
+            "canonical_fields": {
+                "first_name": {
+                    "type": "string|null",
+                    "storage": "users.first_name"
+                },
+                "last_name": {
+                    "type": "string|null",
+                    "storage": "users.last_name"
+                },
+                "name": {
+                    "type": "derived_string",
+                    "storage": "users.name"
+                },
+                "email": {
+                    "type": "email",
+                    "required": true,
+                    "storage": "users.email"
+                },
+                "phone": {
+                    "type": "string|null",
+                    "storage": "users.phone"
+                },
+                "secondary_phone": {
+                    "type": "string|null",
+                    "storage": "users.secondary_phone"
+                },
+                "whatsapp_phone": {
+                    "type": "string|null",
+                    "storage": "users.whatsapp_phone"
+                },
+                "birth_date": {
+                    "type": "date|null",
+                    "storage": "users.birth_date"
+                },
+                "gender": {
+                    "type": "enum|null",
+                    "enum": "client_gender",
+                    "storage": "users.gender"
+                },
+                "city": {
+                    "type": "string|null",
+                    "storage": "users.city"
+                },
+                "account_type": {
+                    "type": "enum",
+                    "enum": "client_account_type",
+                    "storage": "users.account_type"
+                },
+                "avatar": {
+                    "type": "file|null",
+                    "storage": "users.avatar"
+                },
+                "locale": {
+                    "type": "enum",
+                    "values": [
+                        "fr",
+                        "en"
+                    ],
+                    "storage": "users.locale"
+                },
+                "currency": {
+                    "type": "enum",
+                    "values": [
+                        "XOF",
+                        "EUR"
+                    ],
+                    "storage": "users.currency"
+                },
+                "timezone": {
+                    "type": "timezone|null",
+                    "storage": "users.timezone"
+                },
+                "date_format": {
+                    "type": "enum|null",
+                    "values": [
+                        "d/m/Y",
+                        "m/d/Y"
+                    ],
+                    "storage": "users.date_format"
+                }
+            },
+            "decisions": {
+                "secondary_phone_and_whatsapp_phone_are_distinct_fields": true,
+                "mobile_profile_must_expose_same_business_fields_as_web": true
+            }
+        },
+        "address": {
+            "source_model": "App\\Models\\Address",
+            "canonical_fields": {
+                "type": {
+                    "type": "enum",
+                    "enum": "address_type",
+                    "required": true,
+                    "storage": "addresses.type"
+                },
+                "label": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "addresses.label"
+                },
+                "recipient_name": {
+                    "type": "string|null",
+                    "storage": "addresses.recipient_name"
+                },
+                "city": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "addresses.city"
+                },
+                "commune": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "addresses.commune"
+                },
+                "quartier": {
+                    "type": "string|null",
+                    "storage": "addresses.quartier"
+                },
+                "country": {
+                    "type": "string|null",
+                    "storage": "addresses.country"
+                },
+                "address": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "addresses.address"
+                },
+                "phone": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "addresses.phone"
+                },
+                "latitude": {
+                    "type": "number|null",
+                    "storage": "addresses.latitude"
+                },
+                "longitude": {
+                    "type": "number|null",
+                    "storage": "addresses.longitude"
+                },
+                "is_default": {
+                    "type": "boolean",
+                    "storage": "addresses.is_default"
+                },
+                "quartier_principal": {
+                    "type": "derived_string",
+                    "api_only": true
+                },
+                "sous_quartier": {
+                    "type": "derived_string",
+                    "api_only": true
+                }
+            },
+            "decisions": {
+                "address_types_are_already_canonical": true,
+                "checkout_must_use_server_territory_reference": true
+            }
+        },
+        "driver": {
+            "source_model": "App\\Models\\DeliveryDriver",
+            "canonical_fields": {
+                "first_name": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "delivery_drivers.first_name"
+                },
+                "last_name": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "delivery_drivers.last_name"
+                },
+                "phone": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "delivery_drivers.phone"
+                },
+                "email": {
+                    "type": "email|null",
+                    "storage": "delivery_drivers.email"
+                },
+                "avatar": {
+                    "type": "file|null",
+                    "storage": "delivery_drivers.avatar"
+                },
+                "onboarding_status": {
+                    "type": "enum",
+                    "enum": "driver_onboarding_status",
+                    "storage": "delivery_drivers.onboarding_status"
+                },
+                "availability_status": {
+                    "type": "enum",
+                    "enum": "driver_availability_status",
+                    "target_storage": "delivery_drivers.status"
+                },
+                "is_online": {
+                    "type": "derived_boolean",
+                    "rule": "fresh_gps_presence"
+                },
+                "birth_date": {
+                    "type": "date|null",
+                    "profile_key": "birth_date"
+                },
+                "identity_type": {
+                    "type": "enum|null",
+                    "enum": "identity_type",
+                    "profile_key": "identity_type"
+                },
+                "identity_number": {
+                    "type": "string|null",
+                    "profile_key": "identity_number"
+                },
+                "identity_document": {
+                    "type": "file|null",
+                    "profile_key": "documents.Pièce d’identité.path"
+                },
+                "vehicle_type": {
+                    "type": "enum",
+                    "enum": "vehicle_type",
+                    "required": true,
+                    "storage": "delivery_drivers.vehicle"
+                },
+                "plate": {
+                    "type": "string",
+                    "required": true,
+                    "profile_key": "plate"
+                },
+                "vehicle_color": {
+                    "type": "string|null",
+                    "profile_key": "vehicle_color"
+                },
+                "vehicle_color_hex": {
+                    "type": "hex_color|null",
+                    "profile_key": "vehicle_color_hex"
+                },
+                "vehicle_year": {
+                    "type": "integer|null",
+                    "profile_key": "vehicle_year"
+                },
+                "capacity_kg": {
+                    "type": "number|null",
+                    "target_profile_key": "capacity_kg"
+                },
+                "vehicle_registration_document": {
+                    "type": "file|null",
+                    "profile_key": "documents.Carte grise.path"
+                },
+                "vehicle_photo": {
+                    "type": "file|null",
+                    "profile_key": "vehicle_photo"
+                },
+                "plate_photo": {
+                    "type": "file|null",
+                    "profile_key": "plate_photo"
+                },
+                "supporting_documents": {
+                    "type": "file_array",
+                    "profile_key": "supporting_documents"
+                },
+                "availability_days": {
+                    "type": "enum_array",
+                    "enum": "week_day",
+                    "required": true,
+                    "profile_key": "availability_days"
+                },
+                "zone_ids": {
+                    "type": "integer_array",
+                    "required": true,
+                    "profile_key": "zone_ids"
+                },
+                "work_hours": {
+                    "type": "string|null",
+                    "profile_key": "work_hours"
+                }
+            },
+            "decisions": {
+                "driver_is_partner_not_employee": true,
+                "vehicle_must_be_same_in_profile_home_and_logistics": true,
+                "supporting_documents_must_be_transmitted": true,
+                "gps_online_is_server_derived": true
+            }
+        },
+        "order": {
+            "source_model": "App\\Models\\Order",
+            "canonical_fields": {
+                "order_status": {
+                    "type": "enum",
+                    "values": [
+                        "pending",
+                        "confirmed",
+                        "processing",
+                        "completed",
+                        "cancelled"
+                    ],
+                    "target_storage": "orders.status"
+                },
+                "payment_status": {
+                    "type": "enum",
+                    "enum": "payment_status",
+                    "storage": "orders.payment_status"
+                },
+                "delivery_provider": {
+                    "type": "enum|null",
+                    "enum": "delivery_provider",
+                    "storage": "orders.delivery_provider"
+                },
+                "delivery_status": {
+                    "type": "enum|null",
+                    "enum": "delivery_status",
+                    "storage": "orders.delivery_status"
+                },
+                "subtotal": {
+                    "type": "number",
+                    "unit": "FCFA",
+                    "storage": "orders.subtotal"
+                },
+                "delivery_fee_total": {
+                    "type": "number",
+                    "unit": "FCFA",
+                    "storage": "orders.delivery_fee_total"
+                },
+                "total_amount": {
+                    "type": "number",
+                    "unit": "FCFA",
+                    "storage": "orders.total_amount"
+                },
+                "delivery_address": {
+                    "type": "string",
+                    "storage": "orders.delivery_address"
+                },
+                "delivery_commune": {
+                    "type": "string|null",
+                    "storage": "orders.delivery_commune"
+                },
+                "delivery_quartier": {
+                    "type": "string|null",
+                    "storage": "orders.delivery_quartier"
+                },
+                "delivery_latitude": {
+                    "type": "number|null",
+                    "storage": "orders.delivery_latitude"
+                },
+                "delivery_longitude": {
+                    "type": "number|null",
+                    "storage": "orders.delivery_longitude"
+                }
+            },
+            "decisions": {
+                "paid_is_payment_status_not_order_status": true,
+                "shipped_is_delivery_status_not_order_status": true
+            }
+        },
+        "order_item_workflow": {
+            "source_model": "App\\Models\\OrderItem",
+            "canonical_fields": {
+                "vendor_status": {
+                    "type": "enum",
+                    "enum": "vendor_preparation_status",
+                    "storage": "order_items.vendor_status"
+                },
+                "delivery_provider": {
+                    "type": "enum",
+                    "enum": "delivery_provider",
+                    "storage": "order_items.delivery_provider"
+                },
+                "delivery_status": {
+                    "type": "enum",
+                    "enum": "delivery_status",
+                    "storage": "order_items.delivery_status"
+                },
+                "reception_status": {
+                    "type": "enum",
+                    "values": [
+                        "waiting",
+                        "confirmed"
+                    ],
+                    "storage": "order_items.reception_status"
+                },
+                "payout_status": {
+                    "type": "enum",
+                    "values": [
+                        "not_ready",
+                        "waiting_reception",
+                        "ready",
+                        "blocked",
+                        "adjusted",
+                        "cancelled"
+                    ],
+                    "storage": "order_items.payout_status"
+                }
+            },
+            "decisions": {
+                "vendor_status_stops_at_ready_for_ovanie_logistics": true,
+                "legacy_vendor_status_shipped_and_delivered_are_display_compatibility_only": true,
+                "delivery_actions_are_server_authorized": true
+            }
+        },
+        "delivery_mission": {
+            "source_model": "App\\Models\\DeliveryAssignment",
+            "canonical_fields": {
+                "mission_number": {
+                    "type": "string",
+                    "required": true,
+                    "storage": "delivery_assignments.mission_number"
+                },
+                "driver_id": {
+                    "type": "integer",
+                    "required": true,
+                    "storage": "delivery_assignments.driver_id"
+                },
+                "vehicle_id": {
+                    "type": "integer|null",
+                    "storage": "delivery_assignments.vehicle_id"
+                },
+                "status": {
+                    "type": "enum",
+                    "enum": "mission_status",
+                    "storage": "delivery_assignments.status"
+                },
+                "gps_status": {
+                    "type": "string|null",
+                    "storage": "delivery_assignments.gps_status"
+                },
+                "pickup_address": {
+                    "type": "string|null",
+                    "storage": "delivery_assignments.pickup_address"
+                },
+                "delivery_address": {
+                    "type": "string|null",
+                    "storage": "delivery_assignments.delivery_address"
+                }
+            }
+        },
+        "return": {
+            "source_model": "App\\Models\\ReturnModel",
+            "canonical_fields": {
+                "status": {
+                    "type": "enum",
+                    "enum": "return_status",
+                    "storage": "returns.status"
+                },
+                "logistics_status": {
+                    "type": "enum|null",
+                    "enum": "return_logistics_status",
+                    "storage": "returns.logistics_status"
+                },
+                "reason_code": {
+                    "type": "reference_code|null",
+                    "target_storage": "returns.meta.reason_code"
+                },
+                "reason": {
+                    "type": "string",
+                    "storage": "returns.reason"
+                },
+                "quantity": {
+                    "type": "integer|null",
+                    "storage": "returns.quantity"
+                },
+                "refund_amount": {
+                    "type": "number|null",
+                    "unit": "FCFA",
+                    "storage": "returns.refund_amount"
+                }
+            },
+            "decisions": {
+                "return_reasons_must_be_server_reference_data": true,
+                "return_slots_must_be_server_reference_or_availability_data": true
+            }
+        },
+        "payment": {
+            "source_model": "App\\Models\\Payment",
+            "canonical_fields": {
+                "method": {
+                    "type": "enum",
+                    "enum": "payment_method",
+                    "storage": "payments.method"
+                },
+                "operator": {
+                    "type": "enum|null",
+                    "enum": "mobile_money_operator",
+                    "storage": "payments.operator"
+                },
+                "status": {
+                    "type": "enum",
+                    "enum": "payment_status",
+                    "storage": "payments.status"
+                },
+                "amount": {
+                    "type": "number",
+                    "unit": "FCFA",
+                    "storage": "payments.amount"
+                },
+                "transaction_id": {
+                    "type": "string|null",
+                    "storage": "payments.transaction_id"
+                },
+                "reference": {
+                    "type": "string",
+                    "storage": "payments.reference"
+                },
+                "mobile_number": {
+                    "type": "string|null",
+                    "storage": "payments.mobile_number"
+                }
+            },
+            "decisions": {
+                "legacy_status_aliases_are_normalized_at_backend_boundary": true,
+                "apps_must_not_define_operator_lists_independently": true
+            }
+        }
+    },
+    "legacy_mappings": {
+        "product.sale_type.web": {
+            "legacy_field": "products.sale_type",
+            "canonical_field": "product.commercial_sale_type",
+            "map": {
+                "Vente normale": "normal",
+                "normal": "normal",
+                "Vente flash": "flash_sale",
+                "vente flash": "flash_sale",
+                "flash": "flash_sale",
+                "flash_sale": "flash_sale",
+                "Black Friday": "black_friday",
+                "black friday": "black_friday",
+                "Promo spéciale": "promotion",
+                "promo": "promotion",
+                "promotion": "promotion"
+            }
+        },
+        "product.sale_type.mobile_vendor": {
+            "legacy_field": "products.sale_type",
+            "canonical_field": "product.selling_mode",
+            "map": {
+                "standard": "unit",
+                "lot": "lot",
+                "weight": "weight",
+                "meter": "linear_meter",
+                "surface": "surface",
+                "volume": "volume"
+            }
+        },
+        "product.status": {
+            "legacy_field": "products.status",
+            "canonical_field": "product.publication_status",
+            "map": {
+                "brouillon": "draft",
+                "draft": "draft",
+                "pending_logistics": "pending_logistics",
+                "actif": "active",
+                "active": "active",
+                "approved": "active",
+                "inactif": "inactive",
+                "inactive": "inactive",
+                "archived": "archived"
+            }
+        },
+        "driver.status": {
+            "legacy_field": "delivery_drivers.status",
+            "canonical_field": "driver.availability_status",
+            "map": {
+                "Disponible": "available",
+                "Indisponible": "unavailable",
+                "En mission": "on_mission",
+                "En livraison": "on_mission"
+            }
+        },
+        "payment.status": {
+            "legacy_field": "payments.status",
+            "canonical_field": "payment.status",
+            "map": {
+                "waiting": "pending",
+                "initiated": "pending",
+                "success": "paid",
+                "successful": "paid",
+                "completed": "paid",
+                "validated": "paid",
+                "confirmed": "paid",
+                "error": "failed",
+                "canceled": "cancelled"
+            }
+        }
+    }
+}

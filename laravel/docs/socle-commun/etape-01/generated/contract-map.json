@@ -1,0 +1,707 @@
+{
+  "audit": {
+    "step": 1,
+    "title": "Cartographie du contrat de données actuel Web ↔ API Laravel ↔ Mobile",
+    "generated_from": "web(3).zip",
+    "runtime_changes": false,
+    "notes": "Inventaire de l'état actuel. Ne constitue pas encore le contrat cible de l'étape 2."
+  },
+  "active_routing": {
+    "api_bootstrap": "web/routes/api.php",
+    "evidence": {
+      "file": "web/bootstrap/app.php",
+      "line": 10
+    }
+  },
+  "entities": {
+    "User": {
+      "file": "web/app/Models/User.php",
+      "fillable": [
+        "created_by_commercial_id",
+        "first_name",
+        "last_name",
+        "name",
+        "email",
+        "phone",
+        "password",
+        "whatsapp_phone",
+        "whatsapp_verified_at",
+        "role",
+        "status",
+        "is_admin",
+        "avatar",
+        "secondary_phone",
+        "birth_date",
+        "gender",
+        "city",
+        "account_type",
+        "loyalty_points",
+        "loyalty_debt",
+        "preferred_cities",
+        "favorite_categories",
+        "notification_preferences",
+        "locale",
+        "currency",
+        "timezone",
+        "date_format",
+        "referral_code",
+        "deletion_in_progress"
+      ],
+      "constants": {}
+    },
+    "Shop": {
+      "file": "web/app/Models/Shop.php",
+      "fillable": [
+        "user_id",
+        "created_by_commercial_id",
+        "managed_by_commercial_id",
+        "name",
+        "display_name",
+        "slug",
+        "description",
+        "logo",
+        "selfie",
+        "seller_type",
+        "company_name",
+        "legal_form",
+        "rccm",
+        "taxpayer_number",
+        "main_category",
+        "main_subcategory",
+        "commercial_notes",
+        "delivery_zone",
+        "processing_time",
+        "city",
+        "region",
+        "commune",
+        "commune_id",
+        "district",
+        "quarter_id",
+        "landmark",
+        "landmark_id",
+        "address",
+        "whatsapp",
+        "business_email",
+        "latitude",
+        "longitude",
+        "geo_accuracy",
+        "geo_source",
+        "geo_precision",
+        "geo_precision_score",
+        "geo_status",
+        "geo_verified_at",
+        "identity_country",
+        "identity_type",
+        "identity_number",
+        "identity_upload_mode",
+        "identity_file",
+        "identity_file_front",
+        "identity_file_back",
+        "rccm_file",
+        "tax_file",
+        "mm_operator",
+        "mm_number",
+        "mm_holder",
+        "direct_payment",
+        "logistics_type",
+        "payment_mode",
+        "payout_onboarding_started_at",
+        "status",
+        "kyc_status",
+        "logistics_status",
+        "is_active",
+        "rejection_reason",
+        "approved_at",
+        "reviewed_by"
+      ],
+      "constants": {
+        "STATUS_APPROVED": "approved",
+        "STATUS_REJECTED": "rejected",
+        "KYC_PENDING": "pending",
+        "KYC_VERIFIED": "verified",
+        "KYC_REJECTED": "rejected",
+        "LOGISTICS_READY": "ready",
+        "LOGISTICS_INCOMPLETE": "incomplete",
+        "LOGISTICS_SUSPENDED": "suspended",
+        "PAYMENT_POST_DELIVERY": "post_delivery",
+        "PAYMENT_WEEKLY": "weekly",
+        "GEO_STATUS_RELIABLE": "reliable",
+        "GEO_STATUS_REVIEW_RECOMMENDED": "review_recommended",
+        "GEO_STATUS_VERIFICATION_REQUIRED": "verification_required",
+        "GEO_STATUS_VERIFIED": "verified"
+      }
+    },
+    "Product": {
+      "file": "web/app/Models/Product.php",
+      "fillable": [
+        "shop_id",
+        "created_by_commercial_id",
+        "vendor_id",
+        "category_id",
+        "sku",
+        "master_product_id",
+        "fulfillment_priority",
+        "is_fulfillment_enabled",
+        "product_state",
+        "name",
+        "slug",
+        "description",
+        "short_description",
+        "technical_details",
+        "product_attributes",
+        "technical_sheet_path",
+        "product_video_path",
+        "product_video_url",
+        "usage_area",
+        "material_grade",
+        "color",
+        "standard",
+        "warranty",
+        "return_policy",
+        "price",
+        "weight",
+        "weight_kg",
+        "length_cm",
+        "width_cm",
+        "height_cm",
+        "volume_m3",
+        "transport",
+        "promo_price",
+        "promo_end",
+        "stock",
+        "availability_status",
+        "fast_delivery",
+        "status",
+        "is_active",
+        "commission_paid",
+        "lock_contacts",
+        "gallery",
+        "type",
+        "sale_type",
+        "unit",
+        "unit_label",
+        "min_order_quantity",
+        "packaging",
+        "content_per_unit",
+        "content_unit",
+        "units_per_package",
+        "coverage_per_unit_m2",
+        "supply_delay",
+        "brand",
+        "origin_country",
+        "delivery_mode",
+        "seller_delivery_delay",
+        "fragile",
+        "requires_unloading",
+        "unloading_instructions",
+        "handling_options",
+        "pickup_city",
+        "pickup_commune",
+        "pickup_address",
+        "price_p1",
+        "price_p2",
+        "price_p3",
+        "is_negotiable",
+        "flash_start_at",
+        "flash_end",
+        "bf_start",
+        "bf_end",
+        "is_boosted",
+        "boosted_by_ovanie",
+        "boost_type",
+        "boost_start_at",
+        "boost_end_at",
+        "boost_price",
+        "boost_payment_status",
+        "boost_payment_reference",
+        "boost_paid_at",
+        "boost_package",
+        "boost_duration_days",
+        "boost_priority",
+        "boost_views",
+        "boost_clicks",
+        "free_boosted_by_ovanie",
+        "free_boost_start_at",
+        "free_boost_end_at",
+        "free_boost_batch_date",
+        "views",
+        "sales",
+        "archived_at",
+        "archived_by",
+        "archive_reason"
+      ],
+      "constants": {}
+    },
+    "Order": {
+      "file": "web/app/Models/Order.php",
+      "fillable": [
+        "order_number",
+        "client_id",
+        "gift_card_id",
+        "customer_name",
+        "vendor_id",
+        "shop_id",
+        "product_id",
+        "quantity",
+        "invoice_number",
+        "status",
+        "commission_amount",
+        "payment_method",
+        "payment_status",
+        "subtotal",
+        "delivery_fee",
+        "delivery_fee_total",
+        "ovanie_delivery_fee",
+        "seller_delivery_fee",
+        "partner_delivery_fee",
+        "delivery_pricing_status",
+        "delivery_pricing_meta",
+        "delivery_breakdown",
+        "selected_carriers",
+        "total_amount",
+        "bank_reference",
+        "receipt_path",
+        "payment_proof",
+        "carrier",
+        "tracking_number",
+        "shipment_date",
+        "notes",
+        "discount",
+        "loyalty_points_used",
+        "loyalty_discount",
+        "gift_card_amount",
+        "phone",
+        "address",
+        "delivery_address",
+        "delivery_zone",
+        "delivery_destination_type",
+        "delivery_site_name",
+        "delivery_recipient_name",
+        "delivery_recipient_phone",
+        "delivery_commune",
+        "delivery_quartier",
+        "delivery_city",
+        "delivery_lat",
+        "delivery_lng",
+        "delivery_latitude",
+        "delivery_longitude",
+        "delivery_geo_accuracy",
+        "delivery_geo_source",
+        "delivery_started_at",
+        "delivery_min_date",
+        "delivery_max_date",
+        "delivery_note",
+        "delivery_provider",
+        "delivery_status",
+        "seller_ready_for_pickup_at",
+        "driver_assigned_at",
+        "picked_up_at",
+        "in_transit_at",
+        "delivered_at",
+        "reception_status",
+        "payout_status",
+        "platform_commission",
+        "vendor_payout_amount"
+      ],
+      "constants": {}
+    },
+    "Shipment": {
+      "file": "web/app/Models/Shipment.php",
+      "fillable": [
+        "order_id",
+        "order_item_id",
+        "carrier_id",
+        "shop_id",
+        "delivery_service_id",
+        "order_delivery_selection_id",
+        "provider_type",
+        "pickup_address",
+        "pickup_latitude",
+        "pickup_longitude",
+        "delivery_address",
+        "delivery_latitude",
+        "delivery_longitude",
+        "distance_km",
+        "duration_minutes",
+        "routing_provider",
+        "traffic_delay_minutes",
+        "no_traffic_duration_minutes",
+        "routed_at",
+        "route_geometry",
+        "vehicle_code",
+        "vehicle_label",
+        "total_weight_kg",
+        "total_volume_m3",
+        "internal_carrier_type",
+        "internal_carrier_name",
+        "waze_url",
+        "optimized_route_id",
+        "service_code",
+        "tracking_number",
+        "status",
+        "estimated_delivery_at",
+        "delivered_at",
+        "final_price",
+        "meta"
+      ],
+      "constants": {}
+    },
+    "DeliveryAssignment": {
+      "file": "web/app/Models/DeliveryAssignment.php",
+      "fillable": [
+        "mission_number",
+        "order_id",
+        "order_item_id",
+        "driver_id",
+        "vehicle_id",
+        "assigned_by",
+        "status",
+        "gps_status",
+        "gps_disabled_reason",
+        "gps_last_seen_at",
+        "manual_eta_at",
+        "last_manual_status_at",
+        "pickup_address",
+        "delivery_address",
+        "pickup_scheduled_at",
+        "estimated_delivery_at",
+        "accepted_at",
+        "started_at",
+        "arrived_at",
+        "rejected_at",
+        "rejection_reason",
+        "picked_up_at",
+        "delivered_at",
+        "meta"
+      ],
+      "constants": {}
+    },
+    "DeliveryDriver": {
+      "file": "web/app/Models/DeliveryDriver.php",
+      "fillable": [
+        "profile",
+        "name",
+        "first_name",
+        "last_name",
+        "phone",
+        "email",
+        "password",
+        "otp_code",
+        "otp_expires_at",
+        "otp_used_at",
+        "otp_last_sent_at",
+        "zone",
+        "commune_id",
+        "vehicle",
+        "avatar",
+        "status",
+        "rating",
+        "is_active",
+        "must_change_password",
+        "latitude",
+        "longitude",
+        "last_seen_at",
+        "last_login_at",
+        "phone_verified_at",
+        "is_online",
+        "onboarding_status",
+        "submitted_at",
+        "reviewed_at",
+        "reviewed_by",
+        "rejection_reason"
+      ],
+      "constants": {
+        "ONBOARDING_INVITED": "invited",
+        "ONBOARDING_PENDING_REVIEW": "pending_review",
+        "ONBOARDING_ACTIVE": "active",
+        "ONBOARDING_SUSPENDED": "suspended",
+        "ONBOARDING_REJECTED": "rejected"
+      }
+    },
+    "ReturnModel": {
+      "file": "web/app/Models/ReturnModel.php",
+      "fillable": [
+        "order_reference",
+        "product_name",
+        "reason",
+        "request_date",
+        "status",
+        "order_id",
+        "order_item_id",
+        "client_id",
+        "vendor_id",
+        "shop_id",
+        "product_id",
+        "quantity",
+        "photo_proof",
+        "refund_amount",
+        "return_type",
+        "logistics_status",
+        "vendor_response",
+        "accepted_at",
+        "rejected_at",
+        "refund_prepared_at",
+        "refunded_at",
+        "resolved_at",
+        "meta"
+      ],
+      "constants": {
+        "STATUS_PENDING": "pending",
+        "STATUS_ACCEPTED": "accepted",
+        "STATUS_REJECTED": "rejected",
+        "STATUS_CLOSED": "closed",
+        "STATUS_REFUNDED": "refunded",
+        "LOGISTICS_PENDING_PICKUP": "pending_pickup",
+        "LOGISTICS_PICKUP_PLANNED": "return_pickup_planned",
+        "LOGISTICS_IN_TRANSIT": "return_in_transit",
+        "LOGISTICS_RECEIVED": "return_received",
+        "LOGISTICS_REFUND_PENDING": "refund_pending",
+        "LOGISTICS_REFUNDED": "refunded",
+        "LOGISTICS_CLAIM_REVIEW": "claim_review",
+        "LOGISTICS_REFUND_REVIEW": "refund_review"
+      }
+    },
+    "Payment": {
+      "file": "web/app/Models/Payment.php",
+      "fillable": [
+        "order_id",
+        "method",
+        "transaction_id",
+        "amount",
+        "status",
+        "reference",
+        "user_id",
+        "client_payment_method_id",
+        "operator",
+        "mobile_number",
+        "type",
+        "order_item_ids",
+        "provider_payload",
+        "paid_at",
+        "failed_at",
+        "released_at"
+      ],
+      "constants": {}
+    },
+    "Address": {
+      "file": "web/app/Models/Address.php",
+      "fillable": [
+        "user_id",
+        "type",
+        "label",
+        "recipient_name",
+        "city",
+        "commune",
+        "quartier",
+        "country",
+        "address",
+        "phone",
+        "latitude",
+        "longitude",
+        "is_default"
+      ],
+      "constants": {}
+    }
+  },
+  "status_sources": {
+    "Shop": {
+      "source": "web/app/Models/Shop.php",
+      "groups": {
+        "status": [
+          "approved",
+          "rejected"
+        ],
+        "kyc_status": [
+          "pending",
+          "verified",
+          "rejected"
+        ],
+        "logistics_status": [
+          "ready",
+          "incomplete",
+          "suspended"
+        ],
+        "payment_mode": [
+          "post_delivery",
+          "weekly"
+        ]
+      }
+    },
+    "DeliveryDriver": {
+      "source": "web/app/Models/DeliveryDriver.php",
+      "groups": {
+        "onboarding_status": [
+          "invited",
+          "pending_review",
+          "active",
+          "suspended",
+          "rejected"
+        ]
+      }
+    },
+    "ReturnModel": {
+      "source": "web/app/Models/ReturnModel.php",
+      "groups": {
+        "status": [
+          "pending",
+          "accepted",
+          "rejected",
+          "closed",
+          "refunded"
+        ],
+        "logistics_status": [
+          "pending_pickup",
+          "return_pickup_planned",
+          "return_in_transit",
+          "return_received",
+          "refund_pending",
+          "refunded",
+          "claim_review",
+          "refund_review"
+        ]
+      }
+    },
+    "OrderDelivery": {
+      "source": "web/app/Services/OrderWorkflowService.php",
+      "groups": {
+        "delivery_provider": [
+          "ovanie",
+          "seller",
+          "pickup",
+          "partner"
+        ],
+        "delivery_status": [
+          "pending",
+          "preparing",
+          "ready_for_pickup",
+          "assigned",
+          "picked_up",
+          "in_transit",
+          "delivered",
+          "late",
+          "failed",
+          "returned",
+          "cancelled",
+          "delivery_failed",
+          "not_required"
+        ]
+      }
+    },
+    "Payment": {
+      "source": "web/app/Services/PaymentService.php",
+      "groups": {
+        "status": [
+          "pending",
+          "paid",
+          "failed",
+          "cancelled",
+          "refunded",
+          "escrow_held",
+          "released_to_vendor"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "product_web_sale_type": {
+      "file": "web/resources/views/vendor/products/partials/ovanie-product-wizard.blade.php",
+      "line": 955
+    },
+    "product_web_state": {
+      "file": "web/resources/views/vendor/products/partials/ovanie-product-wizard.blade.php",
+      "line": 849
+    },
+    "vendor_mobile_sale_types": {
+      "file": "mobile vendeur/lib/features/products/product_form_screen.dart",
+      "line": 53
+    },
+    "vendor_mobile_state_forced": {
+      "file": "mobile vendeur/lib/features/products/product_form_screen.dart",
+      "line": 478
+    },
+    "vendor_mobile_sale_payload": {
+      "file": "mobile vendeur/lib/features/products/product_form_screen.dart",
+      "line": 489
+    },
+    "shop_web_company": {
+      "file": "web/app/Http/Controllers/ShopController.php",
+      "line": 522
+    },
+    "vendor_onboarding_values": {
+      "file": "mobile vendeur/lib/features/onboarding/shop_onboarding_screen.dart",
+      "line": 347
+    },
+    "vendor_local_categories": {
+      "file": "mobile vendeur/lib/features/menu/profile_screens.dart",
+      "line": 214
+    },
+    "client_mobile_profile": {
+      "file": "mobile client/lib/features/account/domain/account_models.dart",
+      "line": 10
+    },
+    "client_mobile_update": {
+      "file": "web/app/Http/Controllers/Api/MobileClientAccountController.php",
+      "line": 75
+    },
+    "client_web_extended_profile": {
+      "file": "web/app/Http/Controllers/ClientAccountController.php",
+      "line": 627
+    },
+    "checkout_localities": {
+      "file": "mobile client/lib/features/checkout/presentation/checkout_screen.dart",
+      "line": 20
+    },
+    "territory_route": {
+      "file": "web/routes/api.php",
+      "line": 337
+    },
+    "address_types": {
+      "file": "web/app/Http/Controllers/Api/AddressController.php",
+      "line": 136
+    },
+    "payment_local_operators": {
+      "file": "mobile client/lib/features/payments/presentation/resume_payment_screen.dart",
+      "line": 31
+    },
+    "driver_submit_mobile": {
+      "file": "mobile livreur /lib/features/driver/data/driver_repository.dart",
+      "line": 250
+    },
+    "driver_backend_birth": {
+      "file": "web/app/Http/Controllers/Api/Driver/DriverOnboardingController.php",
+      "line": 124
+    },
+    "driver_supporting_backend": {
+      "file": "web/app/Http/Controllers/Api/Driver/DriverOnboardingController.php",
+      "line": 139
+    },
+    "driver_profile_mobile": {
+      "file": "mobile livreur /lib/features/driver/models/driver_profile.dart",
+      "line": 6
+    },
+    "commercial_seller_types": {
+      "file": "web/app/Http/Controllers/Api/Commercial/CommercialMobileShopController.php",
+      "line": 295
+    },
+    "commercial_product": {
+      "file": "web/app/Http/Controllers/Api/Commercial/CommercialMobileProductController.php",
+      "line": 16
+    },
+    "commercial_publish": {
+      "file": "web/app/Http/Controllers/Api/Commercial/CommercialMobileProductController.php",
+      "line": 35
+    },
+    "vendor_order_local_status": {
+      "file": "mobile vendeur/lib/features/orders/order_ui.dart",
+      "line": 38
+    },
+    "return_local_reason": {
+      "file": "mobile client/lib/features/returns/presentation/return_form_screen.dart",
+      "line": 58
+    },
+    "route_active": {
+      "file": "web/bootstrap/app.php",
+      "line": 10
+    }
+  }
+}

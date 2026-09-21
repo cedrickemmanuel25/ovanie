@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800" role="img" aria-labelledby="title description">
+  <title id="title">Image produit indisponible</title>
+  <description id="description">Illustration OVANIE utilisée lorsqu'un produit ne possède pas encore d'image.</description>
+  <rect width="800" height="800" rx="48" fill="#F5F8FD"/>
+  <circle cx="400" cy="350" r="150" fill="#E7EFFC"/>
+  <g fill="none" stroke="#3463A5" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M290 320 400 255l110 65v130L400 515 290 450Z"/>
+    <path d="m290 320 110 65 110-65M400 385v130"/>
+  </g>
+  <text x="400" y="620" text-anchor="middle" font-family="Arial, sans-serif" font-size="36" font-weight="700" fill="#102D60">Image produit</text>
+  <text x="400" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" fill="#667A9D">OVANIE</text>
+</svg>

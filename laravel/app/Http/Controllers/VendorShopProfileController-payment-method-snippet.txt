@@ -1,0 +1,45 @@
+/**
+ * Affiche une page dédiée et propre pour la méthode de reversement vendeur.
+ */
+public function paymentMethod()
+{
+    $shop = $this->currentShop();
+
+    return view('vendor.payment-method', compact('shop'));
+}
+
+/**
+ * Met à jour uniquement la méthode de paiement/reversement vendeur.
+ */
+public function updatePaymentMethod(Request $request)
+{
+    $shop = $this->currentShop();
+
+    $validated = $request->validate([
+        'direct_payment' => ['nullable', 'boolean'],
+        'mm_operator' => ['required', Rule::in(['orange', 'mtn', 'wave', 'moov', 'airtel'])],
+        'mm_number' => ['required', 'regex:/^[0-9+ ]{8,20}$/'],
+        'mm_holder' => ['required', 'string', 'max:255'],
+        'whatsapp' => ['nullable', 'string', 'max:30'],
+        'business_email' => ['nullable', 'email', 'max:255'],
+    ], [
+        'mm_operator.required' => 'Choisissez l’opérateur de paiement.',
+        'mm_number.required' => 'Le numéro Mobile Money est obligatoire.',
+        'mm_number.regex' => 'Le numéro Mobile Money est invalide.',
+        'mm_holder.required' => 'Le nom du titulaire est obligatoire.',
+        'business_email.email' => 'L’email professionnel est invalide.',
+    ]);
+
+    $shop->fill([
+        'direct_payment' => $request->boolean('direct_payment'),
+        'mm_operator' => $validated['mm_operator'],
+        'mm_number' => $this->cleanPhone($validated['mm_number']),
+        'mm_holder' => $validated['mm_holder'],
+        'whatsapp' => $this->cleanPhone($validated['whatsapp'] ?? $shop->whatsapp),
+        'business_email' => $validated['business_email'] ?? $shop->business_email,
+    ])->save();
+
+    return redirect()
+        ->route('vendor.payment-method')
+        ->with('success', 'Votre méthode de paiement vendeur a été mise à jour.');
+}

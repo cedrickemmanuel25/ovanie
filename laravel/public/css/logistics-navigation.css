@@ -1,0 +1,314 @@
+
+.ops-symbols {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden
+}
+.ops-topbar {
+    height: 50px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    background: linear-gradient(110deg,#003936,#002e30);
+    color: #fff;
+    font-family: Inter,Arial,sans-serif;
+    position: relative;
+    z-index: 30
+}
+.ops-brand {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    white-space: nowrap;
+    color: white!important
+}
+.ops-brand>svg {
+    width: 28px;
+    height: 28px
+}
+.ops-brand strong {
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: .4px
+}
+.ops-brand span {
+    font-size: 16px;
+    font-weight: 400;
+    letter-spacing: 0
+}
+.ops-navigation {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+    min-width: 0
+}
+.ops-navigation>a,.ops-nav-menu>summary {
+    padding: 9px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    font-weight: 500;
+    color: #fff;
+    border-radius: 6px
+}
+.ops-navigation>a:hover {
+    background: #ffffff15
+}
+.ops-nav-menu>summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    background: linear-gradient(#00a85c,#008e49);
+    padding-inline: 14px
+}
+.ops-nav-menu>summary::-webkit-details-marker {
+    display: none
+}
+.ops-nav-menu>summary .ops-icon {
+    width: 13px;
+    height: 13px
+}
+.ops-nav-menu {
+    position: relative
+}
+.ops-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    background: #fff;
+    padding: 6px;
+    min-width: 155px;
+    border: 1px solid var(--ops-border);
+    border-radius: 6px;
+    box-shadow: 0 3px 10px #18244925;
+    color: var(--ops-navy);
+    z-index: 40;
+    font: 13px var(--ops-font)
+}
+.ops-dropdown a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px;
+    border-radius: 4px
+}
+.ops-dropdown a .ops-icon {
+    width: 16px;
+    height: 16px
+}
+.ops-dropdown a:hover,.ops-dropdown a.selected {
+    background: #e4f9f0;
+    color: #00864b
+}
+.ops-account {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    white-space: nowrap;
+    margin-left: auto;
+    font-size: 12px
+}
+.ops-account>a {
+    color: #fff
+}
+.ops-account-avatar {
+    display: grid;
+    place-items: center;
+    background: #eff4ff;
+    color: #6073a0;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    margin-left: 12px
+}
+.ops-account>.ops-icon {
+    width: 13px;
+    height: 13px
+}
+.ops-notifications {
+    position: relative
+}
+.ops-notifications b {
+    position: absolute;
+    right: -4px;
+    top: -5px;
+    min-width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #f0001d;
+    color: white;
+    font: 9px/15px Arial;
+    text-align: center
+}
+.ops-mobile-toggle {
+    display: none!important
+}
+@media(min-width:1600px) {
+    .ops-topbar {
+        height: 45px;
+        padding-inline: 32px
+    }
+}
+@media(min-width:1600px) {
+}
+@media(max-width:1450px) {
+    .ops-topbar {
+        gap: 19px;
+        padding-inline: 20px
+    }
+}
+@media(max-width:1450px) {
+    .ops-brand strong {
+        font-size: 20px
+    }
+}
+@media(max-width:1450px) {
+    .ops-brand span {
+        font-size: 15px
+    }
+}
+@media(max-width:1450px) {
+    .ops-navigation>a,.ops-nav-menu>summary {
+        padding-inline: 9px;
+        font-size: 11px
+    }
+}
+@media(max-width:1450px) {
+    .ops-account {
+        gap: 12px;
+        font-size: 11px
+    }
+}
+@media(max-width:1200px) {
+    .ops-account-name {
+        display: none
+    }
+}
+@media(max-width:1200px) {
+    .ops-brand strong {
+        font-size: 18px
+    }
+}
+@media(max-width:1200px) {
+    .ops-brand span {
+        font-size: 13px
+    }
+}
+@media(max-width:1200px) {
+    .ops-topbar {
+        gap: 12px
+    }
+}
+@media(max-width:1200px) {
+    .ops-navigation>a,.ops-nav-menu>summary {
+        padding-inline: 7px;
+        font-size: 10px
+    }
+}
+@media(max-width:1000px) {
+    .ops-navigation {
+        display: none;
+        position: absolute;
+        top: 50px;
+        left: 0;
+        right: 0;
+        flex-wrap: wrap;
+        padding: 12px;
+        background: #003b38
+    }
+}
+@media(max-width:1000px) {
+    .ops-navigation.is-open {
+        display: flex
+    }
+}
+@media(max-width:1000px) {
+    .ops-navigation>a,.ops-nav-menu>summary {
+        font-size: 13px
+    }
+}
+@media(max-width:1000px) {
+    .ops-mobile-toggle {
+        display: flex!important;
+        color: white
+    }
+}
+@media(max-width:1000px) {
+    .ops-account {
+        margin-left: auto
+    }
+}
+@media(max-width:1000px) {
+    .ops-account-name {
+        display: inline
+    }
+}
+@media(max-width:700px) {
+    .ops-topbar {
+        padding: 0 12px
+    }
+}
+@media(max-width:700px) {
+    .ops-account-name,.ops-account-avatar,.ops-account>.ops-icon {
+        display: none
+    }
+}
+@media(max-width:700px) {
+    .ops-account {
+        gap: 12px
+    }
+}
+@media(max-width:700px) {
+    .ops-brand strong {
+        font-size: 18px
+    }
+}
+@media print {
+    .ops-topbar {
+        display: none!important
+    }
+}
+.ops-dropdown { left: calc(100% + 4px); }
+@media (max-width: 1450px) and (min-width: 1001px) {
+    .ops-nav-menu > summary { font-size: 12px; padding-inline: 14px; }
+}
+@media (max-width: 700px) { .ops-dropdown { left: 0; } }
+.ops-dropdown { top: calc(100% + 2px); padding: 5px; font-size: 12px; }
+.ops-dropdown a { padding: 6px 8px; gap: 10px; line-height: 16px; white-space: nowrap; }
+.ops-topbar{flex-shrink:0;--ops-border:#dfeafa;--ops-navy:#090e48;--ops-font:Roboto,Arial,sans-serif;line-height:1.35}.ops-topbar a{text-decoration:none}.ops-topbar .ops-icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}.ops-topbar button{background:none;border:0;color:inherit}.ops-topbar .ops-navigation .active{background:linear-gradient(#00a85c,#008e49)}.ops-topbar .ops-nav-menu>summary:not(.active){background:transparent}.ops-topbar .ops-dropdown{min-width:220px}.ops-topbar .ops-dropdown a{color:#090e48}.ops-topbar .ops-dropdown a:hover{background:#e4f9f0;color:#00864b}.ops-topbar .ops-nav-menu>summary .ops-icon{width:13px;height:13px}
+
+@media (min-width:1001px) and (max-width:1450px){.ops-topbar{gap:12px}.ops-topbar .ops-navigation{gap:1px}.ops-topbar .ops-navigation>a,.ops-topbar .ops-nav-menu>summary{padding-inline:6px;font-size:11px;gap:5px}.ops-account{gap:8px;font-size:10px;flex-shrink:0}.ops-account-avatar{margin-left:4px;width:28px;height:28px}.ops-brand strong{font-size:19px}.ops-brand span{font-size:14px}}
+
+/* Dropdowns for Tarification / Pilotage: inactive parents stay transparent. */
+.ops-nav-menu>summary{background:transparent;padding-inline:10px}
+.ops-nav-menu>summary:hover{background:#ffffff15}
+.ops-nav-menu>summary.active{background:linear-gradient(#00a85c,#008e49)}
+.ops-dropdown-right{left:auto;right:0;min-width:230px}
+.ops-pricing-menu .ops-dropdown{min-width:220px}
+.ops-control-menu .ops-dropdown{min-width:240px}
+
+/* ===== Pilotage / compte responsable ===== */
+.ops-notifications.is-active{color:#6ee7b7}
+.ops-account-menu{position:relative}
+.ops-account-menu>summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer;color:#fff;padding:4px 3px;border-radius:7px}
+.ops-account-menu>summary::-webkit-details-marker{display:none}
+.ops-account-menu>summary:hover{background:#ffffff12}
+.ops-account-menu>summary>.ops-icon{width:13px;height:13px;transition:transform .15s ease}
+.ops-account-menu[open]>summary>.ops-icon{transform:rotate(180deg)}
+.ops-account-menu .ops-account-avatar{margin-left:3px}
+.ops-account-dropdown{position:absolute;right:0;top:calc(100% + 10px);width:270px;padding:7px;background:#fff;border:1px solid #dce6f2;border-radius:10px;box-shadow:0 14px 35px rgba(8,28,59,.18);z-index:80;color:#0c1d50}
+.ops-account-dropdown-head{display:flex;align-items:center;gap:11px;padding:10px 9px 12px;border-bottom:1px solid #edf2f7;margin-bottom:5px}
+.ops-account-dropdown-head .ops-account-avatar{margin:0;width:38px;height:38px;background:#eef4ff;color:#506a9c}
+.ops-account-dropdown-head>div{display:flex;flex-direction:column;min-width:0}
+.ops-account-dropdown-head strong{font-size:12px;color:#09164e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ops-account-dropdown-head small{font-size:10px;color:#7282a3;margin-top:2px}
+.ops-account-dropdown>a,.ops-account-dropdown form button{width:100%;min-height:38px;display:flex;align-items:center;gap:10px;padding:8px 9px;border:0;border-radius:7px;background:transparent;color:#10245b;font:600 11px/1.2 Inter,Arial,sans-serif;text-align:left;text-decoration:none;cursor:pointer}
+.ops-account-dropdown>a:hover,.ops-account-dropdown>a.selected,.ops-account-dropdown form button:hover{background:#eaf9f2;color:#008b51}
+.ops-account-dropdown>a .ops-icon,.ops-account-dropdown form button .ops-icon{width:17px;height:17px}
+.ops-account-dropdown>a b{margin-left:auto;min-width:20px;height:20px;border-radius:99px;background:#fee2e2;color:#dc2626;display:grid;place-items:center;font-size:9px}
+.ops-account-dropdown form{border-top:1px solid #edf2f7;margin-top:5px;padding-top:5px}
+@media(max-width:700px){.ops-account-menu>summary .ops-account-avatar,.ops-account-menu>summary .ops-account-name,.ops-account-menu>summary>.ops-icon{display:none}.ops-account-dropdown{right:-6px;width:250px}}

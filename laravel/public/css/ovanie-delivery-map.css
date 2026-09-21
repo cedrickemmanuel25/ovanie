@@ -1,0 +1,207 @@
+/* OVANIE delivery maps v4.1 — professional navigation markers. */
+.ovd-marker {
+    --ovd-color: #1769e8;
+    --ovd-heading: 0deg;
+    position: relative;
+    width: 66px;
+    height: 76px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    display: grid;
+    grid-template-rows: 54px 18px;
+    justify-items: center;
+    align-items: start;
+    cursor: pointer;
+    user-select: none;
+    isolation: isolate;
+    z-index: 30;
+    font: inherit;
+}
+.ovd-marker__pulse {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    width: 52px;
+    height: 52px;
+    margin-left: -26px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--ovd-color) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ovd-color) 24%, transparent);
+    opacity: 0;
+    z-index: -1;
+}
+.ovd-marker.is-live .ovd-marker__pulse { animation: ovd-pulse 2.7s ease-out infinite; }
+.ovd-marker__shell {
+    position: relative;
+    width: 50px;
+    height: 50px;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    background: #fff;
+    color: var(--ovd-color);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 10px 25px rgba(15,23,42,.23), 0 2px 7px rgba(15,23,42,.16), inset 0 0 0 2px color-mix(in srgb,var(--ovd-color) 88%,#fff);
+    transition: transform .18s ease, filter .18s ease, opacity .18s ease, box-shadow .18s ease;
+}
+.ovd-marker__direction {
+    position: absolute;
+    top: -9px;
+    left: 50%;
+    width: 0;
+    height: 0;
+    transform: translateX(-50%) rotate(var(--ovd-heading));
+    transform-origin: 50% 34px;
+    transition: transform .55s cubic-bezier(.2,.8,.2,1);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-bottom: 10px solid var(--ovd-color);
+    filter: drop-shadow(0 1px 1px rgba(15,23,42,.18));
+}
+.ovd-marker:hover .ovd-marker__shell,
+.ovd-marker:focus-visible .ovd-marker__shell,
+.ovd-marker.is-selected .ovd-marker__shell {
+    transform: translateY(-2px) scale(1.055);
+    box-shadow: 0 14px 32px rgba(15,23,42,.27), 0 0 0 5px color-mix(in srgb,var(--ovd-color) 16%,transparent), inset 0 0 0 2px var(--ovd-color);
+}
+.ovd-marker__rotator {
+    width: 37px;
+    height: 37px;
+    display: grid;
+    place-items: center;
+    transform: rotate(var(--ovd-heading));
+    transition: transform .55s cubic-bezier(.2,.8,.2,1);
+    transform-origin: 50% 50%;
+}
+.ovd-marker__rotator svg { width: 36px; height: 36px; display: block; overflow: visible; }
+.ovd-marker__number {
+    position: absolute;
+    top: -3px;
+    right: 2px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    background: #0f2444;
+    color: #fff;
+    box-shadow: 0 3px 9px rgba(15,23,42,.24);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font: 900 9px/1 Inter,ui-sans-serif,system-ui,sans-serif;
+    font-variant-numeric: tabular-nums;
+}
+.ovd-marker__number[hidden] { display: none; }
+.ovd-marker__type {
+    max-width: 92px;
+    height: 19px;
+    margin-top: 2px;
+    padding: 0 8px;
+    border: 1px solid rgba(219,227,237,.98);
+    border-radius: 999px;
+    background: rgba(255,255,255,.98);
+    color: #17233a;
+    box-shadow: 0 5px 14px rgba(15,23,42,.14);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: 850 9px/1 Inter,ui-sans-serif,system-ui,sans-serif;
+}
+.ovd-marker.hide-type .ovd-marker__type { display: none; }
+.ovd-marker__signal {
+    position: absolute;
+    top: 38px;
+    right: 7px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: #16a34a;
+    box-shadow: 0 2px 7px rgba(15,23,42,.24);
+}
+.ovd-marker.is-stale .ovd-marker__pulse { display: none; }
+.ovd-marker.is-stale .ovd-marker__shell { filter: saturate(.65); opacity: .92; }
+.ovd-marker.is-stale .ovd-marker__signal { background: #f59e0b; }
+.ovd-marker.is-offline .ovd-marker__pulse { display: none; }
+.ovd-marker.is-offline .ovd-marker__shell { filter: grayscale(.55); opacity: .72; }
+.ovd-marker.is-offline .ovd-marker__signal { background: #94a3b8; }
+.ovd-marker.is-muted { opacity: .76; z-index: 22; }
+.ovd-marker.is-selected { z-index: 45; }
+
+.ovd-marker--pin {
+    width: 54px;
+    height: 64px;
+    display: grid;
+    grid-template-rows: 54px;
+    z-index: 20;
+}
+.ovd-marker--pin .ovd-marker__shell {
+    width: 46px;
+    height: 46px;
+    border-radius: 50% 50% 50% 10px;
+    background: var(--ovd-color);
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(15,23,42,.22), inset 0 0 0 1px rgba(255,255,255,.2);
+    transform: rotate(-45deg);
+}
+.ovd-marker--pin:hover .ovd-marker__shell,
+.ovd-marker--pin:focus-visible .ovd-marker__shell,
+.ovd-marker--pin.is-selected .ovd-marker__shell {
+    transform: rotate(-45deg) translate(1px,-1px) scale(1.04);
+}
+.ovd-marker--pin .ovd-marker__rotator { width:31px;height:31px;transform:rotate(45deg); }
+.ovd-marker--pin .ovd-marker__rotator svg { width:29px;height:29px; }
+.ovd-marker--pin .ovd-marker__direction,
+.ovd-marker--pin .ovd-marker__pulse,
+.ovd-marker--pin .ovd-marker__number,
+.ovd-marker--pin .ovd-marker__type,
+.ovd-marker--pin .ovd-marker__signal { display:none; }
+.ovd-marker--pickup,
+.ovd-marker--shop { --ovd-color:#087a63; }
+.ovd-marker--destination { --ovd-color:#082b5c; }
+
+@keyframes ovd-pulse {
+    0% { transform:scale(.84);opacity:.4; }
+    75%,100% { transform:scale(1.55);opacity:0; }
+}
+
+.mapboxgl-popup-content {
+    border:1px solid rgba(226,232,240,.96) !important;
+    border-radius:13px !important;
+    padding:11px 13px !important;
+    color:#10233f;
+    font:700 11.5px/1.45 Inter,ui-sans-serif,system-ui,sans-serif;
+    box-shadow:0 14px 34px rgba(15,23,42,.19) !important;
+}
+.mapboxgl-popup-tip { border-top-color:#fff !important; }
+.mapboxgl-ctrl-group {
+    border:1px solid rgba(226,232,240,.92) !important;
+    border-radius:12px !important;
+    overflow:hidden;
+    box-shadow:0 8px 22px rgba(15,23,42,.13) !important;
+}
+.mapboxgl-ctrl-group button { width:34px !important;height:34px !important; }
+
+/* v6: silhouettes de véhicules nettes, sans cercle générique. */
+.mapboxgl-marker:has(.ovd-marker--vehicle) { z-index:30!important; }
+.mapboxgl-marker:has(.ovd-marker--pin) { z-index:24!important; }
+.ovd-marker { width:52px;height:58px;grid-template-rows:44px 14px; }
+.ovd-marker--vehicle .ovd-marker__shell {
+    width:48px;height:44px;border:0;border-radius:0;background:transparent;
+    box-shadow:none;
+}
+.ovd-marker--vehicle .ovd-marker__pulse { width:42px;height:42px;margin-left:-21px;top:2px; }
+.ovd-marker__rotator { width:44px;height:44px;filter:drop-shadow(0 5px 6px rgba(15,23,42,.28)); }
+.ovd-marker__rotator img { width:100%;height:100%;display:block;object-fit:contain; }
+.ovd-marker__signal { top:32px;right:1px;width:9px;height:9px; }
+.ovd-marker--pin { width:40px;height:46px;grid-template-rows:40px; }
+.ovd-marker--pin .ovd-marker__shell { width:38px;height:38px;border-radius:50%;background:#fff;transform:none;box-shadow:0 6px 16px rgba(15,23,42,.2); }
+.ovd-marker--pin:hover .ovd-marker__shell,
+.ovd-marker--pin:focus-visible .ovd-marker__shell,
+.ovd-marker--pin.is-selected .ovd-marker__shell { transform:translateY(-1px) scale(1.04); }
+.ovd-marker--pin .ovd-marker__rotator { width:34px;height:34px;transform:none; }

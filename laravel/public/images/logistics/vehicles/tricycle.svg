@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="vehicle" viewBox="0 0 64 96">
+    <g>
+      <ellipse cx="32" cy="8" rx="7" ry="9" fill="#1f2937"/>
+      <ellipse cx="13" cy="82" rx="7" ry="10" fill="#1f2937"/>
+      <ellipse cx="51" cy="82" rx="7" ry="10" fill="#1f2937"/>
+      <path d="M24 17h16l6 19-3 12h7c4 0 7 3 7 7v24c0 5-4 9-9 9H16c-5 0-9-4-9-9V55c0-4 3-7 7-7h7l-3-12z" fill="currentColor" stroke="#ffffff" stroke-width="2"/>
+      <path d="M23 23h18l3 12H20z" fill="#d9eef7" stroke="#ffffff" stroke-width="1.5"/>
+      <rect x="14" y="53" width="36" height="27" rx="5" fill="currentColor" stroke="#0f2942" stroke-width="1.4"/>
+      <path d="M18 58h28M18 72h28" stroke="#ffffff" stroke-width="1.5" opacity=".78"/>
+      <rect x="26" y="37" width="12" height="11" rx="3" fill="#17212d" opacity=".88"/>
+      <circle cx="32" cy="20" r="2.5" fill="#ffffff" opacity=".9"/>
+    </g>
+  </symbol>
+</svg>

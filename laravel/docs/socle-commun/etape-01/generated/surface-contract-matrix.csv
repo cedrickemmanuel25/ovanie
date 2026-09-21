@@ -1,0 +1,21 @@
+﻿entity;concept;laravel_backend;web;app_client;app_vendeur;app_livreur;app_commercial;assessment;notes
+Client;Identité de base;User: first_name,last_name,name,email,phone;Oui;Oui;N/A;N/A;Création client spécifique;PARTIEL;Mobile Client couvre le noyau.
+Client;Profil étendu;secondary_phone,birth_date,gender,city,account_type,locale,currency,timezone,date_format,avatar;Oui;Non / partiel;N/A;N/A;N/A;DIVERGENT;Le Web expose davantage de champs que l'API/modèle Flutter Client.
+Adresse;Types d'adresse;AddressController: home,office,site,warehouse,other;Oui;Oui, chargé depuis API;N/A;N/A;N/A;ALIGNE;Correction déjà présente dans ce ZIP.
+Checkout;Communes/quartiers;/mobile/delivery-territory existe;Backend/Web;Liste locale abidjan_localities.dart;N/A;N/A;N/A;DIVERGENT;L'app Client n'utilise pas la route territoire comme source principale du sélecteur.
+Catalogue;Catégories Client;Category / APIs marketplace;Oui;APIs marketplace;N/A;N/A;N/A;ALIGNE_ACTIF;official_categories.dart existe mais aucun import actif trouvé.
+Paiement;Opérateurs;capabilities: orange,mtn,wave,moov;Backend;API + liste statique dans reprise paiement;N/A;N/A;N/A;DOUBLE_SOURCE;Les valeurs sont alignées aujourd'hui mais dupliquées.
+Boutique;Types vendeur;ShopController: particulier,entreprise,artisan,grossiste;Oui;N/A;Meta API: 4 types;N/A;Commercial API: particulier,entreprise;DIVERGENT;Commercial mobile n'accepte que 2 types.
+Boutique;Entreprise/KYC société;companyName,legalForm,rccm,taxpayerNumber,rccmFile,taxFile obligatoires;Oui;N/A;Écran onboarding ne les envoie pas;N/A;Contrat mobile commercial séparé;DIVERGENT_P0;L'App Vendeur ne satisfait pas le contrat Entreprise Web.
+Boutique;Catégorie principale;Category active;Oui;N/A;"Onboarding via meta; profil édition liste locale";N/A;Meta commercial;DOUBLE_SOURCE;L'édition profil vendeur conserve une liste Flutter locale.
+Produit;État produit;new,reconditioned,used dans VendorProductController;Oui;Lecture catalogue;Toujours envoyé new;N/A;Flux commercial séparé;DIVERGENT_P0;L'App Vendeur force product_state=new.
+Produit;sale_type;Web: normal/flash/Black Friday/promotion;Oui;Lecture catalogue;standard/lot/weight/meter/surface/volume;N/A;Commercial écrit sale_type dans flux séparé;CONFLIT_P0;Même champ, deux significations.
+Produit;Unités;VendorMobile meta PRODUCT_UNITS;Oui;Catalogue;API meta disponible;N/A;Flux commercial séparé;PARTIEL;Un référentiel backend existe mais tous les choix produit ne sont pas centralisés.
+Commande;Statuts/actions;OrderWorkflowService + payloads API;Oui;App Client lit labels/actions serveur;App Vendeur possède mapping/étapes locales;Mission liée;N/A;DOUBLE_INTERPRETATION;Risque de divergence côté vendeur.
+Livreur;Identité/KYC;DriverOnboarding accepte birth_date,identity_type,identity_number,identity_document;Logistique lit profil;N/A;N/A;App ne les envoie pas;N/A;DIVERGENT_P0;Photo profil ≠ document identité.
+Livreur;Véhicule détaillé;vehicle,plate,color,year,capacity,documents;Logistique;N/A;N/A;App envoie type/plaque/photos/couleur détectée mais pas year/capacity;N/A;DIVERGENT;Dossier mobile incomplet par rapport au backend.
+Livreur;Documents complémentaires;supporting_documents[] accepté backend;Logistique;N/A;N/A;Sélectionnés dans OnboardingData mais non ajoutés au FormData;N/A;BUG_P0;Les fichiers sélectionnés ne sont pas transmis.
+Livreur;Zones;Territoire backend dynamique;Logistique;N/A;N/A;/driver/territory/communes;N/A;ALIGNE_ACTIF;La liste statique ancienne n'est pas la source active.
+Livreur;Profil mobile;DeliveryDriver + profile JSON riche;Logistique;N/A;N/A;DriverProfile lit un sous-ensemble;N/A;PARTIEL;L'app ignore identité, année/capacité, documents, horaires, rejet, présence.
+Retour;Motifs/créneaux;reason libre + champs préparation;Web/API;Listes locales dans formulaire mobile;N/A;N/A;N/A;DOUBLE_SOURCE_UX;Pas encore de référentiel API pour ces choix.
+Routes API;Source active;bootstrap/app.php -> routes/api.php;Oui;Oui;Oui;Oui;Oui;ALIGNE;Des fichiers de routes historiques restent présents mais ne sont pas le point d'entrée API principal.

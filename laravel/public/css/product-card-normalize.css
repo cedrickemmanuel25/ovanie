@@ -1,0 +1,320 @@
+/*
+ * ============================================================
+ *  OVANIE — Normalisation images cartes produit v1.0
+ *  Règle universelle : toutes les cartes produit ont
+ *  un conteneur image carré 1:1, fond #f8fafc,
+ *  image en object-fit:contain sans déformation.
+ *
+ *  Ce fichier s'applique EN DERNIER (chargé après tous les
+ *  autres CSS) pour écraser toute hauteur fixe héritée.
+ * ============================================================
+ */
+
+/* ----------------------------------------------------------------
+   1. TOKEN COMMUN — valeurs partagées
+---------------------------------------------------------------- */
+:root {
+  --ov-card-img-bg:     #f8fafc;
+  --ov-card-img-radius: 0px;       /* bords gérés par la carte parente */
+  --ov-card-img-pad:    10px;      /* petit padding pour respiration */
+}
+
+/* ----------------------------------------------------------------
+   2. CONTENEURS IMAGE — carré 1:1 obligatoire
+   Toutes les classes utilisées dans les cartes produit OVANIE
+---------------------------------------------------------------- */
+
+/* Composant hm-card (accueil, catalogue, suggestions) */
+.hm-card__image,
+a.hm-card__image {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  min-height: unset !important;
+  max-height: unset !important;
+  padding: var(--ov-card-img-pad) !important;
+  background: var(--ov-card-img-bg) !important;
+  overflow: hidden !important;
+  border-bottom: 1px solid #eef2f8 !important;
+  border-radius: var(--ov-card-img-radius) !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+/* Composant ovanie-product-card (home slider, best-sellers, flash) */
+.ovanie-product-card__image {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  min-height: unset !important;
+  max-height: unset !important;
+  padding: var(--ov-card-img-pad) !important;
+  background: var(--ov-card-img-bg) !important;
+  overflow: hidden !important;
+  border-bottom: 1px solid #eef2f8 !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+/* Composant catalogue — ovcat-product-media */
+.ovcat-product-media {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  min-height: unset !important;
+  max-height: unset !important;
+  padding: var(--ov-card-img-pad) !important;
+  background: var(--ov-card-img-bg) !important;
+  overflow: hidden !important;
+  border-bottom: 1px solid #eef2f8 !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+/* Mini-cartes accueil */
+.ovanie-mini-card {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.ovanie-mini-card .ovanie-mini-card__img-wrap,
+.ovanie-mini-card > a > span,
+.ovanie-mini-card > a {
+  display: block !important;
+  width: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  overflow: hidden !important;
+}
+
+/* ----------------------------------------------------------------
+   3. IMAGES — contain + center, jamais cover sur les cartes BTP
+---------------------------------------------------------------- */
+
+.hm-card__image img,
+a.hm-card__image img,
+.ovanie-product-card__image img,
+.ovcat-product-media img,
+.ovcat-product-img {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  transform: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  flex-shrink: 0 !important;
+  transition: transform .22s ease !important;
+}
+
+/* Effet hover léger */
+.hm-card:hover .hm-card__image img,
+.hm-card:hover a.hm-card__image img,
+.ovanie-product-card:hover .ovanie-product-card__image img,
+.ovcat-product-card:hover .ovcat-product-media img,
+.ovcat-product-card:hover .ovcat-product-img {
+  transform: scale(1.04) !important;
+}
+
+/* Mini-cartes image */
+.ovanie-mini-card img {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  background: var(--ov-card-img-bg) !important;
+  border-radius: 8px !important;
+  padding: 8px !important;
+  box-sizing: border-box !important;
+}
+
+/* ----------------------------------------------------------------
+   4. ALIGNEMENT DU BODY — prix, titre, bouton restent alignés
+   La carte utilise flex-column, le body prend l'espace restant.
+---------------------------------------------------------------- */
+
+.hm-card {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.hm-card__body {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.ovanie-product-card {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.ovanie-product-card__body {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.ovcat-product-card {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.ovcat-product-body {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* ----------------------------------------------------------------
+   5. PANIER — images suggestions & ligne produit
+---------------------------------------------------------------- */
+
+/* Image ligne panier */
+.cart-product-img,
+.cart-item-img,
+.cart-item__img,
+.cart-item__image img,
+.cs-product-img img {
+  width: 64px !important;
+  height: 64px !important;
+  aspect-ratio: 1 / 1 !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  background: var(--ov-card-img-bg) !important;
+  border-radius: 8px !important;
+  flex-shrink: 0 !important;
+  border: 1px solid #eef2f8 !important;
+}
+
+.cs-product-img {
+  width: 64px !important;
+  height: 64px !important;
+  aspect-ratio: 1 / 1 !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+  border-radius: 8px !important;
+  background: var(--ov-card-img-bg) !important;
+}
+
+/* ----------------------------------------------------------------
+   6. FICHE PRODUIT — miniatures galerie
+---------------------------------------------------------------- */
+
+.ov-mini-product__image,
+.ov-thumb-item,
+.product-thumb,
+.gallery-thumb {
+  aspect-ratio: 1 / 1 !important;
+  overflow: hidden !important;
+  background: var(--ov-card-img-bg) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.ov-mini-product__image img,
+.ov-thumb-item img,
+.product-thumb img,
+.gallery-thumb img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center !important;
+}
+
+/* ----------------------------------------------------------------
+   7. RESPONSIVE — s'assurer que les heights fixes des media
+   queries existantes ne cassent pas aspect-ratio
+---------------------------------------------------------------- */
+
+@media (max-width: 767px) {
+  .hm-card__image,
+  a.hm-card__image,
+  .ovanie-product-card__image,
+  .ovcat-product-media {
+    /* aspect-ratio gère la hauteur — ne jamais forcer en mobile */
+    height: auto !important;
+    min-height: unset !important;
+    max-height: unset !important;
+  }
+}
+
+/* ----------------------------------------------------------------
+   8. ANNULER les mix-blend-mode et filtres qui altèrent le blanc
+   (ils causent des artefacts sur fond #f8fafc)
+---------------------------------------------------------------- */
+
+.hm-card__image img,
+a.hm-card__image img,
+.ovanie-product-card__image img,
+.ovcat-product-media img,
+.ovcat-product-img {
+  mix-blend-mode: normal !important;
+  filter: none !important;
+}
+
+/* ----------------------------------------------------------------
+   9. VUE LISTE CATALOGUE — ne pas écraser le layout horizontal
+---------------------------------------------------------------- */
+.catalog-main--list .ovcat-product-card {
+  display: grid !important;
+  grid-template-columns: 150px minmax(0, 1fr) !important;
+  flex-direction: initial !important;
+  align-items: stretch !important;
+}
+
+.catalog-main--list .ovcat-product-media-wrap {
+  width: 150px !important;
+  height: 100% !important;
+}
+
+.catalog-main--list .ovcat-product-media {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: auto !important;
+}
+
+@media (max-width: 640px) {
+  .catalog-main--list .ovcat-product-card {
+    grid-template-columns: 96px minmax(0, 1fr) !important;
+    min-height: 142px !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  .catalog-main--list .ovcat-product-media-wrap {
+    width: 96px !important;
+    height: 100% !important;
+  }
+
+  .catalog-main--list .ovcat-product-media {
+    height: 100% !important;
+    min-height: 130px !important;
+    aspect-ratio: auto !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .catalog-main--list .ovcat-product-card {
+    grid-template-columns: 86px minmax(0, 1fr) !important;
+  }
+
+  .catalog-main--list .ovcat-product-media-wrap {
+    width: 86px !important;
+  }
+}

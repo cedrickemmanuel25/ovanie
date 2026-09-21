@@ -1,0 +1,32 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.jks
+*.keystore
+key.properties
+local.properties
+auth.json
+
+# Dependencies and generated artifacts
+node_modules/
+vendor/
+.gradle/
+.gradle-*/
+.dart_tool/
+.pub-cache/
+build/
+coverage/
+*.apk
+*.aab
+cloudflared.exe
+
+# Local tools and operating system files
+.claude/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

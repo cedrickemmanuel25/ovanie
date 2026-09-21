@@ -1,0 +1,9 @@
+﻿application;reference;usage_status;file;evidence;risk
+App Client;Checkout communes/quartiers;ACTIVE;mobile client/lib/features/checkout/data/abidjan_localities.dart;importé par checkout_screen.dart;Doit être comparé à /mobile/delivery-territory
+App Client;Catégories officielles;LEGACY_NON_REFERENCE;mobile client/lib/features/categories/data/official_categories.dart;aucun import actif trouvé;Ne pas considérer comme source active dans ce ZIP
+App Client;Opérateurs reprise paiement;ACTIVE;mobile client/lib/features/payments/presentation/resume_payment_screen.dart;_operators statique;Backend expose aussi supported_payment_operators
+App Client;Motifs/créneaux retour;ACTIVE;mobile client/lib/features/returns/presentation/return_form_screen.dart;listes locales;Pas de meta de retour identifié
+App Vendeur;Types de vente produit;ACTIVE;mobile vendeur/lib/features/products/product_form_screen.dart;_saleTypes statique;Conflit de sens avec sale_type Web
+App Vendeur;Catégories édition boutique;ACTIVE;mobile vendeur/lib/features/menu/profile_screens.dart;static const categories;Peut diverger de Category Laravel
+App Livreur;Types de véhicule/jours;ACTIVE;mobile livreur /lib/features/onboarding/onboarding_data.dart;constantes locales;Actuellement alignées avec backend, mais dupliquées
+App Livreur;Communes statiques historiques;LEGACY/À_VÉRIFIER;mobile livreur /lib/features/onboarding/onboarding_data.dart;kAbidjanCommunes;écran Zones utilise API dynamique dans ce ZIP

@@ -1,0 +1,8 @@
+[Fri Jun 19 09:38:47 2026] PHP 8.4.6 Development Server (http://127.0.0.1:8001) started
+[Fri Jun 19 09:38:50 2026] 127.0.0.1:64231 Accepted
+[Fri Jun 19 09:38:50 2026] PHP Warning:  require_once(C:\Users\yaoce\Downloads\ovanie\laravel\public/index.php): Failed to open stream: No such file or directory in C:\Users\yaoce\Downloads\ovanie\laravel\vendor\laravel\framework\src\Illuminate\Foundation\resources\server.php on line 23
+[Fri Jun 19 09:38:50 2026] PHP Fatal error:  Uncaught Error: Failed opening required 'C:\Users\yaoce\Downloads\ovanie\laravel\public/index.php' (include_path='.;C:\php\pear') in C:\Users\yaoce\Downloads\ovanie\laravel\vendor\laravel\framework\src\Illuminate\Foundation\resources\server.php:23
+Stack trace:
+#0 {main}
+  thrown in C:\Users\yaoce\Downloads\ovanie\laravel\vendor\laravel\framework\src\Illuminate\Foundation\resources\server.php on line 23
+[Fri Jun 19 09:38:50 2026] 127.0.0.1:64231 Closing

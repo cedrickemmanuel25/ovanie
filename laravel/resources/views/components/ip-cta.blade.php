@@ -1,0 +1,1 @@
+<section class="ip-cta"><div><h2>{{$title}}</h2><p>Découvrez nos solutions et rejoignez l’écosystème OVANIE.</p></div><a class="ip-btn" href="{{route('catalog.index')}}">Découvrir OVANIE →</a></section>

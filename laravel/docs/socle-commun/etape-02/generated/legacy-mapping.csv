@@ -1,0 +1,40 @@
+mapping_id,legacy_field,canonical_field,legacy_value,canonical_value
+product.sale_type.web,products.sale_type,product.commercial_sale_type,"Vente normale",normal
+product.sale_type.web,products.sale_type,product.commercial_sale_type,normal,normal
+product.sale_type.web,products.sale_type,product.commercial_sale_type,"Vente flash",flash_sale
+product.sale_type.web,products.sale_type,product.commercial_sale_type,"vente flash",flash_sale
+product.sale_type.web,products.sale_type,product.commercial_sale_type,flash,flash_sale
+product.sale_type.web,products.sale_type,product.commercial_sale_type,flash_sale,flash_sale
+product.sale_type.web,products.sale_type,product.commercial_sale_type,"Black Friday",black_friday
+product.sale_type.web,products.sale_type,product.commercial_sale_type,"black friday",black_friday
+product.sale_type.web,products.sale_type,product.commercial_sale_type,"Promo spéciale",promotion
+product.sale_type.web,products.sale_type,product.commercial_sale_type,promo,promotion
+product.sale_type.web,products.sale_type,product.commercial_sale_type,promotion,promotion
+product.sale_type.mobile_vendor,products.sale_type,product.selling_mode,standard,unit
+product.sale_type.mobile_vendor,products.sale_type,product.selling_mode,lot,lot
+product.sale_type.mobile_vendor,products.sale_type,product.selling_mode,weight,weight
+product.sale_type.mobile_vendor,products.sale_type,product.selling_mode,meter,linear_meter
+product.sale_type.mobile_vendor,products.sale_type,product.selling_mode,surface,surface
+product.sale_type.mobile_vendor,products.sale_type,product.selling_mode,volume,volume
+product.status,products.status,product.publication_status,brouillon,draft
+product.status,products.status,product.publication_status,draft,draft
+product.status,products.status,product.publication_status,pending_logistics,pending_logistics
+product.status,products.status,product.publication_status,actif,active
+product.status,products.status,product.publication_status,active,active
+product.status,products.status,product.publication_status,approved,active
+product.status,products.status,product.publication_status,inactif,inactive
+product.status,products.status,product.publication_status,inactive,inactive
+product.status,products.status,product.publication_status,archived,archived
+driver.status,delivery_drivers.status,driver.availability_status,Disponible,available
+driver.status,delivery_drivers.status,driver.availability_status,Indisponible,unavailable
+driver.status,delivery_drivers.status,driver.availability_status,"En mission",on_mission
+driver.status,delivery_drivers.status,driver.availability_status,"En livraison",on_mission
+payment.status,payments.status,payment.status,waiting,pending
+payment.status,payments.status,payment.status,initiated,pending
+payment.status,payments.status,payment.status,success,paid
+payment.status,payments.status,payment.status,successful,paid
+payment.status,payments.status,payment.status,completed,paid
+payment.status,payments.status,payment.status,validated,paid
+payment.status,payments.status,payment.status,confirmed,paid
+payment.status,payments.status,payment.status,error,failed
+payment.status,payments.status,payment.status,canceled,cancelled

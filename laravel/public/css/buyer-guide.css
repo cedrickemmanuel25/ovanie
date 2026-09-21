@@ -1,0 +1,643 @@
+:root {
+    --bg-blue: #f5f8fd;
+    --navy: #061d58;
+    --blue: #0c55ec;
+    --blue-soft: #eef5ff;
+    --orange: #ff6200;
+    --green: #13a33d;
+    --red: #ff3038;
+    --text: #0a214f;
+    --muted: #667793;
+    --line: #dbe5f1;
+    --card: #ffffff;
+}
+
+.buyer-guide-page {
+    background: linear-gradient(180deg, #fbfdff 0%, #f5f8fd 100%);
+    padding: 18px 0 50px;
+    color: var(--text);
+}
+
+.buyer-guide-shell {
+    width: min(calc(100% - 40px), 1440px);
+    margin: 0 auto;
+}
+
+.buyer-guide-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 18px;
+    min-height: 32px;
+    color: #536789;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.buyer-guide-breadcrumb a {
+    color: #0c55ec;
+    text-decoration: none;
+}
+
+.buyer-guide-breadcrumb svg {
+    width: 14px;
+    height: 14px;
+}
+
+.buyer-guide-layout {
+    display: grid;
+    grid-template-columns: 270px minmax(0, 1fr);
+    gap: 26px;
+    align-items: start;
+}
+
+.buyer-guide-sidebar {
+    position: sticky;
+    top: 18px;
+    display: grid;
+    gap: 20px;
+}
+
+.buyer-guide-summary-card,
+.buyer-guide-commitment-card,
+.buyer-guide-hero,
+.buyer-guide-card,
+.buyer-guide-contact {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(7, 29, 72, .045);
+}
+
+.buyer-guide-summary-card {
+    padding: 20px 0 14px;
+    overflow: hidden;
+}
+
+.buyer-guide-summary-card h2 {
+    margin: 0 20px 12px;
+    font-size: 15px;
+    text-transform: uppercase;
+    font-weight: 900;
+    letter-spacing: .03em;
+}
+
+.buyer-guide-summary {
+    display: grid;
+}
+
+.buyer-guide-summary a {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 6px;
+    align-items: start;
+    padding: 12px 16px;
+    color: #213963;
+    text-decoration: none;
+    font-size: 13px;
+    line-height: 1.35;
+    font-weight: 650;
+    border-left: 3px solid transparent;
+    transition: .18s ease;
+}
+
+.buyer-guide-summary a:hover,
+.buyer-guide-summary a.is-active {
+    color: var(--blue);
+    background: #f0f5ff;
+    border-left-color: var(--blue);
+}
+
+.buyer-guide-summary a span {
+    color: inherit;
+}
+
+.buyer-guide-commitment-card {
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+}
+
+.buyer-guide-commitment-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #eef5ff;
+    color: var(--blue);
+    display: grid;
+    place-items: center;
+}
+
+.buyer-guide-commitment-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.buyer-guide-commitment-card h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+}
+
+.buyer-guide-commitment-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.buyer-guide-main {
+    min-width: 0;
+    display: grid;
+    gap: 18px;
+}
+
+.buyer-guide-hero {
+    min-height: 250px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr);
+    overflow: hidden;
+}
+
+.buyer-guide-hero__copy {
+    padding: 28px 28px 24px;
+    align-self: center;
+}
+
+.buyer-guide-hero__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 6px 12px;
+    border: 1px solid #cfe0ff;
+    border-radius: 999px;
+    color: var(--blue);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.buyer-guide-hero__eyebrow svg {
+    width: 18px;
+    height: 18px;
+}
+
+.buyer-guide-hero h1 {
+    margin: 18px 0 10px;
+    color: var(--navy);
+    font-size: clamp(32px, 3.4vw, 48px);
+    line-height: 1.04;
+    letter-spacing: -.035em;
+    font-weight: 900;
+}
+
+.buyer-guide-hero strong {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 16px;
+}
+
+.buyer-guide-hero p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.65;
+    max-width: 700px;
+}
+
+.buyer-guide-hero__visual {
+    position: relative;
+    min-height: 250px;
+    overflow: hidden;
+}
+
+.buyer-guide-hero__circle {
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    right: 35px;
+    top: 12px;
+    background: #eef4ff;
+}
+
+.buyer-guide-shield {
+    position: absolute;
+    right: 210px;
+    top: 54px;
+    width: 98px;
+    height: 112px;
+    z-index: 5;
+    color: #fff;
+    background: linear-gradient(145deg, #0c58ff, #0733a7);
+    clip-path: polygon(50% 0, 95% 18%, 87% 72%, 50% 100%, 13% 72%, 5% 18%);
+    display: grid;
+    place-items: center;
+    filter: drop-shadow(0 14px 20px rgba(11, 71, 210, .22));
+}
+
+.buyer-guide-shield svg {
+    width: 56px;
+    height: 56px;
+}
+
+.buyer-guide-material {
+    position: absolute;
+    z-index: 3;
+}
+
+.buyer-guide-material--block {
+    left: 20px;
+    bottom: 40px;
+    width: 150px;
+    height: 74px;
+    background: linear-gradient(180deg, #a8a8a8, #797979);
+    transform: skewY(-4deg);
+    box-shadow: inset -30px 0 0 rgba(0,0,0,.08);
+}
+
+.buyer-guide-material--block::before,
+.buyer-guide-material--block::after {
+    content: '';
+    position: absolute;
+    width: 34px;
+    height: 34px;
+    border: 4px solid #737373;
+    border-radius: 4px;
+    top: 18px;
+    background: #666;
+}
+.buyer-guide-material--block::before { left: 30px; }
+.buyer-guide-material--block::after { right: 28px; }
+
+.buyer-guide-material--bag {
+    right: 80px;
+    bottom: 44px;
+    width: 104px;
+    height: 128px;
+    border-radius: 10px 10px 4px 4px;
+    background: linear-gradient(180deg, #e3c28b, #c49858);
+    color: #30210d;
+    font-weight: 900;
+    font-size: 18px;
+    text-align: center;
+    padding-top: 38px;
+    transform: rotate(2deg);
+    box-shadow: 0 12px 18px rgba(80, 53, 12, .16);
+}
+
+.buyer-guide-material--bag small {
+    font-size: 12px;
+}
+
+.buyer-guide-material--bars {
+    right: 0;
+    bottom: 36px;
+    width: 170px;
+    height: 54px;
+    transform: rotate(-10deg);
+}
+
+.buyer-guide-material--bars span {
+    display: block;
+    height: 9px;
+    border-radius: 999px;
+    margin: 2px 0;
+    background: repeating-linear-gradient(90deg, #626d7b 0 7px, #9099a4 7px 12px);
+}
+
+.buyer-guide-duo {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.buyer-guide-card {
+    position: relative;
+    padding: 20px 22px;
+}
+
+.buyer-guide-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 14px 0 0 14px;
+    background: #0a3fbd;
+}
+
+.buyer-guide-card--success::before { background: var(--green); }
+.buyer-guide-card--danger::before { background: var(--red); }
+
+.buyer-guide-card h2,
+.buyer-guide-contact h2 {
+    margin: 0 0 12px;
+    font-size: 18px;
+    line-height: 1.25;
+    text-transform: uppercase;
+    color: var(--navy);
+    font-weight: 900;
+}
+
+.buyer-guide-card > p {
+    margin: 0 0 12px;
+    color: #51627d;
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.buyer-guide-check-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.buyer-guide-check-list li {
+    position: relative;
+    padding-left: 28px;
+    color: #31425f;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.buyer-guide-check-list li::before {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.buyer-guide-check-list--success li::before { content: '✓'; color: var(--green); border: 1px solid var(--green); }
+.buyer-guide-check-list--danger li::before { content: '×'; color: var(--red); border: 1px solid var(--red); }
+.buyer-guide-check-list--blue li::before { content: '✓'; color: var(--blue); border: 1px solid var(--blue); }
+
+.buyer-guide-note {
+    margin-top: 16px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.buyer-guide-note svg { width: 18px; height: 18px; flex: 0 0 18px; }
+.buyer-guide-note--success { color: #167232; background: #ecf9ef; border: 1px solid #c9efd2; }
+.buyer-guide-note--danger { color: #c11b23; background: #fff0f1; border: 1px solid #ffd0d3; }
+
+.buyer-guide-card--steps { padding-bottom: 24px; }
+
+.buyer-guide-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 22px;
+}
+
+.buyer-guide-step-card {
+    position: relative;
+    min-height: 120px;
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    padding: 18px;
+    border: 1px solid #d4e1f3;
+    border-radius: 12px;
+    background: #f9fbff;
+}
+
+.buyer-guide-step-number {
+    position: absolute;
+    top: -34px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: var(--blue);
+    font-size: 15px;
+    font-weight: 900;
+}
+
+.buyer-guide-step-card::before {
+    content: '';
+    position: absolute;
+    top: -18px;
+    left: 0;
+    right: 0;
+    border-top: 1px dashed #9bbdfb;
+}
+
+.buyer-guide-step-icon {
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    color: var(--navy);
+}
+
+.buyer-guide-step-icon svg { width: 42px; height: 42px; }
+
+.buyer-guide-step-card h3 {
+    margin: 0 0 6px;
+    font-size: 13px;
+    color: var(--navy);
+}
+
+.buyer-guide-step-card p {
+    margin: 0;
+    color: #5d6f8a;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.buyer-guide-card--solutions > h3 {
+    margin: 12px 0;
+    font-size: 14px;
+    color: var(--navy);
+}
+
+.buyer-guide-solutions-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.buyer-guide-solution {
+    min-height: 116px;
+    padding: 16px;
+    border: 1px solid #dbe5f1;
+    border-radius: 12px;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+    background: #fff;
+}
+
+.buyer-guide-solution > span {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+}
+.buyer-guide-solution > span svg { width: 26px; height: 26px; }
+.buyer-guide-solution strong { display: block; margin-bottom: 5px; font-size: 13px; }
+.buyer-guide-solution p { margin: 0; color: #5d6f8a; font-size: 12px; line-height: 1.4; }
+.buyer-guide-solution--green > span { color: #169a3a; background: #ecf9ef; }
+.buyer-guide-solution--orange > span { color: #ff7a00; background: #fff4e8; }
+.buyer-guide-solution--blue > span { color: #1260ef; background: #edf4ff; }
+.buyer-guide-solution--purple > span { color: #742de4; background: #f4edff; }
+
+.buyer-guide-duo--lower .buyer-guide-card {
+    min-height: 240px;
+}
+
+.buyer-guide-delay-row {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid #e6edf5;
+}
+
+.buyer-guide-delay-row strong {
+    color: var(--blue);
+    font-size: 22px;
+}
+
+.buyer-guide-delay-row span {
+    color: #445673;
+    font-size: 13px;
+}
+
+.buyer-guide-muted {
+    color: #75849a !important;
+    font-size: 12px !important;
+    margin-top: 14px !important;
+}
+
+.buyer-guide-general-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.buyer-guide-general-grid > div {
+    padding: 16px;
+    border: 1px solid #dfe7f1;
+    border-radius: 12px;
+    background: #fbfdff;
+}
+
+.buyer-guide-general-grid h3 {
+    margin: 0 0 8px;
+    color: var(--navy);
+    font-size: 14px;
+}
+
+.buyer-guide-general-grid p {
+    margin: 0;
+    color: #5f7089;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.buyer-guide-contact {
+    padding: 20px 22px;
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr) auto;
+    gap: 18px;
+    align-items: center;
+}
+
+.buyer-guide-contact__icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background: #eef5ff;
+    color: var(--blue);
+    display: grid;
+    place-items: center;
+}
+.buyer-guide-contact__icon svg { width: 28px; height: 28px; }
+.buyer-guide-contact h2 { margin-bottom: 5px; }
+.buyer-guide-contact p { margin: 0; color: #5e708b; font-size: 13px; }
+
+.buyer-guide-contact__actions {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.buyer-guide-contact__actions a {
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: 9px;
+    background: linear-gradient(180deg, #ff720f, #ff5c00);
+    color: #fff;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.buyer-guide-contact__actions a svg { width: 16px; height: 16px; }
+.buyer-guide-contact__actions span { color: var(--navy); font-size: 14px; font-weight: 800; white-space: nowrap; }
+
+@media (max-width: 1180px) {
+    .buyer-guide-layout { grid-template-columns: 230px minmax(0, 1fr); }
+    .buyer-guide-hero { grid-template-columns: 1fr; }
+    .buyer-guide-hero__visual { min-height: 220px; }
+    .buyer-guide-solutions-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+    .buyer-guide-shell { width: min(calc(100% - 24px), 1440px); }
+    .buyer-guide-layout { grid-template-columns: 1fr; }
+    .buyer-guide-sidebar { position: static; }
+    .buyer-guide-summary-card { display: none; }
+    .buyer-guide-duo,
+    .buyer-guide-steps,
+    .buyer-guide-general-grid { grid-template-columns: 1fr; }
+    .buyer-guide-step-card::before { display: none; }
+    .buyer-guide-step-number { top: 10px; left: 18px; transform: none; }
+    .buyer-guide-step-card { padding-top: 54px; }
+    .buyer-guide-contact { grid-template-columns: 54px minmax(0, 1fr); }
+    .buyer-guide-contact__actions { grid-column: 1 / -1; justify-content: flex-start; flex-wrap: wrap; }
+}
+
+@media (max-width: 640px) {
+    .buyer-guide-page { padding-top: 10px; }
+    .buyer-guide-hero__copy { padding: 22px 18px; }
+    .buyer-guide-hero h1 { font-size: 32px; }
+    .buyer-guide-card { padding: 18px 16px; }
+    .buyer-guide-solutions-grid { grid-template-columns: 1fr; }
+    .buyer-guide-hero__circle { right: -30px; }
+    .buyer-guide-shield { right: 120px; }
+    .buyer-guide-material--bag { right: 26px; }
+    .buyer-guide-material--bars { right: -50px; }
+    .buyer-guide-contact { grid-template-columns: 1fr; }
+    .buyer-guide-contact__actions { flex-direction: column; align-items: stretch; }
+    .buyer-guide-contact__actions a { justify-content: center; }
+}

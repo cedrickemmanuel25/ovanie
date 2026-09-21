@@ -1,0 +1,3 @@
+.modal { display: none; }
+.modal.hidden { display: none !important; }
+.modal.active { display: flex; }

@@ -1,0 +1,25 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Block sensitive files accidentally placed in public/.
+    RewriteRule (?i)^(phpinfo|test)\.php$ - [F,L]
+    RewriteRule (?i)\.(env|sql|bak|zip|rar|7z|log|key|pem|p12|pfx|crt|iss|exe)$ - [F,L]
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Route toutes les requêtes virtuelles vers index.php
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+# ─────────────────────────────────────────────────────────────
+# FALLBACK LiteSpeed — si mod_rewrite est désactivé par cPanel,
+# ErrorDocument 404 intercepte les URLs virtuelles et les
+# transmet à index.php. Laravel lit REQUEST_URI et route
+# normalement. Supprimer cette ligne si mod_rewrite fonctionne.
+# ─────────────────────────────────────────────────────────────
+ErrorDocument 404 /index.php

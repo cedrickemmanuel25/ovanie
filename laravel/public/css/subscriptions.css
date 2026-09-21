@@ -1,0 +1,21 @@
+.plans {
+  display: flex;
+  gap: 30px;
+}
+
+.plan {
+  background: white;
+  padding: 30px;
+  border-radius: 14px;
+  width: 300px;
+  text-align: center;
+}
+
+.featured {
+  border: 2px solid #f97316;
+}
+
+.price {
+  font-size: 22px;
+  font-weight: bold;
+}

@@ -1,0 +1,6 @@
+@php
+    $mapPoints=collect($ovanieShops ?? [])->map(fn($shop)=>['label'=>$shop['name'],'lat'=>$shop['lat'],'lng'=>$shop['lng'],'kind'=>'shop','status'=>'done'])->concat(collect($mapMissions)->map(fn($row)=>['label'=>$row['reference'].' · '.$row['destination'],'lat'=>$row['lat'],'lng'=>$row['lng'],'kind'=>'destination','status'=>$row['delayed']?'late':'in_progress','url'=>$row['trackingUrl'],'id'=>$row['id']]));
+    $mapPoints=$mapPoints->concat(collect($mapMissions)->filter(fn($row)=>$row['position']??null)->map(fn($row)=>['label'=>$row['reference'],'lat'=>$row['position']['lat'],'lng'=>$row['position']['lng'],'kind'=>'driver','status'=>'in_progress','url'=>$row['trackingUrl'],'id'=>$row['id']]));
+    $mapTour=['stops'=>$mapPoints->all(),'routeSegments'=>collect($mapMissions)->flatMap(fn($row)=>$row['routeSegments'])->all()];
+@endphp
+<div class="ops-supervision-map"><x-operations.map :tour="$mapTour" :summary="false" mode="supervision"/><div class="ops-supervision-legend"><span><x-operations.icon name="warehouse"/>Boutique OVANIE</span><span class="text-blue"><x-operations.icon name="pin"/>Destination</span><span class="text-red">● Retard</span></div><span class="ops-map-sync">● Actualisé à {{ now()->format('H:i') }}</span></div>
