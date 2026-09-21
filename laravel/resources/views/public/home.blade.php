@@ -312,6 +312,7 @@
         @include('public.home.hero')
         @include('public.home.categories')
         @include('public.home.commerce-row')
+        @include('public.home.best-sellers')
         @include('public.home.promotions')
         @include('public.home.event-offers')
         @include('public.home.featured-selection')

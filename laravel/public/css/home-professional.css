@@ -266,7 +266,7 @@
 }
 
 /* Commerce */
-.ov-commerce-row { margin-top: 14px; display: grid; grid-template-columns: 232px minmax(0,1fr) 320px; gap: 14px; align-items: stretch; }
+.ov-commerce-row { margin-top: 14px; display: grid; grid-template-columns: 232px minmax(0,1fr); gap: 14px; align-items: stretch; }
 .ov-promotion-card {
     position: relative;
     overflow: hidden;
@@ -308,6 +308,11 @@
 
 .ov-flash-panel,
 .ov-best-panel { padding: 16px; }
+.ov-best-panel,
+.ov-promo-panel,
+.ov-featured-selection-panel { margin-top: 14px; }
+.ov-promo-panel,
+.ov-featured-selection-panel { padding: 16px; }
 .ov-product-grid { display: grid; gap: 10px; }
 .ov-product-grid--3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
 .ov-product-card {
@@ -320,10 +325,12 @@
 .ov-product-card__image {
     aspect-ratio: 1 / 1;
     padding: 12px;
-    display: grid;
-    place-items: center;
+    display: block;
     background: #f8fafc;
 }
+/* display:block (pas grid) ici : un img avec height:100% dans un conteneur
+   display:grid ne respecte pas aspect-ratio dans Chromium — l'image déborde
+   selon son ratio naturel au lieu d'être contenue dans une case carrée. */
 .ov-product-card__image img { width: 100%; height: 100%; object-fit: contain; }
 .ov-product-card__body { padding: 12px; }
 .ov-product-card__name {
@@ -600,7 +607,7 @@
 
 @media (max-width: 1280px) {
     .ov-category-grid { grid-template-columns: repeat(4, minmax(0,1fr)); }
-    .ov-commerce-row { grid-template-columns: 210px minmax(0,1fr) 290px; }
+    .ov-commerce-row { grid-template-columns: 210px minmax(0,1fr); }
     .ov-benefit-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
     .ov-gift-grid { grid-template-columns: 1fr; }
     .ov-gift-card { grid-template-columns: minmax(0,1fr) 260px; }
@@ -650,7 +657,10 @@
     .ov-panel { padding: 12px; }
     .ov-category-section,
     .ov-commerce-row,
+    .ov-best-panel,
+    .ov-promo-panel,
     .ov-feature-section,
+    .ov-featured-selection-panel,
     .ov-gift-section,
     .ov-benefits-section,
     .ov-business,
