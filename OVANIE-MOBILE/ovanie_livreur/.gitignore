@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Identifiants Firebase locaux/production : jamais versionnés (voir
+# android/app/build.gradle.kts, qui active le plug-in Google Services
+# automatiquement dès que ce fichier existe).
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist

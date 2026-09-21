@@ -5,6 +5,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// La configuration Firebase locale/production reste hors du dépôt.
+// Si android/app/google-services.json est présent, le plug-in Google Services
+// est activé automatiquement. L'application peut aussi être initialisée via
+// les FirebaseOptions fournis par --dart-define.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.ovanie.ovanie_livreur"
     compileSdk = flutter.compileSdkVersion
