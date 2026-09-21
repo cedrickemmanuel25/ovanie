@@ -28,6 +28,7 @@
 
     $returnsUrl = $ovRoute(['vendor.returns.index'], '/vendeur/returns');
     $disputesUrl = $ovRoute(['vendor.disputes.index'], '/vendeur/disputes');
+    $reviewsUrl = $ovRoute(['vendor.reviews.index'], '/vendeur/reviews');
 
     $vendorActesUrl = $ovRoute(['vendor.vendeur-actes'], '/vendeur/vendeur-actes');
     $shopProfileUrl = $ovRoute(['vendor.shop.profile'], '/vendeur/shop-profile');
@@ -122,6 +123,9 @@
 
     $isDisputes = request()->routeIs('vendor.disputes.*')
         || request()->is('vendeur/disputes*');
+
+    $isReviews = request()->routeIs('vendor.reviews.*')
+        || request()->is('vendeur/reviews*');
 
     $isVendorActes = request()->routeIs('vendor.vendeur-actes')
         || request()->is('vendeur/vendeur-actes');
@@ -1169,6 +1173,13 @@
                                 <a href="{{ $disputesUrl }}" class="ov-sidebar-link {{ $isDisputes ? 'is-active' : '' }}">
                                     <i data-lucide="shield-alert"></i>
                                     <span>Litiges</span>
+                                </a>
+                            </li>
+
+                            <li>
+                                <a href="{{ $reviewsUrl }}" class="ov-sidebar-link {{ $isReviews ? 'is-active' : '' }}">
+                                    <i data-lucide="star"></i>
+                                    <span>Avis clients</span>
                                 </a>
                             </li>
                         </ul>

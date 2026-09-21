@@ -24,6 +24,7 @@ use App\Http\Controllers\LogisticsPilotageController;
 use App\Http\Controllers\DeliveryIncidentController;
 use App\Http\Controllers\VendorDashboardController;
 use App\Http\Controllers\VendorDisputeController;
+use App\Http\Controllers\VendorReviewController;
 use App\Http\Controllers\VendorOrderController;
 use App\Http\Controllers\VendorPaymentController;
 use App\Http\Controllers\VendorProductController;
@@ -465,6 +466,9 @@ Route::middleware('auth')->group(function () {
             Route::post('/disputes/{id}/respond', [VendorDisputeController::class, 'respond'])->name('disputes.respond');
             Route::post('/disputes/{id}/escalate', [VendorDisputeController::class, 'escalate'])->name('disputes.escalate');
 
+            Route::get('/reviews', [VendorReviewController::class, 'index'])->name('reviews.index');
+            Route::post('/reviews/{review}/reply', [VendorReviewController::class, 'reply'])->name('reviews.reply');
+
         });
 
     // Ancien espace /daniel : conservé seulement en redirection pour éviter les doublons.
@@ -485,6 +489,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/payouts', fn () => redirect()->route('vendor.payouts.index'))->name('payouts.index');
         Route::get('/returns', fn () => redirect()->route('vendor.returns.index'))->name('returns.index');
         Route::get('/disputes', fn () => redirect()->route('vendor.disputes.index'))->name('disputes.index');
+        Route::get('/reviews', fn () => redirect()->route('vendor.reviews.index'))->name('reviews.index');
         Route::get('/orders/{order}', fn ($order) => redirect()->route('vendor.orders.show', $order))->name('orders.show');
         Route::get('/products/{product}/edit', fn ($product) => redirect()->route('vendor.products.edit', $product))->name('products.edit');
     });

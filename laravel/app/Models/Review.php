@@ -14,6 +14,10 @@ class Review extends Model
         'comment',
     ];
 
+    protected $casts = [
+        'vendor_replied_at' => 'datetime',
+    ];
+
     // Un avis appartient à un produit
     public function product()
     {
