@@ -77,6 +77,15 @@ class VendorMobileController extends Controller
         $request->headers->set('Accept', 'application/json');
         $request->attributes->set('ovanie_mobile_skip_web_login', true);
 
+        // Compatibilité : l'app mobile vendeur envoie encore 'main_category'
+        // (une seule catégorie) alors que ShopController::store() attend
+        // désormais 'categories' (tableau, plusieurs catégories possibles).
+        // Tant que l'app Flutter n'a pas été mise à jour pour envoyer
+        // 'categories[]', on dérive le tableau attendu depuis l'ancien champ.
+        if (! $request->has('categories') && $request->filled('main_category')) {
+            $request->merge(['categories' => [$request->input('main_category')]]);
+        }
+
         $response = $this->callController(ShopController::class, 'store', [
             'request' => $request,
         ]);
