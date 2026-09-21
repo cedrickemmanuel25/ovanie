@@ -1,0 +1,10 @@
+        <section class="ov-panel ov-benefits-section">
+            <div class="ov-section-head"><h2>Les avantages OVANIE</h2></div>
+            <div class="ov-benefit-grid">
+                <article class="ov-benefit"><span><svg viewBox="0 0 24 24"><path d="m12 3 2 2 3-.3.8 2.8 2.7 1.3-1.1 2.8 1.1 2.8-2.7 1.3-.8 2.8-3-.3-2 2-2-2-3 .3-.8-2.8-2.7-1.3 1.1-2.8-1.1-2.8 2.7-1.3.8-2.8 3 .3 2-2Z"></path><path d="m9 12 2 2 4-4"></path></svg></span><div><strong>Produits vérifiés</strong><p>Un catalogue public respectant les règles de publication OVANIE.</p></div></article>
+                <a href="{{ route('payment.secure') }}" class="ov-benefit"><span><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.7 3 8.4 7 10 4-1.6 7-5.3 7-10V6l-7-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></span><div><strong>Achat sécurisé</strong><p>Paiement et données protégés pendant le parcours de commande.</p></div></a>
+                <a href="{{ route('delivery.info') }}" class="ov-benefit"><span><svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"></path><circle cx="7" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg></span><div><strong>Livraison adaptée</strong><p>La logistique est calculée selon le panier et l’adresse de livraison.</p></div></a>
+                <article class="ov-benefit"><span><svg viewBox="0 0 24 24"><path d="M4 13v-2a8 8 0 0 1 16 0v2"></path><path d="M4 13h3v6H5a1 1 0 0 1-1-1v-5ZM20 13h-3v6h2a1 1 0 0 0 1-1v-5Z"></path><path d="M17 19c0 1.1-1.8 2-4 2"></path></svg></span><div><strong>Assistance 7j/7</strong><p>Centre d’aide et WhatsApp OVANIE pour accompagner les clients.</p></div></article>
+                <a href="{{ route('payment.secure') }}" class="ov-benefit"><span><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 9h18M7 15h4"></path></svg></span><div><strong>Paiement sécurisé</strong><p>Les moyens configurés sont proposés au moment du checkout.</p></div></a>
+            </div>
+        </section>
