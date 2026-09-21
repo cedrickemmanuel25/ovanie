@@ -15,6 +15,7 @@ use App\Policies\DisputePolicy;
 use App\Policies\ProductImagePolicy;
 use App\Observers\OrderItemObserver;
 use App\Observers\OrderObserver;
+use App\Observers\ProductImageObserver;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Notifications\Events\NotificationSent;
@@ -52,6 +53,11 @@ class AppServiceProvider extends ServiceProvider
         // une réception client ou un paiement change d'état.
         OrderItem::observe(OrderItemObserver::class);
         Order::observe(OrderObserver::class);
+
+        // Régénère automatiquement une photo produit fraîchement uploadée en
+        // version "catalogue pro" via l'IA (désactivé par défaut, voir
+        // config/product-images.php ai_enhancement_enabled).
+        ProductImage::observe(ProductImageObserver::class);
 
         // Toute notification Laravel enregistrée en base (ex. logistique) peut
         // aussi devenir un vrai push FCM sans créer un flux mobile parallèle.

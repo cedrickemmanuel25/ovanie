@@ -21,6 +21,8 @@ class ProductImage extends Model
         'original_width',
         'original_height',
         'normalized_at',
+        'ai_image_status',
+        'ai_image_generated_at',
         'url',
         'image',
         'file_path',
@@ -39,6 +41,7 @@ class ProductImage extends Model
         'original_width' => 'integer',
         'original_height' => 'integer',
         'normalized_at' => 'datetime',
+        'ai_image_generated_at' => 'datetime',
     ];
 
     protected $appends = [
