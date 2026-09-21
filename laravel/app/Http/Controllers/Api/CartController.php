@@ -73,7 +73,11 @@ class CartController extends Controller
         $price = (float) ($product->final_price ?? $product->promo_price ?? $product->price);
 
         if ($item) {
-            $item->update(['quantity' => $targetQuantity, 'price' => $price]);
+            $attributes = ['quantity' => $targetQuantity];
+            if ($item->price_source !== 'negotiated') {
+                $attributes['price'] = $price;
+            }
+            $item->update($attributes);
         } else {
             $item = CartItem::create([
                 'cart_id' => $cart->id,

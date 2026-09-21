@@ -88,8 +88,8 @@ class PaymentController extends Controller
                 'item_name' => 'Solde commande OVANIE',
                 'description' => 'Paiement du solde de la commande ' . $order->order_number,
                 'amount' => $amount,
-                'return_url' => route('paydunya.return'),
-                'cancel_url' => route('paydunya.cancel'),
+                'return_url' => route('paydunya.mobile.return'),
+                'cancel_url' => route('paydunya.mobile.cancel'),
                 'channel' => $channel,
             ]);
 

@@ -72,6 +72,17 @@ class CheckoutPaymentOptionsService
                         : null,
                     'operators' => [],
                 ],
+                [
+                    'code' => 'bank_transfer',
+                    'label' => 'Virement bancaire',
+                    'description' => 'Effectuez un virement puis déposez votre preuve de paiement.',
+                    'enabled' => ! $requiresCashOnDelivery,
+                    'required' => false,
+                    'reason' => $requiresCashOnDelivery
+                        ? 'Cette commande doit être réglée à la livraison.'
+                        : null,
+                    'operators' => [],
+                ],
             ],
         ];
     }

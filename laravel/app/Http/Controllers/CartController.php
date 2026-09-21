@@ -279,13 +279,16 @@ class CartController extends Controller
         $unitPrice = $product->final_price ?? $product->price ?? 0;
 
         if ($item) {
+            $isNegotiated = $item->price_source === 'negotiated';
             $newQuantity = (int) $item->quantity + $quantity;
 
             if ($newQuantity > $stock) {
                 $item->quantity = $stock;
-                $item->price = $unitPrice;
-                $item->price_source = 'catalog';
-                $item->negotiation_id = null;
+                if (! $isNegotiated) {
+                    $item->price = $unitPrice;
+                    $item->price_source = 'catalog';
+                    $item->negotiation_id = null;
+                }
                 $item->save();
 
                 $this->persistCartTotals($cart);
@@ -298,9 +301,11 @@ class CartController extends Controller
             }
 
             $item->quantity = $newQuantity;
-            $item->price = $unitPrice;
-            $item->price_source = 'catalog';
-            $item->negotiation_id = null;
+            if (! $isNegotiated) {
+                $item->price = $unitPrice;
+                $item->price_source = 'catalog';
+                $item->negotiation_id = null;
+            }
             $item->save();
         } else {
             $item = $cart->items()->create([
