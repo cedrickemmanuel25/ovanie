@@ -253,6 +253,9 @@
         ->take(6)
         ->values();
 
+    // Produits réellement en promotion (promo_price actif, voir Product::getIsOnPromoAttribute()).
+    $promoList = collect($promotionProducts ?? [])->filter()->take(6)->values();
+
     $isFridayCampaign = (bool) ($isBlackFridayDay ?? now()->isFriday());
     $eventList = collect($isFridayCampaign ? ($blackFridayProducts ?? []) : ($flashProducts ?? []))
         ->filter()
@@ -286,6 +289,9 @@
         ? $categoryUrl($featuredCategory->slug ?? '')
         : $catalogUrl;
 
+    // Sélection toujours peuplée (écologique, puis catégorie la mieux fournie, puis fallback catalogue global).
+    $featuredList = collect($featuredCategoryProducts ?? [])->filter()->take(3)->values();
+
     $giftImages = [
         'bon-achat' => asset('images/home/bon-achat.png'),
         'carte-cadeau' => asset('images/home/carte-cadeau.png'),
@@ -306,7 +312,9 @@
         @include('public.home.hero')
         @include('public.home.categories')
         @include('public.home.commerce-row')
+        @include('public.home.promotions')
         @include('public.home.event-offers')
+        @include('public.home.featured-selection')
         @include('public.home.gift-cards')
         @include('public.home.benefits')
         @include('public.home.business-pro')
