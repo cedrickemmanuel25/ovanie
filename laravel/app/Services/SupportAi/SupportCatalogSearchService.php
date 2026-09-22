@@ -30,10 +30,21 @@ class SupportCatalogSearchService
             ];
         }
 
+        // Bug rapporté par l'utilisateur : l'IA affirmait qu'un produit
+        // "n'existe pas" alors qu'il était bien en base. Cause : une demande
+        // formulée par catégorie ("EPI", "équipements de protection"...) ne
+        // matchait aucun champ du produit si ces mots n'apparaissaient pas
+        // dans son nom. On calcule donc en PHP (accents normalisés, comme
+        // pour le classement ci-dessous) les catégories dont le nom - ou
+        // celui de leur catégorie parente - correspond à la recherche, un
+        // simple `LIKE` SQL sur le nom brut ne repérant pas "securite" dans
+        // "Sécurité" selon la collation de la base.
+        $categoryIds = $this->matchingCategoryIds($terms);
+
         $products = Product::query()
             ->active()
             ->notArchived()
-            ->where(function (Builder $builder) use ($terms): void {
+            ->where(function (Builder $builder) use ($terms, $categoryIds): void {
                 foreach ($terms as $term) {
                     $builder->orWhere(function (Builder $inner) use ($term): void {
                         $like = '%'.$term.'%';
@@ -46,8 +57,12 @@ class SupportCatalogSearchService
                             ->orWhere('packaging', 'like', $like);
                     });
                 }
+
+                if ($categoryIds !== []) {
+                    $builder->orWhereIn('category_id', $categoryIds);
+                }
             })
-            ->with('category:id,name')
+            ->with(['category:id,name,parent_id', 'category.parent:id,name'])
             ->limit(40)
             ->get([
                 'id', 'category_id', 'name', 'slug', 'brand', 'price', 'promo_price',
@@ -62,6 +77,7 @@ class SupportCatalogSearchService
                     $product->brand,
                     $product->short_description,
                     $product->category?->name,
+                    $product->category?->parent?->name,
                     $product->unit,
                     $product->unit_label,
                     $product->packaging,
@@ -163,6 +179,35 @@ class SupportCatalogSearchService
             'categories' => $this->officialCategories(),
             'products' => $ranked,
         ];
+    }
+
+    /** @return list<int> */
+    private function matchingCategoryIds(array $terms): array
+    {
+        if ($terms === []) {
+            return [];
+        }
+
+        return Category::query()
+            ->select(['id', 'name', 'parent_id'])
+            ->with('parent:id,name')
+            ->get()
+            ->filter(function (Category $category) use ($terms): bool {
+                $haystack = $this->normalize(implode(' ', array_filter([
+                    $category->name,
+                    $category->parent?->name,
+                ])));
+
+                foreach ($terms as $term) {
+                    if (str_contains($haystack, $term)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })
+            ->pluck('id')
+            ->all();
     }
 
     /** @return list<string> */
