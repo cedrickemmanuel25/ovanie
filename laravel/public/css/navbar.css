@@ -251,7 +251,7 @@ body > header.ovn-header { margin-top: 0 !important; }
 .ovn-primary-nav {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: clamp(14px, 1.7vw, 28px);
     overflow-x: auto;
     scrollbar-width: none;
