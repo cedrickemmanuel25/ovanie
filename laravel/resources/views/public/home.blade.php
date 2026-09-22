@@ -226,7 +226,7 @@
         ->values();
 
     // Produits réellement en promotion (promo_price actif, voir Product::getIsOnPromoAttribute()).
-    $promoList = collect($promotionProducts ?? [])->filter()->take(6)->values();
+    $promoList = collect($promotionProducts ?? [])->filter()->take(4)->values();
 
     $isFridayCampaign = (bool) ($isBlackFridayDay ?? now()->isFriday());
     $eventList = collect($isFridayCampaign ? ($blackFridayProducts ?? []) : ($flashProducts ?? []))
