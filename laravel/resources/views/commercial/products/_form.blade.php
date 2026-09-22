@@ -119,8 +119,8 @@
                 </div>
                 <div class="form-grid-product">
                     <div class="form-group"><label class="required">Boutique</label><select name="shop_id"><option value="">Choisir une boutique</option>@foreach($shops as $shop)<option value="{{ $shop->id }}" @selected($selectedShopId === $shop->id)>{{ $shop->name }} — {{ $shop->user?->name ?: $shop->user?->email }}</option>@endforeach</select></div>
-                    <div class="form-group"><label class="required">Catégorie</label><select name="category_id"><option value="">Sélectionner</option>@foreach($categories as $category)<option value="{{ $category->id }}" @selected($value('category_id') == $category->id)>{{ $category->name }}</option>@endforeach</select></div>
-                    <div class="form-group"><label class="required">Nom du produit</label><input name="name" value="{{ $value('name') }}"></div>
+                    <div class="form-group"><label class="required">Catégorie</label><select name="category_id" id="commCategory"><option value="">Sélectionner</option>@foreach($categories as $category)<option value="{{ $category->id }}" @selected($value('category_id') == $category->id)>{{ $category->name }}</option>@endforeach</select><p id="commCategorySuggestedHint" style="display:none;margin:4px 0 0;color:#64748b;font-size:11px;">Catégorie suggérée automatiquement à partir du nom du produit. Modifiable si besoin.</p></div>
+                    <div class="form-group"><label class="required">Nom du produit</label><input name="name" id="commName" value="{{ $value('name') }}"></div>
                     <div class="form-group"><label>Marque</label><input name="brand" value="{{ $value('brand') }}"></div>
                     <div class="form-group"><label>Type de produit</label><input name="type" value="{{ $value('type') }}"></div>
                     <div class="form-group"><label>Description courte</label><input name="short_description" maxlength="500" value="{{ $value('short_description') }}"></div>
@@ -382,6 +382,61 @@
     document.querySelector('input[name="price"]')?.addEventListener('input', updateNegotiationOffers);
     document.querySelectorAll('input[name="is_negotiable"]').forEach(input => input.addEventListener('change', updateNegotiationOffers));
     updateNegotiationOffers();
+
+    // Suggestion IA de catégorie à partir du nom du produit : le commercial
+    // n'a plus besoin de la choisir lui-même, mais reste toujours libre de la
+    // corriger (voir AiProductCategorySuggester côté serveur, qui ne choisit
+    // jamais une catégorie hors de celles qui existent réellement).
+    (function () {
+        const categorySelect = document.getElementById('commCategory');
+        const nameInput = document.getElementById('commName');
+        const hint = document.getElementById('commCategorySuggestedHint');
+        const suggestUrl = @json(\Illuminate\Support\Facades\Route::has('commercial.products.suggestCategory') ? route('commercial.products.suggestCategory') : null);
+        if (!categorySelect || !nameInput || !suggestUrl) return;
+
+        let categoryChosenManually = categorySelect.value !== '';
+        let timer = null;
+
+        categorySelect.addEventListener('change', () => {
+            categoryChosenManually = true;
+            if (hint) hint.style.display = 'none';
+        });
+
+        async function suggestCategory() {
+            if (categoryChosenManually) return;
+            const name = nameInput.value.trim();
+            if (name.length < 3) return;
+
+            try {
+                const response = await fetch(suggestUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('input[name="_token"]')?.value || '',
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ name }),
+                });
+                if (!response.ok || categoryChosenManually) return;
+
+                const payload = await response.json();
+                const suggestion = payload?.suggestion;
+                if (!suggestion || !suggestion.category_id) return;
+
+                categorySelect.value = String(suggestion.subcategory_id || suggestion.category_id);
+                if (hint) hint.style.display = '';
+            } catch (_) {
+                // Échec silencieux : le commercial garde la sélection manuelle du formulaire.
+            }
+        }
+
+        nameInput.addEventListener('input', () => {
+            if (categoryChosenManually) return;
+            window.clearTimeout(timer);
+            timer = window.setTimeout(suggestCategory, 700);
+        });
+    })();
 
     document.getElementById('addAttribute').addEventListener('click', () => {
         document.getElementById('attributes').insertAdjacentHTML('beforeend', `<div class="attributes-row"><input name="attributes[${attrIndex}][label]" placeholder="Ex. Puissance"><input name="attributes[${attrIndex}][value]" placeholder="Ex. 200"><input name="attributes[${attrIndex}][unit]" placeholder="Ex. W"><button type="button" class="small-icon-button remove-attribute" aria-label="Supprimer">×</button></div>`);

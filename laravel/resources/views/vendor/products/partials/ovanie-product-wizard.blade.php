@@ -822,6 +822,7 @@
                                 <option value="{{ $selectedCategory->id }}" data-parent="{{ $selectedCategory->id }}" selected>{{ $selectedCategory->name }}</option>
                             @endif
                         </select>
+                        <p class="pw-help" id="pwCategorySuggestedHint" style="display:none">Catégorie suggérée automatiquement à partir du nom du produit. Modifiable si besoin.</p>
                     </div>
 
                     <div class="pw-field">
@@ -1566,8 +1567,69 @@ document.addEventListener('DOMContentLoaded', () => {
     qs('#pwMainCategory')?.addEventListener('change', () => {
         syncCategoryFilters();
         qs('#pwSubCategory')?.classList.remove('is-invalid');
+        markCategoryChosenManually();
     });
     syncCategoryFilters();
+
+    // Suggestion IA de catégorie/sous-catégorie à partir du nom du produit :
+    // le vendeur n'a plus besoin de la choisir lui-même, mais reste toujours
+    // libre de la corriger (voir AiProductCategorySuggester côté serveur, qui
+    // ne choisit jamais une catégorie hors de celles qui existent réellement).
+    let categoryChosenManually = @json($isEdit && $selectedCategoryId !== '');
+    let categorySuggestTimer = null;
+    const suggestCategoryUrl = @json(Route::has('vendor.products.suggestCategory') ? route('vendor.products.suggestCategory') : null);
+
+    function markCategoryChosenManually() {
+        categoryChosenManually = true;
+        const hint = qs('#pwCategorySuggestedHint');
+        if (hint) hint.style.display = 'none';
+    }
+
+    qs('#pwSubCategory')?.addEventListener('change', markCategoryChosenManually);
+
+    async function suggestCategoryFromName() {
+        if (categoryChosenManually || !suggestCategoryUrl) return;
+        const name = (qs('#pwName')?.value || '').trim();
+        if (name.length < 3) return;
+
+        try {
+            const response = await fetch(suggestCategoryUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': qs('input[name="_token"]')?.value || '',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ name }),
+            });
+            if (!response.ok || categoryChosenManually) return;
+
+            const payload = await response.json();
+            const suggestion = payload?.suggestion;
+            if (!suggestion || !suggestion.category_id) return;
+
+            const mainSelect = qs('#pwMainCategory');
+            const subSelect = qs('#pwSubCategory');
+            if (mainSelect) mainSelect.value = String(suggestion.category_id);
+            syncCategoryFilters();
+            if (subSelect && suggestion.subcategory_id) {
+                subSelect.value = String(suggestion.subcategory_id);
+            }
+            qs('#pwSubCategory')?.classList.remove('is-invalid');
+
+            const hint = qs('#pwCategorySuggestedHint');
+            if (hint) hint.style.display = '';
+        } catch (_) {
+            // Échec silencieux : le vendeur garde la sélection manuelle du formulaire.
+        }
+    }
+
+    qs('#pwName')?.addEventListener('input', () => {
+        if (categoryChosenManually) return;
+        window.clearTimeout(categorySuggestTimer);
+        categorySuggestTimer = window.setTimeout(suggestCategoryFromName, 700);
+    });
 
     function syncVisibility() {
         const visibility = qs('#pwVisibility');

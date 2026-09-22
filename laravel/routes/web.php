@@ -28,6 +28,7 @@ use App\Http\Controllers\VendorReviewController;
 use App\Http\Controllers\VendorOrderController;
 use App\Http\Controllers\VendorPaymentController;
 use App\Http\Controllers\VendorProductController;
+use App\Http\Controllers\ProductCategorySuggestionController;
 use App\Http\Controllers\VendorDeliverySettingsController;
 use App\Http\Controllers\VendorReturnController;
 use App\Http\Controllers\VendorShopStatusController;
@@ -411,6 +412,9 @@ Route::middleware('auth')->group(function () {
 
             Route::get('/products', [VendorProductController::class, 'index'])->name('products');
             Route::get('/products/create', [VendorProductController::class, 'create'])->name('add_product');
+            Route::post('/products/suggest-category', ProductCategorySuggestionController::class)
+                ->middleware('throttle:20,1')
+                ->name('products.suggestCategory');
             Route::post('/products', [VendorProductController::class, 'store'])->name('products.store');
             Route::get('/products/export', [VendorProductController::class, 'export'])->name('products.export');
             Route::get('/products/{product}/edit', [VendorProductController::class, 'edit'])->name('products.edit');
@@ -617,6 +621,9 @@ Route::middleware(['auth:admin', 'internal', 'staff:commercial'])->prefix('comme
     Route::post('/produits/import', [CommercialQuickProductController::class, 'import'])->name('products.import.store');
 
     Route::get('/produits/create', [CommercialProductController::class, 'create'])->name('products.create');
+    Route::post('/produits/suggest-category', ProductCategorySuggestionController::class)
+        ->middleware('throttle:20,1')
+        ->name('products.suggestCategory');
     Route::post('/produits', [CommercialProductController::class, 'store'])->name('products.store');
     Route::get('/produits/{product}/edit', [CommercialProductController::class, 'edit'])->name('products.edit');
     Route::match(['put', 'patch'], '/produits/{product}', [CommercialProductController::class, 'update'])->name('products.update');
