@@ -18,7 +18,16 @@
     </header>
 
     <div class="ovai-panel__body" id="ovaiBody">
-        <div class="ovai-welcome" id="ovaiWelcome">
+        <div class="ovai-resume-choice" id="ovaiResumeChoice" hidden>
+            <p>Vous avez déjà une conversation avec N’Nan.</p>
+            <p class="ovai-resume-choice__preview" id="ovaiResumePreview"></p>
+            <div class="ovai-resume-choice__actions">
+                <button type="button" class="ovai-btn ovai-btn--primary" id="ovaiResumeContinue">Reprendre la conversation</button>
+                <button type="button" class="ovai-btn ovai-btn--ghost" id="ovaiResumeNew">Nouvelle conversation</button>
+            </div>
+        </div>
+
+        <div class="ovai-welcome" id="ovaiWelcome" hidden>
             <p>Bonjour {{ auth()->check() ? explode(' ', trim(auth()->user()->name))[0] : '' }}, je suis N’Nan. Comment puis-je vous aider aujourd’hui ?</p>
 
             <div class="ovai-suggestions" id="ovaiSuggestions">

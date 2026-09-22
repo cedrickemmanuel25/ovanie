@@ -133,7 +133,6 @@ class SupportAiOrchestrator
         // Un nouveau segment commence avec l'agente générale. Une continuation reprend
         // directement avec l'agente déjà active afin de ne pas répéter le même relais.
         $agent = $this->router->selectByRole($this->initialAgentRole($memory));
-        $firstAgent = $agent;
         $visitedRoles = [$agent->role_key];
         $handoffTrail = [];
         $turnState = [
@@ -298,22 +297,16 @@ class SupportAiOrchestrator
             $finalBody = $this->removeRepeatedOpening($finalBody);
         }
 
-        // Si l'agente spécialisée n'a pas elle-même explicité la relève, Laravel ajoute
-        // une seule phrase de transition. Les informations déjà recueillies restent intactes.
-        if ($handoffTrail !== [] && $agent->role_key !== $firstAgent->role_key) {
-            $lastHandoff = end($handoffTrail);
-            $fromName = trim((string) ($lastHandoff['from_agent'] ?? ''));
-            $agentName = trim((string) $agent->name);
-            $lowerBody = mb_strtolower($finalBody);
-
-            if ($agentName !== '' && ! str_contains($lowerBody, mb_strtolower($agentName))) {
-                $transition = 'Je suis '.$agentName.'.';
-                if ($fromName !== '') {
-                    $transition .= ' '.$fromName.' m’a transmis votre demande et les informations déjà fournies.';
-                }
-                $finalBody = trim($transition."\n\n".$finalBody);
-            }
-        }
+        // Demande utilisateur : le relais entre agentes IA reste strictement
+        // interne. Chaque agente spécialisée (Rita, Technique, Logistique,
+        // Salomé) continue de répondre en coulisses selon le sujet, pour
+        // garder la qualité des réponses par domaine - mais le client ne
+        // voit jamais ni changement de nom, ni phrase de transition ("je
+        // suis Rita", "X m'a transmis votre demande") : il a l'impression de
+        // parler à N'Nan du début à la fin. Voir aussi maskSpecialistIdentity()
+        // ci-dessous, qui neutralise toute auto-présentation spontanée de
+        // Claude sous un autre nom que N'Nan.
+        $finalBody = $this->maskSpecialistIdentity($finalBody);
 
         if ($needsHuman) {
             $finalBody = $this->appendHumanEscalationMessage($finalBody);
@@ -747,6 +740,34 @@ class SupportAiOrchestrator
         return $clean !== ''
             ? $clean
             : 'Je vous écoute. Quel point souhaitez-vous poursuivre ?';
+    }
+
+    /**
+     * Neutralise toute auto-présentation de l'agente spécialisée réellement
+     * active (Rita, Assistante Technique/Logistique OVANIE, Salomé) : le
+     * client ne doit jamais apprendre qu'une autre IA que N'Nan a traité sa
+     * demande. Les relais restent entièrement internes (voir
+     * receiveCustomerMessage) ; cette méthode est un filet de sécurité pour
+     * le cas où le modèle se nommerait spontanément dans sa réponse.
+     */
+    private function maskSpecialistIdentity(string $body): string
+    {
+        $otherAgentNames = [
+            'Miss Rita',
+            'Assistante Technique OVANIE',
+            'Assistante Logistique OVANIE',
+            'Miss Salomé',
+        ];
+
+        foreach ($otherAgentNames as $name) {
+            $body = preg_replace(
+                '/\bje\s+suis\s+'.preg_quote($name, '/').'\b/iu',
+                'Je suis N’Nan',
+                $body,
+            ) ?? $body;
+        }
+
+        return $body;
     }
 
     /** @return array<string,mixed> */

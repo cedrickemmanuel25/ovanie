@@ -137,6 +137,8 @@ Route::post('/wave/webhook', [WaveController::class, 'webhook'])
 
 Route::prefix('support/chat')->middleware(['auth:sanctum', 'throttle:30,1'])->name('api.support.chat.')->group(function () {
     Route::post('/start', [PublicSupportChatController::class, 'start'])->name('start');
+    // Doit être déclarée avant /{token} : sinon "latest" serait capturé comme un token.
+    Route::get('/latest', [PublicSupportChatController::class, 'latest'])->name('latest');
     Route::get('/{token}', [PublicSupportChatController::class, 'show'])->name('show');
     Route::post('/{token}/messages', [PublicSupportChatController::class, 'message'])->name('message');
     Route::post('/{token}/callback', [PublicSupportChatController::class, 'callback'])->name('callback');

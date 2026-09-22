@@ -13,6 +13,17 @@ use Illuminate\Validation\Rule;
 
 class PublicSupportChatController extends Controller
 {
+    /**
+     * Identité publique unique montrée au client. Les relais internes vers
+     * Rita/Technique/Logistique/Salomé (voir SupportAiOrchestrator) ne
+     * doivent jamais transparaître ici : le client parle toujours à N'Nan.
+     */
+    private const PUBLIC_AGENT_IDENTITY = [
+        'name' => 'N’Nan',
+        'slug' => 'miss-nnan',
+        'role_key' => 'general',
+    ];
+
     public function start(
         Request $request,
         SupportAiOrchestrator $orchestrator,
@@ -66,7 +77,7 @@ class PublicSupportChatController extends Controller
         return response()->json([
             'conversation_token' => $conversation->public_token,
             'status' => $conversation->status,
-            'agent' => $reply->aiAgent?->only(['name', 'slug', 'role_key']),
+            'agent' => self::PUBLIC_AGENT_IDENTITY,
             'reply' => $reply->body,
             'requires_human' => (bool) $conversation->requires_human,
             'account_linked' => (bool) $conversation->requester_user_id,
@@ -76,18 +87,48 @@ class PublicSupportChatController extends Controller
         ], 201);
     }
 
+    /**
+     * Demande utilisateur : à l'ouverture du panneau, proposer un choix
+     * explicite entre "reprendre la dernière conversation" et "nouvelle
+     * conversation" plutôt que de toujours repartir de zéro ou de reprendre
+     * automatiquement en silence.
+     */
+    public function latest(Request $request)
+    {
+        $conversation = SupportConversation::query()
+            ->where('requester_user_id', $request->user('sanctum')->id)
+            ->whereNotIn('status', ['resolved', 'closed'])
+            ->latest('updated_at')
+            ->first();
+
+        if (! $conversation) {
+            return response()->json(['exists' => false]);
+        }
+
+        $lastMessage = $conversation->messages()
+            ->where('is_internal', false)
+            ->latest()
+            ->first();
+
+        return response()->json([
+            'exists' => true,
+            'conversation_token' => $conversation->public_token,
+            'updated_at' => $conversation->updated_at,
+            'preview' => $lastMessage?->body,
+        ]);
+    }
+
     public function show(Request $request, string $token)
     {
         $conversation = $this->conversation($token, $request);
         $conversation->load([
-            'aiAgent:id,name,slug,role_key',
             'ticket:id,reference,status',
             'messages' => fn ($query) => $query->where('is_internal', false)->latest()->limit(50),
         ]);
 
         return response()->json([
             'status' => $conversation->status,
-            'agent' => $conversation->aiAgent,
+            'agent' => self::PUBLIC_AGENT_IDENTITY,
             'ticket' => $conversation->ticket,
             'requires_human' => $conversation->requires_human,
             'account_linked' => (bool) $conversation->requester_user_id,
@@ -122,7 +163,7 @@ class PublicSupportChatController extends Controller
 
         return response()->json([
             'status' => $conversation->status,
-            'agent' => $reply->aiAgent?->only(['name', 'slug', 'role_key']),
+            'agent' => self::PUBLIC_AGENT_IDENTITY,
             'reply' => $reply->body,
             'requires_human' => $conversation->requires_human,
             'account_linked' => (bool) $conversation->requester_user_id,

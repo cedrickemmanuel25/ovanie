@@ -105,6 +105,41 @@
     font-weight: 600;
 }
 
+.ovai-resume-choice {
+    padding: 4px 4px 6px;
+}
+.ovai-resume-choice > p:first-child {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #14284f;
+}
+.ovai-resume-choice__preview {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid #e3e9f3;
+    border-radius: 10px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #4a5b7c;
+    max-height: 62px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+.ovai-resume-choice__actions {
+    display: grid;
+    gap: 8px;
+}
+.ovai-resume-choice__actions .ovai-btn {
+    width: 100%;
+    padding: 11px 14px;
+    font-size: 12px;
+}
+
 .ovai-suggestions {
     display: grid;
     gap: 9px;

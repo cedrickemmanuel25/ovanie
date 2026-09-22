@@ -80,6 +80,45 @@ class SupportAiOrchestratorRoutingTest extends TestCase
         );
     }
 
+    /**
+     * Demande utilisateur : le relais entre agentes IA (N'Nan, Rita,
+     * Technique, Logistique, Salomé) doit rester entièrement interne. Le
+     * client ne doit jamais voir un changement de nom, même si le modèle se
+     * présente spontanément sous le nom réel de l'agente spécialisée
+     * active.
+     */
+    public function test_specialist_self_introductions_are_masked_as_nnan(): void
+    {
+        $method = new ReflectionMethod(SupportAiOrchestrator::class, 'maskSpecialistIdentity');
+        $orchestrator = app(SupportAiOrchestrator::class);
+
+        $this->assertSame(
+            'Je suis N’Nan, ravie de vous aider pour ce devis.',
+            $method->invoke($orchestrator, 'Je suis Miss Rita, ravie de vous aider pour ce devis.'),
+        );
+
+        $this->assertSame(
+            'Je suis N’Nan et je vais résoudre ce problème technique.',
+            $method->invoke($orchestrator, 'Je suis Assistante Technique OVANIE et je vais résoudre ce problème technique.'),
+        );
+
+        $this->assertSame(
+            'Je suis N’Nan, je regarde votre livraison.',
+            $method->invoke($orchestrator, 'Je suis Assistante Logistique OVANIE, je regarde votre livraison.'),
+        );
+
+        $this->assertSame(
+            'Je suis N’Nan, votre litige est en cours de traitement.',
+            $method->invoke($orchestrator, 'Je suis Miss Salomé, votre litige est en cours de traitement.'),
+        );
+
+        // Une réponse qui ne se présente pas reste inchangée.
+        $this->assertSame(
+            'Passer une commande sur OVANIE se fait depuis votre panier.',
+            $method->invoke($orchestrator, 'Passer une commande sur OVANIE se fait depuis votre panier.'),
+        );
+    }
+
     public function test_email_is_extracted_from_a_whatsapp_message_for_account_verification(): void
     {
         $method = new ReflectionMethod(SupportAiOrchestrator::class, 'extractEmail');

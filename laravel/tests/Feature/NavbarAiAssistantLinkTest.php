@@ -71,6 +71,11 @@ class NavbarAiAssistantLinkTest extends TestCase
         $this->assertStringContainsString('images/ai-assistant/n-nan.webp', $html);
         $this->assertStringContainsString('N’Nan', $html);
 
+        // Choix "reprendre / nouvelle conversation" à l'ouverture du panneau.
+        $this->assertStringContainsString('ovaiResumeChoice', $html);
+        $this->assertStringContainsString('ovaiResumeContinue', $html);
+        $this->assertStringContainsString('ovaiResumeNew', $html);
+
         // Le déclencheur "IA" doit précéder "Matériaux" dans le HTML rendu.
         $aiPosition = strpos($html, 'ovn-ai-link');
         $materiauxPosition = strpos($html, 'Matériaux');

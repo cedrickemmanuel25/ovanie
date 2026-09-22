@@ -6,6 +6,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const triggers = document.querySelectorAll('[data-ai-panel-trigger]');
     const closeButton = document.getElementById('ovaiClose');
     const body = document.getElementById('ovaiBody');
+    const resumeChoice = document.getElementById('ovaiResumeChoice');
+    const resumePreview = document.getElementById('ovaiResumePreview');
+    const resumeContinue = document.getElementById('ovaiResumeContinue');
+    const resumeNew = document.getElementById('ovaiResumeNew');
     const welcome = document.getElementById('ovaiWelcome');
     const suggestions = document.getElementById('ovaiSuggestions');
     const messages = document.getElementById('ovaiMessages');
@@ -20,6 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const storageKey = 'ovanie_ai_assistant_conversation';
     let token = sessionStorage.getItem(storageKey);
     let sending = false;
+    let initialStateResolved = false;
+    let pendingResumeToken = null;
 
     const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
 
@@ -77,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
         overlay.classList.add('is-active');
         panel.setAttribute('aria-hidden', 'false');
         document.body.classList.add('menu-open');
-        loadExisting();
+        resolveInitialState();
         setTimeout(() => input?.focus(), 260);
     };
 
@@ -88,18 +94,61 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.remove('menu-open');
     };
 
+    const showWelcome = () => {
+        resumeChoice.hidden = true;
+        welcome.hidden = false;
+    };
+
     const loadExisting = async () => {
         if (!token || messages.childElementCount) return;
         try {
             const data = await json(`/api/support/chat/${token}`);
+            welcome.hidden = true;
+            resumeChoice.hidden = true;
             if (data.messages?.length) {
-                welcome.hidden = true;
                 data.messages.forEach((item) => addBubble(item.body, item.sender === 'customer' ? 'user' : 'ai'));
             }
         } catch (_) {
             sessionStorage.removeItem(storageKey);
             token = null;
+            showWelcome();
         }
+    };
+
+    /**
+     * Demande utilisateur : à l'ouverture du panneau, proposer un choix
+     * explicite entre reprendre la dernière conversation et en démarrer
+     * une nouvelle - plutôt que de toujours repartir de zéro ou de
+     * reprendre automatiquement en silence. Ne s'exécute qu'une fois par
+     * chargement de page ; si une conversation est déjà active dans cet
+     * onglet (token en sessionStorage), elle reprend directement sans
+     * redemander.
+     */
+    const resolveInitialState = async () => {
+        if (initialStateResolved) return;
+        initialStateResolved = true;
+
+        if (token) {
+            welcome.hidden = true;
+            resumeChoice.hidden = true;
+            await loadExisting();
+            return;
+        }
+
+        try {
+            const data = await json('/api/support/chat/latest');
+            if (data.exists) {
+                pendingResumeToken = data.conversation_token;
+                resumePreview.textContent = data.preview || '';
+                welcome.hidden = true;
+                resumeChoice.hidden = false;
+                return;
+            }
+        } catch (_) {
+            // Si la vérification échoue, on retombe simplement sur l'accueil normal.
+        }
+
+        showWelcome();
     };
 
     const sendMessage = async (text) => {
@@ -107,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!message || sending) return;
 
         welcome.hidden = true;
+        resumeChoice.hidden = true;
         addBubble(message, 'user');
         input.value = '';
         autosizeInput();
@@ -162,6 +212,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const button = event.target.closest('[data-ovai-suggestion]');
         if (!button) return;
         sendMessage(button.dataset.ovaiSuggestion);
+    });
+
+    resumeContinue?.addEventListener('click', async () => {
+        if (!pendingResumeToken) return;
+        token = pendingResumeToken;
+        pendingResumeToken = null;
+        sessionStorage.setItem(storageKey, token);
+        resumeChoice.hidden = true;
+        welcome.hidden = true;
+        await loadExisting();
+    });
+
+    resumeNew?.addEventListener('click', () => {
+        pendingResumeToken = null;
+        showWelcome();
     });
 
     sendButton?.addEventListener('click', () => sendMessage(input.value));
