@@ -274,11 +274,15 @@ body > header.ovn-header { margin-top: 0 !important; }
     align-items: center;
     gap: 5px;
     padding: 5px 11px;
+    border: 0;
     border-radius: 999px;
     background: linear-gradient(120deg, #4f46e5, #9333ea 55%, #ff6600);
     color: #fff !important;
+    font: inherit;
+    font-size: 12px;
     font-weight: 800 !important;
     letter-spacing: .2px;
+    cursor: pointer;
 }
 .ovn-ai-link svg {
     width: 13px;

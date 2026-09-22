@@ -548,6 +548,9 @@
     <link rel="stylesheet" href="{{ asset('css/product-card-normalize.css') }}?v={{ file_exists(public_path('css/product-card-normalize.css')) ? filemtime(public_path('css/product-card-normalize.css')) : 1 }}">
     <link rel="stylesheet" href="{{ asset('css/footer.css') }}?v={{ file_exists(public_path('css/footer.css')) ? filemtime(public_path('css/footer.css')) : 1 }}">
     <link rel="stylesheet" href="{{ asset('css/category-drawer.css') }}?v={{ file_exists(public_path('css/category-drawer.css')) ? filemtime(public_path('css/category-drawer.css')) : 1 }}">
+    @auth
+        <link rel="stylesheet" href="{{ asset('css/ai-assistant-panel.css') }}?v={{ file_exists(public_path('css/ai-assistant-panel.css')) ? filemtime(public_path('css/ai-assistant-panel.css')) : 1 }}">
+    @endauth
 </head>
 
 <body>
@@ -555,6 +558,10 @@
     @include('layouts._navbar')
 
     @include('layouts.partials.category-drawer')
+
+    @auth
+        @include('layouts.partials.ai-assistant-panel')
+    @endauth
 
     <main class="ov-page-main">
         @hasSection('content')
@@ -627,6 +634,9 @@
 
     <script src="{{ asset('js/main.js') }}?v={{ file_exists(public_path('js/main.js')) ? filemtime(public_path('js/main.js')) : time() }}" defer></script>
     <script src="{{ asset('js/category-drawer.js') }}?v={{ file_exists(public_path('js/category-drawer.js')) ? filemtime(public_path('js/category-drawer.js')) : time() }}" defer></script>
+    @auth
+        <script src="{{ asset('js/ai-assistant-panel.js') }}?v={{ file_exists(public_path('js/ai-assistant-panel.js')) ? filemtime(public_path('js/ai-assistant-panel.js')) : time() }}" defer></script>
+    @endauth
 
     <script src="https://unpkg.com/lucide@latest" defer></script>
     <script>

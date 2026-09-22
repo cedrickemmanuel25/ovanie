@@ -10,11 +10,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Demande utilisateur : ajouter un lien "IA" dans la navbar, juste avant
+ * Demande utilisateur : ajouter un accès "IA" dans la navbar, juste avant
  * "Matériaux", visible uniquement pour un client connecté (comme Rufus
- * chez Amazon). Le site dispose déjà d'un assistant IA complet
- * (SupportAiOrchestrator, /assistance, auth requise) : ce lien s'y
- * connecte simplement, sans dupliquer cette logique.
+ * chez Amazon), qui ouvre un panneau coulissant depuis la gauche (comme
+ * "Alexa for shopping" chez Amazon) plutôt qu'une page dédiée. Le site
+ * dispose déjà d'un assistant IA complet (SupportAiOrchestrator) : ce
+ * panneau réutilise ses mêmes endpoints /api/support/chat/*, sans dupliquer
+ * cette logique.
  */
 class NavbarAiAssistantLinkTest extends TestCase
 {
@@ -43,27 +45,43 @@ class NavbarAiAssistantLinkTest extends TestCase
         return route('product.show', $product->slug);
     }
 
-    public function test_a_guest_never_sees_the_ai_link(): void
+    public function test_a_guest_never_sees_the_ai_trigger_or_panel(): void
     {
         $html = $this->get($this->makeProductPageUrl())->getContent();
 
         $this->assertStringNotContainsString('ovn-ai-link', $html);
+        $this->assertStringNotContainsString('data-ai-panel-trigger', $html);
+        $this->assertStringNotContainsString('ovaiPanel', $html);
     }
 
-    public function test_a_logged_in_client_sees_the_ai_link_right_before_materiaux(): void
+    public function test_a_logged_in_client_sees_the_ai_trigger_right_before_materiaux(): void
     {
         $client = User::factory()->create(['role' => 'client']);
 
         $html = $this->actingAs($client)->get($this->makeProductPageUrl())->getContent();
 
         $this->assertStringContainsString('ovn-ai-link', $html);
-        $this->assertStringContainsString(route('public.support-chat'), $html);
+        $this->assertStringContainsString('data-ai-panel-trigger', $html);
 
-        // Le lien "IA" doit précéder "Matériaux" dans le HTML rendu.
+        // Le panneau (avatar N'Nan + le bon nom) doit être rendu sur la page.
+        $this->assertStringContainsString('ovaiPanel', $html);
+        $this->assertStringContainsString('images/ai-assistant/n-nan.webp', $html);
+        $this->assertStringContainsString('N’Nan', $html);
+
+        // Le déclencheur "IA" doit précéder "Matériaux" dans le HTML rendu.
         $aiPosition = strpos($html, 'ovn-ai-link');
         $materiauxPosition = strpos($html, 'Matériaux');
         $this->assertNotFalse($aiPosition);
         $this->assertNotFalse($materiauxPosition);
         $this->assertLessThan($materiauxPosition, $aiPosition);
+    }
+
+    public function test_visiting_the_old_assistance_url_redirects_to_home_with_the_panel_open(): void
+    {
+        $client = User::factory()->create(['role' => 'client']);
+
+        $this->actingAs($client)
+            ->get('/assistance')
+            ->assertRedirect(route('home', ['ai' => 1]));
     }
 }

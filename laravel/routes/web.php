@@ -221,7 +221,13 @@ Route::get('/product/{product}', [ProductController::class, 'show'])->name('prod
 Route::get('/boost/product/{product}/click', [ProductController::class, 'boostClick'])
     ->name('boost.product.click');
 Route::get('/contact', [ContactController::class, 'index'])->name('contact.index');
-Route::view('/assistance', 'public.support-chat')->middleware('auth')->name('public.support-chat');
+// L'assistant IA "N'Nan" s'ouvre désormais en panneau coulissant depuis la
+// navbar (voir layouts/partials/ai-assistant-panel.blade.php), plus en page
+// dédiée. Cette route reste enregistrée pour les liens/favoris existants
+// vers /assistance : elle renvoie vers l'accueil avec le panneau ouvert.
+Route::get('/assistance', fn () => redirect()->route('home', ['ai' => 1]))
+    ->middleware('auth')
+    ->name('public.support-chat');
 Route::post('/contact', [ContactController::class, 'send'])->name('contact.send');
 Route::post('/newsletter/subscribe', [NewsletterSubscriptionController::class, 'store'])
     ->middleware('throttle:10,1')
