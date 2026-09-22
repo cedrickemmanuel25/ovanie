@@ -22,7 +22,7 @@
         <a class="category-btn category-btn-secondary" href="{{ route('admin.categories.index') }}">← Retour aux catégories</a>
     </header>
 
-    <form method="POST" action="{{ route('admin.categories.update', $category) }}" class="category-professional-form">
+    <form method="POST" action="{{ route('admin.categories.update', $category) }}" class="category-professional-form" enctype="multipart/form-data">
         @csrf
         @method('PUT')
         <input type="hidden" name="category_type" value="{{ $isSubcategory ? 'subcategory' : 'category' }}">

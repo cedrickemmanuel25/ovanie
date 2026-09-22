@@ -151,3 +151,32 @@
 }
 
 .category-form-sidebar{position:static;top:auto;align-self:start}
+
+.category-field-current-image {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #dce5f1;
+    border-radius: 12px;
+    background: #f7faff;
+}
+.category-field-current-image img {
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: #fff;
+    border: 1px solid #e2e9f2;
+}
+.category-field-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #536680;
+    cursor: pointer;
+}
+.category-field-checkbox input { position: static; opacity: 1; }

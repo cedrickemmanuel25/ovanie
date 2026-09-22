@@ -456,9 +456,16 @@ class HomepageService
     /**
      * Cartes de catégories de l'accueil.
      *
-     * Chaque visuel provient en priorité d'un vrai produit public de la catégorie.
-     * On évite ainsi les illustrations génériques qui donnaient un rendu "jouet".
-     * La carte cadeau utilise son visuel officiel OVANIE.
+     * Demande utilisateur : les catégories affichées à l'accueil doivent venir
+     * de la base (table categories) et une nouvelle catégorie créée dans
+     * l'admin doit y apparaître automatiquement, sans liste figée dans le
+     * code. On prend donc simplement les catégories principales actives,
+     * dans l'ordre configuré par l'admin, au lieu de faire correspondre les
+     * produits à une liste de 8 catégories/mots-clés codés en dur.
+     *
+     * Chaque visuel provient en priorité de la photo importée pour la
+     * catégorie (Category::image_url), puis d'un vrai produit public de
+     * cette catégorie pour éviter les illustrations génériques.
      */
     private function homepageCategoryCards(): Collection
     {
@@ -466,98 +473,29 @@ class HomepageService
             return collect();
         }
 
-        $specs = collect([
-            [
-                'name' => 'Matériaux gros œuvre',
-                'slugs' => ['materiaux-gros-oeuvres', 'materiaux-gros-oeuvre'],
-                'keywords' => ['ciment', 'brique', 'parpaing', 'béton', 'beton', 'fer'],
-            ],
-            [
-                'name' => 'Matériaux de finition',
-                'slugs' => ['materiaux-de-finition'],
-                'keywords' => ['carrelage', 'peinture', 'enduit', 'plâtre', 'platre', 'faïence', 'faience'],
-            ],
-            [
-                'name' => 'Matériaux écologiques',
-                'slugs' => ['materiaux-ecologique', 'materiaux-ecologiques'],
-                'keywords' => ['écologique', 'ecologique', 'osb', 'terre compressée', 'terre compressee', 'recycl'],
-            ],
-            [
-                'name' => 'Outillage & Équipement',
-                'slugs' => ['outillage-equipement'],
-                'keywords' => ['perceuse', 'meuleuse', 'marteau', 'outillage', 'outil', 'clé', 'cle'],
-            ],
-            [
-                'name' => 'Électricité & Plomberie',
-                'slugs' => ['electricite-plomberie'],
-                'keywords' => ['tableau électrique', 'tableau electrique', 'câble', 'cable', 'prise', 'robinet', 'pvc', 'wc'],
-            ],
-            [
-                'name' => 'Énergie solaire',
-                'slugs' => ['energie-solaire'],
-                'keywords' => ['solaire', 'panneau', 'batterie', 'onduleur'],
-            ],
-            [
-                'name' => 'Nos reconditionnés',
-                'slugs' => ['nos-reconditionnee', 'nos-reconditionnes'],
-                'keywords' => ['reconditionné', 'reconditionne', 'reconditionnée', 'reconditionnee'],
-            ],
-            [
-                'name' => 'Cartes & bons OVANIE',
-                'slugs' => ['carte-cadeau-ovanie'],
-                'keywords' => [],
-                'asset' => 'images/home/carte-cadeau.png',
-            ],
-        ]);
-
-        $categoryRows = Category::query()
-            ->select(['id', 'parent_id', 'name', 'slug'])
+        $roots = Category::query()
+            ->active()
+            ->roots()
+            ->ordered()
+            ->limit(8)
             ->get();
 
-        $bySlug = $categoryRows
-            ->filter(fn (Category $category) => (string) $category->slug !== '')
-            ->keyBy(fn (Category $category) => mb_strtolower((string) $category->slug));
+        if ($roots->isEmpty()) {
+            return collect();
+        }
 
-        $children = $categoryRows
-            ->groupBy(fn (Category $category) => $category->parent_id === null ? 'root' : (string) $category->parent_id);
+        $childIdsByParent = Category::query()
+            ->select(['id', 'parent_id'])
+            ->whereIn('parent_id', $roots->pluck('id'))
+            ->get()
+            ->groupBy('parent_id');
 
-        $descendantIds = static function (?Category $root) use ($children): array {
-            if (! $root) {
-                return [];
-            }
+        $findRepresentativeProduct = function (Category $root) use ($childIdsByParent): ?Product {
+            $ids = collect([$root->id])
+                ->merge($childIdsByParent->get($root->id, collect())->pluck('id'))
+                ->all();
 
-            $ids = [];
-            $stack = [(int) $root->id];
-
-            while ($stack !== []) {
-                $id = array_pop($stack);
-
-                if (in_array($id, $ids, true)) {
-                    continue;
-                }
-
-                $ids[] = $id;
-
-                foreach ($children->get((string) $id, collect()) as $child) {
-                    $stack[] = (int) $child->id;
-                }
-            }
-
-            return $ids;
-        };
-
-        $findFallbackProduct = function (array $keywords): ?Product {
-            if ($keywords === []) {
-                return null;
-            }
-
-            $query = $this->publicProductsQuery()
-                ->where(function (Builder $names) use ($keywords) {
-                    foreach ($keywords as $index => $keyword) {
-                        $method = $index === 0 ? 'where' : 'orWhere';
-                        $names->{$method}('products.name', 'like', '%'.$keyword.'%');
-                    }
-                });
+            $query = $this->publicProductsQuery()->whereIn('products.category_id', $ids);
 
             if (Schema::hasColumn('products', 'sales')) {
                 $query->orderByDesc('sales');
@@ -570,46 +508,15 @@ class HomepageService
             return $query->latest('products.id')->first();
         };
 
-        return $specs->map(function (array $spec) use ($bySlug, $descendantIds, $findFallbackProduct) {
-            $root = null;
-
-            foreach ($spec['slugs'] as $slug) {
-                $root = $bySlug->get(mb_strtolower($slug));
-                if ($root) {
-                    break;
-                }
-            }
-
-            $product = null;
-            $ids = $descendantIds($root);
-
-            if ($ids !== []) {
-                $query = $this->publicProductsQuery()
-                    ->whereIn('products.category_id', $ids);
-
-                if (Schema::hasColumn('products', 'sales')) {
-                    $query->orderByDesc('sales');
-                }
-
-                if (Schema::hasColumn('products', 'views')) {
-                    $query->orderByDesc('views');
-                }
-
-                $product = $query->latest('products.id')->first();
-            }
-
-            if (! $product) {
-                $product = $findFallbackProduct($spec['keywords']);
-            }
-
-            return [
-                'name' => $spec['name'],
-                'slug' => (string) ($root?->slug ?: $spec['slugs'][0]),
+        return $roots
+            ->map(fn (Category $root) => [
+                'name' => $root->name,
+                'slug' => (string) $root->slug,
                 'category' => $root,
-                'product' => $product,
-                'asset' => $spec['asset'] ?? null,
-            ];
-        })->values();
+                'product' => $findRepresentativeProduct($root),
+                'asset' => null,
+            ])
+            ->values();
     }
 
     private function featuredCategoryBlock(Collection $displayCategories, Collection $ecoProducts): array

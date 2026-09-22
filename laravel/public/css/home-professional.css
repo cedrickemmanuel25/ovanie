@@ -383,6 +383,7 @@
 .ov-feature-intro h2 { margin: 7px 0 0; color: #0d274d; font-size: 19px; line-height: 1.25; }
 .ov-feature-intro p { margin: 11px 0 18px; color: var(--ov-muted); font-size: 11px; line-height: 1.55; }
 .ov-feature-products { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+.ov-promo-badge { color: #e64e2c; font-size: 10px; font-weight: 900; }
 .ov-event-section { overflow: hidden; }
 .ov-event-intro { border-radius: 10px; background: linear-gradient(145deg, #fff7f1, #fff); }
 .ov-event-section.is-black-friday .ov-event-intro { color: #fff; background: linear-gradient(145deg, #090b10, #242832); }

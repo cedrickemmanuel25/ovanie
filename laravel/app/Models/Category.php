@@ -14,6 +14,7 @@ class Category extends Model
         'name',
         'slug',
         'icon',
+        'image_path',
         'description',
         'status',
         'is_active',
@@ -93,6 +94,21 @@ class Category extends Model
     public function getIsRootAttribute(): bool
     {
         return $this->parent_id === null;
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        $path = trim((string) $this->image_path);
+
+        if ($path === '') {
+            return null;
+        }
+
+        if (Str::startsWith($path, ['http://', 'https://', '//'])) {
+            return $path;
+        }
+
+        return asset('storage/' . ltrim($path, '/'));
     }
 
     public function getStatusLabelAttribute(): string

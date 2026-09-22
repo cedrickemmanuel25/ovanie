@@ -178,72 +178,44 @@
         return '';
     };
 
-    $categoryCards = collect([
-        [
-            'name' => 'Matériaux gros œuvre',
-            'slug' => 'materiaux-gros-oeuvres',
-            'image' => $storageLogoImage(
-                ['home-gros-oeuvre.webp'],
-                ['gros oeuvre', 'maconnerie', 'ciment', 'brique']
-            ),
-        ],
-        [
-            'name' => 'Matériaux de finition',
-            'slug' => 'materiaux-de-finition',
-            'image' => $storageLogoImage(
-                ['home-finition.webp'],
-                ['finition', 'deco', 'carrelage', 'peinture']
-            ),
-        ],
-        [
-            'name' => 'Matériaux écologiques',
-            'slug' => 'materiaux-ecologique',
-            'image' => $storageLogoImage(
-                ['home-equipement.webp'],
-                ['ecolog', 'osb', 'terre', 'recycle']
-            ),
-        ],
-        [
-            'name' => 'Outillage & Équipement',
-            'slug' => 'outillage-equipement',
-            'image' => $storageLogoImage(
-                ['home-outillage.webp'],
-                ['outillage', 'materiel outillage', 'equipement chantier', 'outil']
-            ),
-        ],
-        [
-            'name' => 'Électricité & Plomberie',
-            'slug' => 'electricite-plomberie',
-            'image' => $storageLogoImage(
-                ['home-plomberie.webp'],
-                ['electricite plomberie', 'plomberie', 'electricite', 'cable', 'pvc']
-            ),
-        ],
-        [
-            'name' => 'Énergie solaire',
-            'slug' => 'energie-solaire',
-            'image' => $storageLogoImage(
-                ['home-energie.webp'],
-                ['energie autonomie', 'solaire', 'panneau', 'batterie']
-            ),
-        ],
-        [
-            'name' => 'Nos reconditionnés',
-            'slug' => 'nos-reconditionnee',
-            'image' => $storageLogoImage(
-                ['home-reconditionnes.webp'],
-                ['reconditionne', 'reconditionnes']
-            ),
-        ],
-        [
-            'name' => 'Cartes & bons OVANIE',
-            'slug' => 'carte-cadeau-ovanie',
-            'image' => $storageLogoImage(
-                ['home-carte-cadeau.webp'],
-                ['carte cadeau', 'bon achat', 'carte ovanie']
-            ),
-        ],
-    ]);
+    /*
+     |--------------------------------------------------------------------------
+     | Catégories affichées à l'accueil : entièrement pilotées par la base.
+     |--------------------------------------------------------------------------
+     |
+     | Demande utilisateur : les catégories de cette section doivent venir de
+     | la table `categories` et une nouvelle catégorie créée dans l'admin doit
+     | y apparaître automatiquement. $homepageCategoryCards vient de
+     | HomepageService::homepageCategoryCards(), qui prend simplement les
+     | catégories principales actives dans l'ordre configuré par l'admin.
+     |
+     | Priorité de l'image : 1) photo importée pour la catégorie dans l'admin,
+     | 2) visuel officiel historique (storage/logos) reconnu via le nom, 3) une
+     | vraie photo produit de la catégorie.
+     */
+    $categoryCards = collect($homepageCategoryCards ?? [])
+        ->map(function (array $card) use ($storageLogoImage, $normalizeLogoName): array {
+            $category = $card['category'] ?? null;
+            $name = (string) ($card['name'] ?? $category?->name ?? 'Catégorie');
+            $slug = (string) ($card['slug'] ?? $category?->slug ?? '');
+
+            $keywords = collect(explode(' ', $normalizeLogoName($name . ' ' . str_replace('-', ' ', $slug))))
+                ->filter(fn ($word) => mb_strlen($word) >= 3)
+                ->unique()
+                ->values()
+                ->all();
+
+            $image = $category?->image_url
+                ?: $storageLogoImage([], $keywords)
+                ?: (string) ($card['product']?->card_image_url ?? '');
+
+            return [
+                'name' => $name,
+                'slug' => $slug,
+                'image' => $image,
+            ];
+        })
+        ->values();
 
     $newArrivalsList = collect($latestProducts ?? [])->filter()->sortByDesc('created_at')->take(3)->values();
     // Le classement ne contient que les produits effectivement les plus achetés.

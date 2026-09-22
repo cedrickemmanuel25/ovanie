@@ -18,7 +18,7 @@
         <a class="category-btn category-btn-secondary" href="{{ route('admin.categories.index') }}">← Retour aux catégories</a>
     </header>
 
-    <form method="POST" action="{{ route('admin.categories.store') }}" class="category-professional-form">
+    <form method="POST" action="{{ route('admin.categories.store') }}" class="category-professional-form" enctype="multipart/form-data">
         @csrf
         <input type="hidden" name="category_type" value="category">
         @include('admin.categories.partials.form', ['categoryType' => 'category'])

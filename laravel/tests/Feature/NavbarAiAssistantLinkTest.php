@@ -79,12 +79,20 @@ class NavbarAiAssistantLinkTest extends TestCase
         // Bouton "Nouvelle conversation" toujours disponible dans l'en-tête.
         $this->assertStringContainsString('ovaiRestart', $html);
 
-        // Le déclencheur "IA" doit précéder "Matériaux" dans le HTML rendu.
+        // Le déclencheur "IA" doit précéder les liens de catégories dans le
+        // menu principal. Les catégories affichées viennent maintenant de la
+        // base (voir HomepageCategoryCardsTest et NavbarCategoryLinksTest) et
+        // ne sont donc pas fiables comme repère de test (nom variable, et
+        // "Cartes OVANIE" apparaît aussi dans le filtre de recherche avant le
+        // menu). On compare donc la position du bouton IA à celle de
+        // "Comment acheter", un lien statique du menu principal qui suit
+        // toujours la boucle des catégories et n'apparaît nulle part ailleurs
+        // dans l'en-tête.
         $aiPosition = strpos($html, 'ovn-ai-link');
-        $materiauxPosition = strpos($html, 'Matériaux');
+        $howToBuyPosition = strpos($html, 'Comment acheter');
         $this->assertNotFalse($aiPosition);
-        $this->assertNotFalse($materiauxPosition);
-        $this->assertLessThan($materiauxPosition, $aiPosition);
+        $this->assertNotFalse($howToBuyPosition);
+        $this->assertLessThan($howToBuyPosition, $aiPosition);
     }
 
     public function test_visiting_the_old_assistance_url_redirects_to_home_with_the_panel_open(): void

@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -102,9 +103,10 @@ class AdminCategoryController extends Controller
     public function store(Request $request): RedirectResponse
     {
         [$data, $parent] = $this->validatedData($request);
+        $imagePath = $this->storeImage($request);
 
-        $category = DB::transaction(function () use ($data, $parent): Category {
-            $category = Category::create($this->payload($data, $parent));
+        $category = DB::transaction(function () use ($data, $parent, $imagePath): Category {
+            $category = Category::create($this->payload($data, $parent, $imagePath));
             $this->flushCategoryCaches();
 
             return $category;
@@ -135,8 +137,11 @@ class AdminCategoryController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($category, $data, $parent): void {
-            $category->update($this->payload($data, $parent));
+        $previousImagePath = $category->image_path;
+        $imagePath = $this->storeImage($request) ?? ($request->boolean('remove_image') ? null : $category->image_path);
+
+        DB::transaction(function () use ($category, $data, $parent, $imagePath): void {
+            $category->update($this->payload($data, $parent, $imagePath));
 
             if ($category->parent_id === null && $category->status === 'inactif') {
                 $category->children()->update([
@@ -147,6 +152,10 @@ class AdminCategoryController extends Controller
 
             $this->flushCategoryCaches();
         });
+
+        if ($previousImagePath && $previousImagePath !== $imagePath && Storage::disk('public')->exists($previousImagePath)) {
+            Storage::disk('public')->delete($previousImagePath);
+        }
 
         return redirect()
             ->route('admin.categories.index')
@@ -195,8 +204,13 @@ class AdminCategoryController extends Controller
             ])));
         }
 
+        $imagePath = $category->image_path;
         $category->delete();
         $this->flushCategoryCaches();
+
+        if ($imagePath && Storage::disk('public')->exists($imagePath)) {
+            Storage::disk('public')->delete($imagePath);
+        }
 
         return redirect()
             ->route('admin.categories.index')
@@ -211,6 +225,8 @@ class AdminCategoryController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:1200'],
             'icon' => ['nullable', 'string', 'max:80'],
+            'image' => ['nullable', 'image', 'max:4096'],
+            'remove_image' => ['nullable', 'boolean'],
             'status' => ['required', 'in:actif,inactif'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
         ], [
@@ -259,7 +275,7 @@ class AdminCategoryController extends Controller
         return [$data, $parent];
     }
 
-    private function payload(array $data, ?Category $parent): array
+    private function payload(array $data, ?Category $parent, ?string $imagePath = null): array
     {
         return [
             'parent_id' => $parent?->id,
@@ -267,10 +283,20 @@ class AdminCategoryController extends Controller
             'name' => trim($data['name']),
             'description' => filled($data['description'] ?? null) ? trim($data['description']) : null,
             'icon' => filled($data['icon'] ?? null) ? trim($data['icon']) : null,
+            'image_path' => $imagePath,
             'status' => $data['status'],
             'is_active' => $data['status'] === 'actif',
             'sort_order' => (int) ($data['sort_order'] ?? 0),
         ];
+    }
+
+    private function storeImage(Request $request): ?string
+    {
+        if (! $request->hasFile('image')) {
+            return null;
+        }
+
+        return $request->file('image')->store('categories', 'public');
     }
 
     private function parentOptions(?Category $excluded = null)

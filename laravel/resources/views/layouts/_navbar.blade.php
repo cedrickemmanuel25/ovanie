@@ -1,4 +1,5 @@
 @php
+    use App\Models\Category;
     use Illuminate\Support\Facades\Route;
 
     $_homeUrl = Route::has('home') ? route('home') : url('/');
@@ -55,6 +56,16 @@
             ? route('catalog.index', ['category' => $slug])
             : $_catalogUrl . '?category=' . urlencode($slug);
     };
+
+    // Demande utilisateur : une catégorie créée dans l'admin doit apparaître
+    // automatiquement dans la barre de navigation principale, sans liste
+    // figée dans le code.
+    $_navCategories = Category::query()
+        ->active()
+        ->roots()
+        ->ordered()
+        ->limit(8)
+        ->get(['id', 'slug', 'name']);
 @endphp
 
 <header class="ovn-header" data-ovanie-navbar>
@@ -185,12 +196,9 @@
                         <span>IA</span>
                     </button>
                 @endauth
-                <a href="{{ $_catalogCategoryUrl('materiaux-gros-oeuvres') }}">Matériaux</a>
-                <a href="{{ $_catalogCategoryUrl('electricite-plomberie') }}">Plomberie</a>
-                <a href="{{ $_catalogCategoryUrl('outillage-equipement') }}">Outillage</a>
-                <a href="{{ $_catalogCategoryUrl('electricite-plomberie') }}">Électricité</a>
-                <a href="{{ $_catalogCategoryUrl('energie-solaire') }}">Énergie solaire</a>
-                <a href="{{ $_catalogCategoryUrl('nos-reconditionnee') }}">Reconditionnés</a>
+                @foreach($_navCategories as $_navCategory)
+                    <a href="{{ $_catalogCategoryUrl($_navCategory->slug) }}">{{ $_navCategory->name }}</a>
+                @endforeach
                 <a href="{{ $_giftCardsUrl }}">Cartes OVANIE</a>
                 <a href="{{ $_howToBuyUrl }}">Comment acheter</a>
                 <a href="{{ $_guaranteeUrl }}">Garantie acheteur</a>

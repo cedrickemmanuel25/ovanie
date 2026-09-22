@@ -55,6 +55,22 @@
                     @error('icon')<p class="category-field-error">{{ $message }}</p>@enderror
                 </div>
 
+                <div class="category-field is-wide">
+                    <label for="image">Photo de la catégorie</label>
+                    @if($category->image_url)
+                        <div class="category-field-current-image">
+                            <img src="{{ $category->image_url }}" alt="{{ $category->name }}">
+                            <label class="category-field-checkbox">
+                                <input type="checkbox" name="remove_image" value="1">
+                                Supprimer la photo actuelle
+                            </label>
+                        </div>
+                    @endif
+                    <input id="image" name="image" type="file" accept="image/*">
+                    <small>Utilisée sur la page d’accueil et partout où la catégorie est affichée avec une vignette. Format image, 4 Mo max.</small>
+                    @error('image')<p class="category-field-error">{{ $message }}</p>@enderror
+                </div>
+
                 <div class="category-field">
                     <label for="sort_order">Ordre d’affichage</label>
                     <input id="sort_order" name="sort_order" type="number" min="0" max="9999" value="{{ old('sort_order', $category->sort_order ?? 0) }}">

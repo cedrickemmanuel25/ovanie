@@ -329,9 +329,12 @@ class MobileMarketplaceController extends Controller
                 'parent_id' => null,
                 'name' => (string) ($card['name'] ?? $category?->name ?? 'Catégorie'),
                 'slug' => $slug,
-                'icon' => $filename
-                    ? asset('storage/logos/'.rawurlencode($filename))
-                    : (string) ($card['product']?->card_image_url ?? ''),
+                // Priorité à la photo importée pour la catégorie dans l'admin,
+                // puis aux visuels officiels des catégories historiques,
+                // puis à un vrai produit de la catégorie.
+                'icon' => $category?->image_url
+                    ?? ($filename ? asset('storage/logos/'.rawurlencode($filename)) : null)
+                    ?? (string) ($card['product']?->card_image_url ?? ''),
                 'children' => $category?->relationLoaded('children')
                     ? $category->children->map(fn (Category $child) => [
                         'id' => (int) $child->id,
@@ -361,7 +364,7 @@ class MobileMarketplaceController extends Controller
             'nos-reconditionnes' => 'home-reconditionnes.webp',
             'carte-cadeau-ovanie' => 'home-carte-cadeau.webp',
         ];
-        $icon = (string) ($category->icon ?? '');
+        $icon = (string) ($category->image_url ?? $category->icon ?? '');
         if ($icon === '' && isset($officialImages[$category->slug])) {
             $icon = asset('storage/logos/'.rawurlencode($officialImages[$category->slug]));
         }
