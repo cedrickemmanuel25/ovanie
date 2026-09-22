@@ -39,7 +39,22 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Dispute::class, DisputePolicy::class);
         Gate::policy(ProductImage::class, ProductImagePolicy::class);
 
-        if (str_contains((string) config('app.url'), 'ngrok-free.dev') || $this->app->environment('production')) {
+        // En développement local (php artisan serve sur 127.0.0.1/localhost),
+        // ne jamais forcer https : le serveur local ne parle pas TLS, donc
+        // tout asset() généré en https (JS, CSS, images) échoue en silence
+        // et casse des pages entières (ex. catalogue qui reste bloqué sur
+        // "Chargement des produits…" car catalog.js ne charge jamais). Cette
+        // situation se produit dès que APP_ENV=production en local (copie
+        // d'un .env de prod). On ne désactive ce garde-fou que pour une
+        // vraie requête HTTP locale : jamais en console/queue (les liens
+        // https générés dans les emails/notifications de production restent
+        // corrects).
+        if (self::shouldForceHttpsScheme(
+            runningInConsole: $this->app->runningInConsole(),
+            requestHost: $this->app->runningInConsole() ? '' : request()->getHost(),
+            appUrl: (string) config('app.url'),
+            isProductionEnv: $this->app->environment('production'),
+        )) {
             URL::forceScheme('https');
         }
 
@@ -87,5 +102,30 @@ class AppServiceProvider extends ServiceProvider
 
             $view->with(compact('cartCount', 'favoriteCount'));
         });
+    }
+
+    /**
+     * Décide si les URL générées (asset(), url(), route()...) doivent être
+     * forcées en https. Jamais pour une vraie requête HTTP locale
+     * (127.0.0.1/localhost, ex. php artisan serve) même si APP_ENV=production
+     * par erreur : un serveur de développement ne parle pas TLS, donc forcer
+     * https y casse silencieusement tous les assets (voir le commentaire
+     * dans boot()). Toujours forcé en console/queue et pour toute requête
+     * réelle sur un autre host (production, ngrok).
+     */
+    public static function shouldForceHttpsScheme(
+        bool $runningInConsole,
+        string $requestHost,
+        string $appUrl,
+        bool $isProductionEnv,
+    ): bool {
+        $isLocalDevRequest = ! $runningInConsole
+            && in_array($requestHost, ['127.0.0.1', 'localhost'], true);
+
+        if ($isLocalDevRequest) {
+            return false;
+        }
+
+        return str_contains($appUrl, 'ngrok-free.dev') || $isProductionEnv;
     }
 }
