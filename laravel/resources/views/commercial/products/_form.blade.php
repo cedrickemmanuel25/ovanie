@@ -418,16 +418,24 @@
                     credentials: 'same-origin',
                     body: JSON.stringify({ name }),
                 });
-                if (!response.ok || categoryChosenManually) return;
+                if (!response.ok) {
+                    console.warn('[OVANIE] Suggestion de catégorie : réponse HTTP', response.status, await response.text().catch(() => ''));
+                    return;
+                }
+                if (categoryChosenManually) return;
 
                 const payload = await response.json();
                 const suggestion = payload?.suggestion;
-                if (!suggestion || !suggestion.category_id) return;
+                if (!suggestion || !suggestion.category_id) {
+                    console.info('[OVANIE] Suggestion de catégorie : aucune suggestion renvoyée (fonctionnalité désactivée, clé OpenAI absente, ou IA non confiante).', payload);
+                    return;
+                }
 
                 categorySelect.value = String(suggestion.subcategory_id || suggestion.category_id);
                 if (hint) hint.style.display = '';
-            } catch (_) {
-                // Échec silencieux : le commercial garde la sélection manuelle du formulaire.
+            } catch (error) {
+                // Échec réseau : le commercial garde la sélection manuelle du formulaire.
+                console.warn('[OVANIE] Suggestion de catégorie : requête échouée', error);
             }
         }
 
