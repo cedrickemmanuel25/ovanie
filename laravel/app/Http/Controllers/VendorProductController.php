@@ -119,6 +119,15 @@ class VendorProductController extends Controller
         return self::BOOST_PACKAGES[$key] ?? self::BOOST_PACKAGES['semaine_classic'];
     }
 
+    /**
+     * Exposé publiquement pour l'API mobile (VendorMobileController::boostPackages) :
+     * l'app vendeur a besoin de la même liste de packs que le modal web.
+     */
+    public static function boostPackagesList(): array
+    {
+        return self::BOOST_PACKAGES;
+    }
+
     private function ensureOwnsProduct(Product $product): void
     {
         $shop = Auth::user()?->shop;

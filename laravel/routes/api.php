@@ -304,6 +304,8 @@ Route::prefix('mobile/v1/vendor')
         Route::delete('/products/{product:id}', [VendorMobileController::class, 'archiveProduct']);
         Route::post('/products/{product:id}/restore', [VendorMobileController::class, 'restoreProduct']);
         Route::post('/products/{product:id}/images/reorder', [VendorMobileController::class, 'reorderProductImages']);
+        Route::get('/boost/packages', [VendorMobileController::class, 'boostPackages']);
+        Route::post('/products/{product:id}/boost/pay', [VendorMobileController::class, 'payBoost'])->middleware('throttle:20,1');
 
         Route::get('/orders', [VendorMobileController::class, 'orders']);
         Route::get('/orders/{order}', [VendorMobileController::class, 'order']);

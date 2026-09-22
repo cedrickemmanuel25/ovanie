@@ -500,6 +500,37 @@ class VendorMobileController extends Controller
         ]);
     }
 
+    /**
+     * Mêmes packs que le modal boost du web (VendorProductController::
+     * BOOST_PACKAGES), pour que l'app affiche exactement les mêmes offres
+     * et les mêmes prix.
+     */
+    public function boostPackages(): JsonResponse
+    {
+        return response()->json([
+            'packages' => collect(VendorProductController::boostPackagesList())
+                ->map(fn (array $package, string $key) => [...$package, 'key' => $key])
+                ->values(),
+        ]);
+    }
+
+    public function payBoost(Request $request, Product $product): JsonResponse
+    {
+        $shop = $this->shopFor($request);
+        abort_unless((int) $product->shop_id === (int) $shop->id, 403);
+        $this->bindUserToAuth($request);
+        $request->headers->set('Accept', 'application/json');
+
+        $response = $this->callController(VendorProductController::class, 'payBoost', [
+            'request' => $request,
+            'product' => $product,
+        ]);
+
+        return $response instanceof JsonResponse
+            ? $response
+            : response()->json(['success' => false, 'message' => 'Impossible de lancer le paiement du boost.'], 500);
+    }
+
     public function archiveProduct(Request $request, Product $product): JsonResponse
     {
         $shop = $this->shopFor($request);
