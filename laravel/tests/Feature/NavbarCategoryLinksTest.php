@@ -14,8 +14,14 @@ use Tests\TestCase;
  * portable 1280px). L'utilisateur a choisi de retirer les catégories de
  * cette barre - elles restent listées en entier via "Toutes les
  * catégories" - et d'y afficher à la place des liens qui n'y apparaissaient
- * pas encore : Comment acheter, Conditions vendeurs, OVANIE Pro,
- * Partenaires & Fournisseurs et Garantie acheteur.
+ * pas encore. Puis l'utilisateur a signalé un espace vide entre ces liens et
+ * le bouton "Vendre sur OVANIE" sur son écran (large) : on a complété avec
+ * d'autres liens déjà existants sur le site (Cartes cadeaux, Suivi de
+ * commande, Centre d'aide, FAQ, Qui sommes-nous) pour remplir la ligne à
+ * 1920px. En dessous d'environ 1500px de large, la ligne défile
+ * horizontalement plutôt que de tout faire tenir (déjà le cas avant, via
+ * overflow-x: auto) - remplir un grand écran sans rien couper sur un plus
+ * petit n'est pas possible avec un seul jeu de liens de taille fixe.
  */
 class NavbarCategoryLinksTest extends TestCase
 {
@@ -37,6 +43,11 @@ class NavbarCategoryLinksTest extends TestCase
         $this->assertStringContainsString('OVANIE Pro', $navHtml);
         $this->assertStringContainsString('Partenaires &amp; Fournisseurs', $navHtml);
         $this->assertStringContainsString('Garantie acheteur', $navHtml);
+        $this->assertStringContainsString('Cartes cadeaux', $navHtml);
+        $this->assertStringContainsString('Suivi de commande', $navHtml);
+        $this->assertStringContainsString('Centre d’aide', $navHtml);
+        $this->assertStringContainsString('FAQ', $navHtml);
+        $this->assertStringContainsString('Qui sommes-nous', $navHtml);
         $this->assertStringNotContainsString('Catégorie qui ne doit plus apparaître ici', $navHtml);
     }
 

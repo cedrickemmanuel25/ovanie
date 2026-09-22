@@ -26,6 +26,8 @@
     $_disputesUrl = auth()->check() && Route::has('problem.report') ? route('problem.report', ['type' => 'litige']) : $_loginUrl;
     $_trackingUrl = Route::has('order.tracking.public') ? route('order.tracking.public') : url('/suivi-commande');
     $_helpUrl = Route::has('help.center') ? route('help.center') : url('/centre-aide');
+    $_faqUrl = Route::has('faq') ? route('faq') : url('/faq');
+    $_aboutUrl = Route::has('about') ? route('about') : url('/qui-sommes-nous');
     $_logoutUrl = Route::has('logout') ? route('logout') : url('/logout');
     $_cartCount = (int) ($cartCount ?? 0);
     $_currentUser = auth()->user();
@@ -176,6 +178,11 @@
                 <a href="{{ $_businessUrl }}">OVANIE Pro</a>
                 <a href="{{ $_partnersUrl }}">Partenaires &amp; Fournisseurs</a>
                 <a href="{{ $_guaranteeUrl }}">Garantie acheteur</a>
+                <a href="{{ $_giftCardsUrl }}">Cartes cadeaux</a>
+                <a href="{{ $_trackingUrl }}">Suivi de commande</a>
+                <a href="{{ $_helpUrl }}">Centre d’aide</a>
+                <a href="{{ $_faqUrl }}">FAQ</a>
+                <a href="{{ $_aboutUrl }}">Qui sommes-nous</a>
             </nav>
 
             <a href="{{ $_sellUrl }}" class="ovn-sell-button">Vendre sur OVANIE</a>
