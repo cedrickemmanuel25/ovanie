@@ -29,6 +29,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   bool _saving = false;
   bool _fragile = false;
   bool _unloading = false;
+  bool _negotiable = false;
   int _step = 0;
   int? _mainCategoryId;
   int? _subcategoryId;
@@ -212,6 +213,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       _unloading =
           _existing['requires_unloading'] == true ||
           '${_existing['requires_unloading']}' == '1';
+      _negotiable =
+          _existing['is_negotiable'] == true ||
+          '${_existing['is_negotiable']}' == '1';
     } catch (e) {
       _error = ApiClient.friendlyError(e);
     } finally {
@@ -532,6 +536,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         'fragile': _fragile ? 1 : 0,
         'requires_unloading': _unloading ? 1 : 0,
         'unloading_instructions': ctrl('unloading_instructions').text.trim(),
+        'is_negotiable': _negotiable ? 1 : 0,
         'availability_status':
             (int.tryParse(ctrl('stock').text.trim()) ?? 0) > 0
             ? 'in_stock'
@@ -553,6 +558,21 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         values['product_attributes[$attributeIndex][value]'] =
             _usages[_usage] ?? _usage!;
         values['product_attributes[$attributeIndex][unit]'] = '';
+      }
+
+      if (_negotiable) {
+        // Seuils calculés côté app, jamais saisis par le vendeur : toujours
+        // recalculés à partir du prix courant pour ne jamais rester figés à
+        // une valeur devenue >= au prix si celui-ci est baissé ensuite
+        // (price_p1 doit toujours rester strictement inférieur à price).
+        final price = double.tryParse(
+          ctrl('price').text.trim().replaceAll(',', '.'),
+        );
+        if (price != null && price > 0) {
+          values['price_p1'] = (price * 0.95).round();
+          values['price_p2'] = (price * 0.90).round();
+          values['price_p3'] = (price * 0.85).round();
+        }
       }
 
       await _repo.saveProduct(
@@ -936,6 +956,21 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           alignment: Alignment.centerLeft,
           child: Text(
             'Ex. : Vente à l’unité, par lot, au poids, au mètre, etc.',
+            style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _yesNo(
+          'Prix négociable',
+          _negotiable,
+          Icons.handshake_outlined,
+          (v) => setState(() => _negotiable = v),
+        ),
+        const SizedBox(height: 4),
+        const Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Le client pourra vous proposer un prix depuis la fiche produit.',
             style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
           ),
         ),

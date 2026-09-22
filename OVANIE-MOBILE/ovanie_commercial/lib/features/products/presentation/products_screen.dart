@@ -880,6 +880,7 @@ class _ProductWizardScreenState extends State<ProductWizardScreen>{
         'usage_area':p['usage_area'],
         'fragile':p['fragile']==true,
         'requires_unloading':p['requires_unloading']==true,
+        'is_negotiable':p['is_negotiable']==true,
       };
     }catch(e){error='$e';}
     finally{if(mounted)setState(()=>loading=false);}
@@ -889,6 +890,19 @@ class _ProductWizardScreenState extends State<ProductWizardScreen>{
     final body=<String,dynamic>{};
     for(final e in c.entries)body[e.key]=e.value.text;
     body.addAll(extra);
+    if(step==2 && extra['is_negotiable']==true){
+      // Seuils calculés côté client, comme sur le web : le vendeur/commercial
+      // ne saisit jamais price_p1/p2/p3 directement, ils sont recalculés à
+      // chaque fois à partir du prix courant pour ne jamais rester obsolètes
+      // (un prix baissé après activation de la négociation invaliderait un
+      // seuil figé, price_p1 devant toujours rester strictement < price).
+      final price=double.tryParse(c['price']?.text.replaceAll(',', '.')??'');
+      if(price!=null && price>0){
+        body['price_p1']=(price*0.95).round();
+        body['price_p2']=(price*0.90).round();
+        body['price_p3']=(price*0.85).round();
+      }
+    }
     try{
       await widget.service.saveStep(widget.productId,step,body);
       if(step<5){setState((){step++;c.clear();});await _load();}
@@ -916,6 +930,7 @@ class _ProductWizardScreenState extends State<ProductWizardScreen>{
           Row(children:[Expanded(child:Field(label:'Stock disponible',controller:ctl('stock'),keyboard:TextInputType.number)),const SizedBox(width:12),Expanded(child:_EnumField(label:'Unité de vente',value:extra['unit']?.toString(),options:_unitLabels,onChanged:(v)=>setState(()=>extra['unit']=v)))]),
           Row(children:[Expanded(child:Field(label:'Libellé (optionnel, ex: Sac de 50 kg)',controller:ctl('unit_label'))),const SizedBox(width:12),Expanded(child:Field(label:'Quantité minimum',controller:ctl('min_order_quantity'),keyboard:TextInputType.number))]),
           _EnumField(label:'Type de vente',value:extra['sale_type']?.toString(),options:_saleTypeLabels,onChanged:(v)=>setState(()=>extra['sale_type']=v)),
+          _ToggleField(label:'Prix négociable (le client peut proposer un prix)',value:extra['is_negotiable']==true,onChanged:(v)=>setState(()=>extra['is_negotiable']=v)),
         ];
       case 3:
         return [
