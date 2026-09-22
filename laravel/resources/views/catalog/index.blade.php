@@ -284,6 +284,22 @@
         $categoryPage['image_url'] = asset('storage/logos/' . rawurlencode($categoryPage['image']));
     }
 
+    // Demande utilisateur : une catégorie créée dans l'admin doit avoir la
+    // même page dédiée (bannière, photo importée, sous-catégories en
+    // raccourcis) que les 7 catégories historiques ci-dessus, au lieu de
+    // rester sans page tant qu'elle n'est pas ajoutée à la liste figée.
+    if (! $categoryPage && ! empty($categoryRecord)) {
+        $categoryPage = [
+            'title' => $categoryRecord->name,
+            'description' => trim((string) $categoryRecord->description) !== ''
+                ? $categoryRecord->description
+                : 'Découvrez les produits de la catégorie ' . $categoryRecord->name . ' disponibles sur OVANIE.',
+            'image_url' => $categoryRecord->image_url ?: asset('images/home/product-placeholder.svg'),
+            'accent' => '#0868e8',
+            'items' => $categoryRecord->children->pluck('name')->values()->all(),
+        ];
+    }
+
     $listingPage = match ($listingPageType ?? null) {
         'best-sellers' => [
             'title' => 'Meilleures ventes',
@@ -359,14 +375,16 @@
                 <div><i data-lucide="headphones"></i><span><strong>Assistance 7j/7</strong><small>À votre écoute</small></span></div>
             </section>
 
-            <nav class="category-shortcuts" aria-label="Sous-catégories">
-                @foreach($categoryPage['items'] as $index => $item)
-                    <button type="button" data-category-search="{{ $item }}" class="{{ $index === 0 ? 'is-active' : '' }}">
-                        <i data-lucide="{{ ['package', 'hammer', 'blocks', 'paint-bucket', 'zap', 'wrench'][$index % 6] }}"></i>
-                        <span>{{ $item }}</span>
-                    </button>
-                @endforeach
-            </nav>
+            @if(!empty($categoryPage['items']))
+                <nav class="category-shortcuts" aria-label="Sous-catégories">
+                    @foreach($categoryPage['items'] as $index => $item)
+                        <button type="button" data-category-search="{{ $item }}" class="{{ $index === 0 ? 'is-active' : '' }}">
+                            <i data-lucide="{{ ['package', 'hammer', 'blocks', 'paint-bucket', 'zap', 'wrench'][$index % 6] }}"></i>
+                            <span>{{ $item }}</span>
+                        </button>
+                    @endforeach
+                </nav>
+            @endif
         @endif
 
         <section class="catalog-summary-strip" aria-label="Résumé du catalogue">

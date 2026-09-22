@@ -163,15 +163,6 @@ Route::get('/homepage/status', HomepageStatusController::class)
     ->middleware('throttle:60,1')
     ->name('homepage.status');
 Route::get('/categories/{category}', [ProductController::class, 'categoryPage'])
-    ->whereIn('category', [
-        'materiaux-gros-oeuvre',
-        'materiaux-de-finition',
-        'outillage-equipement',
-        'electricite-plomberie',
-        'energie-solaire',
-        'materiaux-ecologiques',
-        'reconditionnes',
-    ])
     ->name('categories.show');
 Route::get('/meilleures-ventes', [ProductController::class, 'curatedPage'])
     ->defaults('selection', 'best-sellers')

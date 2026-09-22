@@ -74,4 +74,22 @@ class HomepageCategoryCardsTest extends TestCase
 
         $this->assertStringNotContainsString($inactive->name, $html);
     }
+
+    public function test_a_category_without_photo_product_or_matching_logo_never_renders_a_blank_card(): void
+    {
+        // Bug rapporté par l'utilisateur : une catégorie sans photo importée,
+        // sans produit et sans visuel historique correspondant s'affichait
+        // comme une case blanche vide dans la grille "Catégories BTP".
+        Category::create([
+            'name' => 'Xyzzyx sans visuel',
+            'slug' => 'xyzzyx-sans-visuel-' . uniqid(),
+            'status' => 'actif',
+            'sort_order' => 0,
+        ]);
+
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('Xyzzyx sans visuel', $html);
+        $this->assertStringContainsString('images/home/product-placeholder.svg', $html);
+    }
 }

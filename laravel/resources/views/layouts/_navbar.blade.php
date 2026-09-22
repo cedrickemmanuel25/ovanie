@@ -38,7 +38,11 @@
     $_publicPhoneHref = (string) config('public_contact.phone_e164', '+2250161780000');
 
     $_catalogCategoryUrl = static function (string $slug) use ($_catalogUrl): string {
-        $publicCategorySlugs = [
+        // Alias des 7 catégories historiques : leur page dédiée utilise une
+        // URL marketing différente du slug réel en base. categories.show
+        // accepte maintenant n'importe quelle catégorie, donc toute nouvelle
+        // catégorie utilise directement son propre slug.
+        $legacyAliases = [
             'materiaux-gros-oeuvres' => 'materiaux-gros-oeuvre',
             'materiaux-de-finition' => 'materiaux-de-finition',
             'outillage-equipement' => 'outillage-equipement',
@@ -48,27 +52,27 @@
             'nos-reconditionnee' => 'reconditionnes',
         ];
 
-        if (isset($publicCategorySlugs[$slug]) && Route::has('categories.show')) {
-            return route('categories.show', $publicCategorySlugs[$slug]);
+        if (! Route::has('categories.show')) {
+            return Route::has('catalog.index')
+                ? route('catalog.index', ['category' => $slug])
+                : $_catalogUrl . '?category=' . urlencode($slug);
         }
 
-        return Route::has('catalog.index')
-            ? route('catalog.index', ['category' => $slug])
-            : $_catalogUrl . '?category=' . urlencode($slug);
+        return route('categories.show', $legacyAliases[$slug] ?? $slug);
     };
 
     // Demande utilisateur : une catégorie créée dans l'admin doit apparaître
     // automatiquement dans la barre de navigation principale, sans liste
-    // figée dans le code. Limité à 5 (au lieu de toutes les catégories) pour
-    // laisser la place aux liens "Comment acheter"/"Garantie acheteur"/
-    // "Conditions de vente" : au-delà, la ligne déborde et ces liens (et
-    // même le bouton IA) sortent de l'écran sans barre de défilement
-    // visible. Le menu "Toutes les catégories" liste toujours l'ensemble.
+    // figée dans le code - et sans que rien ne soit coupé ou poussé hors
+    // champ. Mesuré avec un rendu réel de cette barre (bouton IA + menu
+    // "Aide & infos" + bouton "Vendre sur OVANIE" compris) : au-delà de 4
+    // catégories, ça déborde déjà sur un écran de portable 1280px de large.
+    // Le menu "Toutes les catégories" liste toujours l'ensemble.
     $_navCategories = Category::query()
         ->active()
         ->roots()
         ->ordered()
-        ->limit(3)
+        ->limit(4)
         ->get(['id', 'slug', 'name']);
 @endphp
 
@@ -203,10 +207,23 @@
                 @foreach($_navCategories as $_navCategory)
                     <a href="{{ $_catalogCategoryUrl($_navCategory->slug) }}">{{ $_navCategory->name }}</a>
                 @endforeach
-                <a href="{{ $_giftCardsUrl }}">Cartes OVANIE</a>
-                <a href="{{ $_howToBuyUrl }}">Comment acheter</a>
-                <a href="{{ $_guaranteeUrl }}">Garantie acheteur</a>
-                <a href="{{ $_vendorTermsUrl }}">Conditions de vente</a>
+
+                {{-- Demande utilisateur : montrer toutes les catégories sans
+                     rien couper. Avec des catégories dynamiques (donc plus
+                     nombreuses), il n'y a plus assez de place pour aussi
+                     afficher ces 3 liens d'aide en clair : regroupés dans un
+                     petit menu, comme le menu compte, pour ne prendre qu'une
+                     seule place dans la ligne. --}}
+                <div class="ovn-account ovn-nav-more" data-account-menu>
+                    <button type="button" class="ovn-account__trigger ovn-nav-more__trigger" aria-expanded="false" aria-controls="ovn-nav-more-panel">
+                        Aide &amp; infos
+                    </button>
+                    <div id="ovn-nav-more-panel" class="ovn-account__panel ovn-nav-more__panel" role="dialog" aria-label="Aide et informations">
+                        <a href="{{ $_howToBuyUrl }}">Comment acheter</a>
+                        <a href="{{ $_guaranteeUrl }}">Garantie acheteur</a>
+                        <a href="{{ $_vendorTermsUrl }}">Conditions de vente</a>
+                    </div>
+                </div>
             </nav>
 
             <a href="{{ $_sellUrl }}" class="ovn-sell-button">Vendre sur OVANIE</a>

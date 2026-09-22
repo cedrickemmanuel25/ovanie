@@ -130,7 +130,11 @@ class ProductController extends Controller
 
     public function categoryPage(Request $request, string $category)
     {
-        $catalogSlugs = [
+        // Anciennes URL marketing figées : conservées telles quelles (texte,
+        // image et accent déjà pensés spécifiquement pour ces 7 pages), avec
+        // parfois un slug d'URL différent du slug réel en base
+        // ("reconditionnes" => "nos-reconditionnes").
+        $legacySlugs = [
             'materiaux-gros-oeuvre' => 'materiaux-gros-oeuvre',
             'materiaux-de-finition' => 'materiaux-de-finition',
             'outillage-equipement' => 'outillage-equipement',
@@ -140,11 +144,31 @@ class ProductController extends Controller
             'reconditionnes' => 'nos-reconditionnes',
         ];
 
-        abort_unless(isset($catalogSlugs[$category]), 404);
+        if (isset($legacySlugs[$category])) {
+            return view('catalog.index', [
+                'category' => $legacySlugs[$category],
+                'categoryPageSlug' => $category,
+                'categoryRecord' => null,
+                'categories' => $this->getCatalogFilterCategories(),
+                'offerStats' => $this->getCatalogOfferStats(),
+            ]);
+        }
+
+        // Demande utilisateur : toute catégorie créée dans l'admin doit avoir
+        // sa propre page dédiée (bannière, photo importée, sous-catégories en
+        // raccourcis), pas seulement les 7 catégories historiques ci-dessus.
+        $categoryRecord = Category::query()
+            ->active()
+            ->where('slug', $category)
+            ->with(['children' => fn ($query) => $query->active()->ordered()])
+            ->first();
+
+        abort_unless($categoryRecord, 404);
 
         return view('catalog.index', [
-            'category' => $catalogSlugs[$category],
-            'categoryPageSlug' => $category,
+            'category' => $categoryRecord->slug,
+            'categoryPageSlug' => $categoryRecord->slug,
+            'categoryRecord' => $categoryRecord,
             'categories' => $this->getCatalogFilterCategories(),
             'offerStats' => $this->getCatalogOfferStats(),
         ]);

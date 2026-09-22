@@ -65,4 +65,58 @@ class NavbarCategoryLinksTest extends TestCase
         $this->assertStringContainsString('Catégorie parente navbar', $html);
         $this->assertStringNotContainsString('Sous-catégorie navbar unique', $html);
     }
+
+    public function test_the_static_gift_card_link_no_longer_duplicates_a_real_category(): void
+    {
+        // Bug rapporté par l'utilisateur : un lien statique "Cartes OVANIE"
+        // et une vraie catégorie "Cartes & Bons OVANIE" apparaissaient tous
+        // les deux dans la barre, l'un juste après l'autre - la barre ne
+        // doit plus contenir ce lien statique en plus des vraies catégories.
+        Category::create([
+            'name' => 'Cartes & Bons OVANIE',
+            'slug' => 'cartes-et-bons-ovanie-' . uniqid(),
+            'status' => 'actif',
+            'sort_order' => 0,
+        ]);
+
+        $navHtml = $this->extractPrimaryNavHtml($this->get('/')->assertOk()->getContent());
+
+        $this->assertStringContainsString('Cartes &amp; Bons OVANIE', $navHtml);
+        $this->assertSame(1, substr_count($navHtml, 'Cartes'));
+    }
+
+    public function test_only_4_dynamic_categories_show_in_the_primary_nav(): void
+    {
+        // Vérifié avec un rendu réel de la barre (voir l'historique de ce
+        // fichier) : au-delà de 4 catégories affichées, le bouton IA et le
+        // menu "Aide & infos" débordent déjà sur un écran de portable
+        // 1280px. Le menu "Toutes les catégories" liste toujours tout.
+        foreach (range(1, 6) as $i) {
+            Category::create([
+                'name' => "Catégorie limite {$i}",
+                'slug' => "categorie-limite-{$i}-" . uniqid(),
+                'status' => 'actif',
+                'sort_order' => $i,
+            ]);
+        }
+
+        $navHtml = $this->extractPrimaryNavHtml($this->get('/')->assertOk()->getContent());
+
+        $shown = 0;
+        foreach (range(1, 6) as $i) {
+            if (str_contains($navHtml, "Catégorie limite {$i}")) {
+                $shown++;
+            }
+        }
+
+        $this->assertSame(4, $shown);
+    }
+
+    private function extractPrimaryNavHtml(string $html): string
+    {
+        $start = strpos($html, '<nav class="ovn-primary-nav"');
+        $end = strpos($html, '</nav>', $start) + strlen('</nav>');
+
+        return substr($html, $start, $end - $start);
+    }
 }

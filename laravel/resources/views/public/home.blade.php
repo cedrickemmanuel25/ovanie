@@ -22,7 +22,11 @@
     $whatsappLabel = (string) config('public_contact.whatsapp_label', 'Discutez avec un conseiller');
 
     $categoryUrl = static function (string $slug) use ($catalogUrl): string {
-        $publicCategorySlugs = [
+        // Alias des 7 catégories historiques : leur page dédiée utilise une
+        // URL marketing différente du slug réel en base. categories.show
+        // accepte maintenant n'importe quelle catégorie, donc toute nouvelle
+        // catégorie utilise directement son propre slug.
+        $legacyAliases = [
             'materiaux-gros-oeuvre' => 'materiaux-gros-oeuvre',
             'materiaux-gros-oeuvres' => 'materiaux-gros-oeuvre',
             'materiaux-de-finition' => 'materiaux-de-finition',
@@ -36,13 +40,13 @@
             'reconditionnes' => 'reconditionnes',
         ];
 
-        if (isset($publicCategorySlugs[$slug]) && Route::has('categories.show')) {
-            return route('categories.show', $publicCategorySlugs[$slug]);
+        if (! Route::has('categories.show')) {
+            return Route::has('catalog.index')
+                ? route('catalog.index', ['category' => $slug])
+                : $catalogUrl . '?category=' . urlencode($slug);
         }
 
-        return Route::has('catalog.index')
-            ? route('catalog.index', ['category' => $slug])
-            : $catalogUrl . '?category=' . urlencode($slug);
+        return route('categories.show', $legacyAliases[$slug] ?? $slug);
     };
 
     $productUrl = static function ($product): string {
@@ -207,7 +211,8 @@
 
             $image = $category?->image_url
                 ?: $storageLogoImage([], $keywords)
-                ?: (string) ($card['product']?->card_image_url ?? '');
+                ?: (string) ($card['product']?->card_image_url ?? '')
+                ?: asset('images/home/product-placeholder.svg');
 
             return [
                 'name' => $name,

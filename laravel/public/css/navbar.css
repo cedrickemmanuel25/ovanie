@@ -393,6 +393,41 @@ body > header.ovn-header { margin-top: 0 !important; }
 .ovn-account__panel p { margin: 0 0 14px; color: #5b6b81; font-size: 11px; line-height: 1.5; white-space: normal; }
 .ovn-account__welcome-icon { width: 45px; height: 45px; margin-bottom: 13px; display: grid; place-items: center; border-radius: 12px; background: #eef5ff; color: #0a63d8; }
 .ovn-account__welcome-icon svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+
+/* "Aide & infos" : même mécanique d'ouverture/fermeture que le menu compte,
+   mais posé sur le fond blanc de la ligne de navigation (pas la barre
+   bleu marine du haut), donc coloré comme les liens voisins. */
+.ovn-nav-more { flex: 0 0 auto; }
+.ovn-nav-more__trigger {
+    min-height: auto;
+    padding: 0;
+    color: #263b59;
+    font-size: 12px;
+    font-weight: 600;
+}
+.ovn-nav-more__trigger:hover,
+.ovn-nav-more.is-open .ovn-nav-more__trigger {
+    background: transparent;
+    border-color: transparent;
+    color: var(--ovn-orange);
+}
+.ovn-nav-more__panel {
+    right: auto;
+    left: 0;
+    width: 210px;
+    padding: 12px;
+    display: grid;
+    gap: 4px;
+}
+.ovn-nav-more__panel::before { left: 20px; right: auto; }
+.ovn-nav-more__panel a {
+    padding: 8px 9px;
+    border-radius: 7px;
+    color: #263b59;
+    font-size: 12px;
+    font-weight: 600;
+}
+.ovn-nav-more__panel a:hover { background: #f1f5fb; color: var(--ovn-orange); }
 .ovn-account__primary { position: relative; min-height: 39px; padding: 0 34px 0 13px; display: flex; align-items: center; justify-content: center; border-radius: 7px; background: var(--ovn-orange); color: #fff !important; font-size: 11px; font-weight: 800; text-align: center; }
 .ovn-account__primary > span { position: absolute; right: 13px; }
 .ovn-account__primary--login { width: 170px; margin-inline: auto; }
