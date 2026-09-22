@@ -179,6 +179,12 @@
             </button>
 
             <nav class="ovn-primary-nav" aria-label="Navigation principale">
+                @auth
+                    <a href="{{ Route::has('public.support-chat') ? route('public.support-chat') : '#' }}" class="ovn-ai-link">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9-1.9 5.6-1.9-5.6-5.6-1.9 5.6-1.9L12 2.5z"></path><path d="M19 14.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6z"></path></svg>
+                        <span>IA</span>
+                    </a>
+                @endauth
                 <a href="{{ $_catalogCategoryUrl('materiaux-gros-oeuvres') }}">Matériaux</a>
                 <a href="{{ $_catalogCategoryUrl('electricite-plomberie') }}">Plomberie</a>
                 <a href="{{ $_catalogCategoryUrl('outillage-equipement') }}">Outillage</a>

@@ -269,6 +269,27 @@ body > header.ovn-header { margin-top: 0 !important; }
 .ovn-primary-nav a:hover,
 .ovn-primary-nav a.is-promo { color: var(--ovn-orange); }
 
+.ovn-ai-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: linear-gradient(120deg, #4f46e5, #9333ea 55%, #ff6600);
+    color: #fff !important;
+    font-weight: 800 !important;
+    letter-spacing: .2px;
+}
+.ovn-ai-link svg {
+    width: 13px;
+    height: 13px;
+    fill: #fff;
+}
+.ovn-ai-link:hover {
+    filter: brightness(1.08);
+    color: #fff !important;
+}
+
 .ovn-sell-button {
     min-height: 38px;
     padding: 0 17px;
