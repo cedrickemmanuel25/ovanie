@@ -80,6 +80,27 @@ class VendorProductWizardSimplificationTest extends TestCase
     }
 
     /**
+     * Régression : sélectionner "Produit négociable" recalculait bien
+     * price_p1/p2/p3 en arrière-plan (champs hidden), mais ne montrait jamais
+     * ces montants au vendeur - il n'avait aucune idée des offres qu'OVANIE
+     * accepterait automatiquement pour son produit.
+     */
+    public function test_the_negotiation_offers_block_is_present_in_the_markup(): void
+    {
+        $vendor = $this->makeVendor();
+
+        $response = $this->actingAs($vendor)->get(route('vendor.add_product', ['type' => 'single']));
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        $this->assertStringContainsString('pwNegotiationOffers', $html);
+        $this->assertStringContainsString('pwOfferP1', $html);
+        $this->assertStringContainsString('pwOfferP2', $html);
+        $this->assertStringContainsString('pwOfferP3', $html);
+    }
+
+    /**
      * VendorProductController::validateProductRequest() n'a pas été modifié
      * par cette simplification (ces champs étaient déjà `nullable` côté
      * serveur) : ce test fige ce contrat pour que personne ne les rende

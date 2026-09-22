@@ -151,6 +151,15 @@
                         <input type="hidden" name="price_p1" id="priceP1" value="{{ $value('price_p1') }}">
                         <input type="hidden" name="price_p2" id="priceP2" value="{{ $value('price_p2') }}">
                         <input type="hidden" name="price_p3" id="priceP3" value="{{ $value('price_p3') }}">
+
+                        <div id="negotiationOffers" style="display:none;margin-top:10px;">
+                            <p style="margin:0 0 8px;color:#64748b;font-size:11px;">Le client ne voit jamais ces montants directement : il propose un prix et OVANIE accepte automatiquement s’il atteint l’une de ces offres.</p>
+                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+                                <div class="volume-box"><strong>1ère offre (-5%)</strong><div><span id="offerPreviewP1">0</span> FCFA</div></div>
+                                <div class="volume-box"><strong>2ème offre (-10%)</strong><div><span id="offerPreviewP2">0</span> FCFA</div></div>
+                                <div class="volume-box"><strong>3ème offre (-15%)</strong><div><span id="offerPreviewP3">0</span> FCFA</div></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -347,6 +356,8 @@
     function updateNegotiationOffers() {
         const price = Number(document.querySelector('input[name="price"]')?.value || 0);
         const negotiable = document.querySelector('input[name="is_negotiable"]:checked')?.value === '1';
+        const offersBox = document.getElementById('negotiationOffers');
+        if (offersBox) offersBox.style.display = negotiable ? '' : 'none';
         if (!negotiable || !price) return;
         const p1 = document.getElementById('priceP1');
         const p2 = document.getElementById('priceP2');
@@ -354,9 +365,19 @@
         // Toujours recalculés à partir du prix courant (sinon un prix modifié
         // après activation de la négociation peut laisser des seuils >= au
         // nouveau prix et faire échouer la validation price_p1 < price).
-        if (p1) p1.value = Math.max(1, Math.round(price * .95));
-        if (p2) p2.value = Math.max(1, Math.round(price * .90));
-        if (p3) p3.value = Math.max(1, Math.round(price * .85));
+        const offer1 = Math.max(1, Math.round(price * .95));
+        const offer2 = Math.max(1, Math.round(price * .90));
+        const offer3 = Math.max(1, Math.round(price * .85));
+        if (p1) p1.value = offer1;
+        if (p2) p2.value = offer2;
+        if (p3) p3.value = offer3;
+        const fmt = (n) => new Intl.NumberFormat('fr-FR').format(n);
+        const o1 = document.getElementById('offerPreviewP1');
+        const o2 = document.getElementById('offerPreviewP2');
+        const o3 = document.getElementById('offerPreviewP3');
+        if (o1) o1.textContent = fmt(offer1);
+        if (o2) o2.textContent = fmt(offer2);
+        if (o3) o3.textContent = fmt(offer3);
     }
     document.querySelector('input[name="price"]')?.addEventListener('input', updateNegotiationOffers);
     document.querySelectorAll('input[name="is_negotiable"]').forEach(input => input.addEventListener('change', updateNegotiationOffers));

@@ -1008,6 +1008,34 @@
                 <input type="hidden" name="price_p2" id="pwPriceP2" value="{{ old('price_p2', $product?->price_p2) }}">
                 <input type="hidden" name="price_p3" id="pwPriceP3" value="{{ old('price_p3', $product?->price_p3) }}">
 
+                <div id="pwNegotiationOffers" style="display:none">
+                    <h3 class="pw-calc-title">Offres automatiques proposées au client</h3>
+                    <p class="pw-help" style="margin:-6px 0 10px;">Le client ne voit jamais ces montants directement : il propose un prix et OVANIE accepte automatiquement s’il atteint l’une de ces offres.</p>
+                    <div class="pw-calc-grid">
+                        <div class="pw-calc-card">
+                            <span class="pw-calc-icon"><i data-lucide="handshake"></i></span>
+                            <div>
+                                <span>1ère offre (-5%)</span>
+                                <strong id="pwOfferP1">0 FCFA</strong>
+                            </div>
+                        </div>
+                        <div class="pw-calc-card">
+                            <span class="pw-calc-icon"><i data-lucide="handshake"></i></span>
+                            <div>
+                                <span>2ème offre (-10%)</span>
+                                <strong id="pwOfferP2">0 FCFA</strong>
+                            </div>
+                        </div>
+                        <div class="pw-calc-card">
+                            <span class="pw-calc-icon"><i data-lucide="handshake"></i></span>
+                            <div>
+                                <span>3ème offre (-15%)</span>
+                                <strong id="pwOfferP3">0 FCFA</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <h3 class="pw-calc-title">Récapitulatif de calcul</h3>
                 <div class="pw-calc-grid">
                     <div class="pw-calc-card">
@@ -1564,6 +1592,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (qs('#pwNetSeller')) qs('#pwNetSeller').textContent = formatFcfa(netSeller);
 
         const negotiable = root.querySelector('input[name="is_negotiable"]:checked')?.value === '1';
+        const offersBox = qs('#pwNegotiationOffers');
+        if (offersBox) offersBox.style.display = negotiable ? '' : 'none';
+
         if (negotiable && normalPrice > 0) {
             // Toujours recalculés à partir du prix courant : sinon, modifier le prix
             // après avoir activé la négociation (ou lors d'une édition) laisse des
@@ -1572,9 +1603,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const p1 = qs('#pwPriceP1');
             const p2 = qs('#pwPriceP2');
             const p3 = qs('#pwPriceP3');
-            if (p1) p1.value = Math.max(1, Math.round(normalPrice * .95));
-            if (p2) p2.value = Math.max(1, Math.round(normalPrice * .90));
-            if (p3) p3.value = Math.max(1, Math.round(normalPrice * .85));
+            const offer1 = Math.max(1, Math.round(normalPrice * .95));
+            const offer2 = Math.max(1, Math.round(normalPrice * .90));
+            const offer3 = Math.max(1, Math.round(normalPrice * .85));
+            if (p1) p1.value = offer1;
+            if (p2) p2.value = offer2;
+            if (p3) p3.value = offer3;
+            if (qs('#pwOfferP1')) qs('#pwOfferP1').textContent = formatFcfa(offer1);
+            if (qs('#pwOfferP2')) qs('#pwOfferP2').textContent = formatFcfa(offer2);
+            if (qs('#pwOfferP3')) qs('#pwOfferP3').textContent = formatFcfa(offer3);
         }
     }
 
