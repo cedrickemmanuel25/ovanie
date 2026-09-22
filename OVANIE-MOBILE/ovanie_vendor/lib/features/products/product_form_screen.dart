@@ -415,22 +415,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       if (_childrenFor(_mainCategoryId).isNotEmpty && _subcategoryId == null) {
         return _showValidation('Sélectionnez la sous-catégorie du produit.');
       }
-      if (_productType == null)
-        return _showValidation('Sélectionnez le type de produit.');
-      if (!_productStates.containsKey(_productState))
-        return _showValidation('Sélectionnez l’état du produit.');
     }
     if (_step == 1) {
       if (_unit == null)
         return _showValidation('Sélectionnez l’unité de vente.');
       if (_saleType == null)
         return _showValidation('Sélectionnez le mode de vente.');
-    }
-    if (_step == 2) {
-      if (_usage == null)
-        return _showValidation('Sélectionnez l’usage recommandé.');
-      if (_warranty == null)
-        return _showValidation('Sélectionnez la durée de garantie.');
     }
     if (_step == 3 &&
         !draft &&
@@ -479,17 +469,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     if (!draft) {
       if (ctrl('name').text.trim().isEmpty ||
           _mainCategoryId == null ||
-          _productType == null ||
-          ctrl('short_description').text.trim().isEmpty ||
           ctrl('description').text.trim().isEmpty ||
           ctrl('price').text.trim().isEmpty ||
           ctrl('stock').text.trim().isEmpty ||
           _unit == null ||
           ctrl('min_order_quantity').text.trim().isEmpty ||
           _saleType == null ||
-          _usage == null ||
-          ctrl('technical_details').text.trim().isEmpty ||
-          _warranty == null ||
           ctrl('weight_kg').text.trim().isEmpty ||
           ctrl('length_cm').text.trim().isEmpty ||
           ctrl('width_cm').text.trim().isEmpty ||
@@ -765,7 +750,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _fieldTitle('Type de produit', required: true),
+              _fieldTitle('Type de produit', suffix: '(optionnel)'),
               _selector<String>(
                 value: _productType,
                 items: _productTypes,
@@ -777,7 +762,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        _fieldTitle('État du produit', required: true),
+        _fieldTitle('État du produit', suffix: '(optionnel)'),
         _selector<String>(
           value: _productState,
           items: _productStates,
@@ -786,13 +771,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           onChanged: (v) => setState(() => _productState = v ?? 'new'),
         ),
         const SizedBox(height: 10),
-        _fieldTitle('Description courte', required: true),
+        _fieldTitle('Description courte', suffix: '(optionnel)'),
         _counterField(
           'short_description',
           'Une brève description de votre produit',
           Icons.description_outlined,
           160,
-          required: true,
+          required: false,
           maxLines: 1,
         ),
         const SizedBox(height: 10),
@@ -983,7 +968,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   Widget _technicalStep() {
     return Column(
       children: [
-        _fieldTitle('Usage recommandé', required: true),
+        _fieldTitle('Usage recommandé', suffix: '(optionnel)'),
         _selector<String>(
           value: _usage,
           items: _usages,
@@ -995,22 +980,22 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         const Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            'Ex. : Construction, Rénovation, Intérieur, Extérieur, etc.',
+            'À quoi sert ce produit ? Laissez vide si vous ne savez pas.',
             style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
           ),
         ),
         const SizedBox(height: 14),
-        _fieldTitle('Détails technique', required: true),
+        _fieldTitle('Détails technique', suffix: '(optionnel)'),
         _counterField(
           'technical_details',
-          'Ex. :\n•  Matière / Composition\n•  Dimensions\n•  Poids\n•  Couleur\n•  Normes\n•  Autres spécifications techniques',
+          'Ex. Résiste à l\'humidité, couleur grise, sac de 50 kg...',
           Icons.description_outlined,
           1000,
-          required: true,
+          required: false,
           maxLines: 7,
         ),
         const SizedBox(height: 14),
-        _fieldTitle('Garantie', required: true),
+        _fieldTitle('Garantie', suffix: '(optionnel)'),
         _selector<String>(
           value: _warranty,
           items: _warranties,
