@@ -5,6 +5,7 @@ import '../../core/ui/vendor_design.dart';
 import '../../data/vendor_repository.dart';
 import '../notifications/vendor_notifications_screen.dart';
 import '../shell/vendor_tabs.dart';
+import 'product_boost_screen.dart';
 import 'product_form_screen.dart';
 import 'product_images_screen.dart';
 import 'product_ui.dart';
@@ -95,6 +96,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     await _load(force: true);
   }
 
+  Future<void> _boost() async {
+    final product = _product;
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductBoostScreen(
+          productId: widget.productId,
+          productName: _text(product?['name'], fallback: 'Produit'),
+        ),
+      ),
+    );
+    if (changed == true) await _load(force: true);
+  }
+
   Future<void> _toggleActive() async {
     final product = _product;
     if (product == null || '${product['status']}'.toLowerCase() == 'archived') {
@@ -169,6 +184,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _images();
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.bolt_rounded,
+                  color: productOrange,
+                ),
+                title: const Text(
+                  'Booster ce produit',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _boost();
                 },
               ),
             ],

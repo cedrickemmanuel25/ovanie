@@ -476,6 +476,36 @@ class VendorRepository {
     invalidateProductCache(productId);
   }
 
+  /// Mêmes packs que le modal "Booster ce produit" du Web vendeur.
+  Future<List<Map<String, dynamic>>> boostPackages() async {
+    final response = await _dio.get('/mobile/v1/vendor/boost/packages');
+    ApiClient.ensureSuccess(response);
+    return _list(_map(response.data)['packages'])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
+  /// Crée la facture PayDunya du boost et renvoie son URL de paiement,
+  /// exactement comme VendorProductController::payBoost() sur le Web.
+  Future<String> payBoost(int productId, String boostPackage, {String? phone}) async {
+    final response = await _dio.post('/mobile/v1/vendor/products/$productId/boost/pay', data: {
+      'boost_package': boostPackage,
+      if (phone?.trim().isNotEmpty == true) 'phone': phone!.trim(),
+    });
+    ApiClient.ensureSuccess(response);
+    final data = _map(response.data);
+    if (data['success'] != true) {
+      throw VendorApiException('${data['message'] ?? 'Impossible de lancer le paiement du boost.'}');
+    }
+    final redirectUrl = '${data['redirect_url'] ?? ''}'.trim();
+    if (redirectUrl.isEmpty) {
+      throw const VendorApiException('OVANIE n’a pas retourné de lien de paiement pour ce boost.');
+    }
+    invalidateProductCache(productId);
+    return redirectUrl;
+  }
+
   Future<Map<String, dynamic>> orders({
     String query = '',
     String status = 'all',
