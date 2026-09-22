@@ -184,7 +184,7 @@ Route::post('/cart/add-negotiated', [ProductController::class, 'addNegotiatedToC
     ->name('cart.addNegotiated');
 Route::get('/catalog-business', [BusinessCatalogController::class, 'catalog'])
     ->name('catalog.business');
-Route::view('/guide-acheteur', 'public.buyer-guide')->middleware('auth')->name('buyer.guide');
+Route::view('/guide-acheteur', 'public.buyer-guide')->name('buyer.guide');
 Route::view('/faq', 'public.faq')->name('faq');
 Route::view('/centre-aide', 'public.help-pages', ['page' => 'help'])->name('help.center');
 Route::view('/suivi-commande', 'public.help-pages', ['page' => 'tracking'])->name('order.tracking.public');
@@ -236,7 +236,7 @@ Route::post('/calculator/estimate', [CalculatorController::class, 'estimate'])
     ->middleware('throttle:30,1')
     ->name('calculator.estimate');
 Route::post('/calculator/add-to-cart', [CalculatorController::class, 'addToCart'])
-    ->middleware(['auth', 'throttle:30,1'])
+    ->middleware('throttle:30,1')
     ->name('calculator.addToCart');
 
 Route::post('/product/{product}/negotiate', [NegotiationController::class, 'store'])
@@ -676,7 +676,13 @@ Route::get('/my-shop', function () {
 })->middleware('auth');
 
 
-Route::prefix('cart')->name('cart.')->middleware('auth')->group(function () {
+// Un visiteur non connecté peut consulter et modifier son panier (stocké en
+// session via GuestCartService) sans créer de compte : seul le passage en
+// caisse (/checkout, plus bas) exige une authentification. Le panier
+// visiteur est fusionné dans le panier du compte au moment du login/
+// inscription (voir GuestCartService::mergeIntoUserCart(), appelé par
+// UserAuthController/SocialController/ShopController).
+Route::prefix('cart')->name('cart.')->group(function () {
     Route::get('/', [CartController::class, 'index'])->name('index');
     Route::post('/add/{product}', [CartController::class, 'add'])->name('add');
     Route::post('/update/{product}', [CartController::class, 'updateQuantity'])->name('update');
@@ -686,16 +692,18 @@ Route::prefix('cart')->name('cart.')->middleware('auth')->group(function () {
     Route::get('/cart-data', [CartController::class, 'apiCart'])->name('apiCart');
 });
 
-Route::get('/cart/count', function () {
-    if (!auth()->check()) {
-        return response()->json(['count' => 0]);
+Route::get('/cart/count', function (\Illuminate\Http\Request $request) {
+    if (! auth()->check()) {
+        $count = app(\App\Services\GuestCartService::class)->count($request);
+
+        return response()->json(['count' => $count]);
     }
 
     $cart = auth()->user()->cart;
     $count = $cart ? $cart->items()->sum('quantity') : 0;
 
     return response()->json(['count' => $count]);
-})->middleware('auth')->name('cart.count');
+})->name('cart.count');
 
 /*
 |--------------------------------------------------------------------------
