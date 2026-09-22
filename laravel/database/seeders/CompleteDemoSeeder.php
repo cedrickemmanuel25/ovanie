@@ -1011,7 +1011,7 @@ class CompleteDemoSeeder extends Seeder
             $this->insert('support_conversation_messages', [
                 'support_conversation_id' => $convId,
                 'sender_type'             => 'ai',
-                'body'                    => 'Bonjour ! Je suis Miss N\'Nan, votre assistante OVANIE. Je vais vous aider immédiatement. Pouvez-vous préciser votre numéro de commande ?',
+                'body'                    => 'Bonjour ! Je suis N\'Nan, votre assistante OVANIE. Je vais vous aider immédiatement. Pouvez-vous préciser votre numéro de commande ?',
                 'created_at'              => now()->subHours(rand(1, 72))->addMinutes(1)->toDateTimeString(),
                 'updated_at'              => now()->subHours(rand(1, 72))->addMinutes(1)->toDateTimeString(),
             ]);

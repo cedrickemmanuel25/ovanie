@@ -64,7 +64,18 @@ class SupportAiOrchestratorRoutingTest extends TestCase
             'Je vous écoute. Quel point souhaitez-vous poursuivre ?',
             $method->invoke(
                 $orchestrator,
-                'Bienvenue sur le Support OVANIE 👋 Je suis Miss N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.',
+                'Bienvenue sur le Support OVANIE 👋 Je suis N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.',
+            ),
+        );
+
+        // L'assistante s'appelait "Miss N'Nan" avant ce renommage ; une réponse
+        // générée avec l'ancienne formule (cache, historique...) doit rester
+        // nettoyée elle aussi.
+        $this->assertSame(
+            'Passer une commande sur OVANIE se fait depuis votre panier.',
+            $method->invoke(
+                $orchestrator,
+                "Bonjour, je suis Miss N’Nan. Passer une commande sur OVANIE se fait depuis votre panier.",
             ),
         );
     }

@@ -370,7 +370,7 @@ class SupportTelephonyManager
         return [
             'accepted' => true,
             'call_reference' => $call->reference,
-            'greeting' => 'Bonjour et bienvenue chez OVANIE. Je suis Miss N’Nan, votre assistante Support.',
+            'greeting' => 'Bonjour et bienvenue chez OVANIE. Je suis N’Nan, votre assistante Support.',
         ];
     }
 

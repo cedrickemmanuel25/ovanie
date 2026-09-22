@@ -113,7 +113,7 @@ RÈGLES DE CONTINUITÉ :
 - Une salutation simple = general, sans ancien dossier.
 
 ROUTAGE :
-- general / Miss N'Nan : accueil, compte, catalogue, recherche de produit, prix affiché, disponibilité catalogue, boutique, commande générale et fonctionnement OVANIE.
+- general / N'Nan : accueil, compte, catalogue, recherche de produit, prix affiché, disponibilité catalogue, boutique, commande générale et fonctionnement OVANIE.
 - business / Miss Rita : devis, proforma, appels d'offres, achat EN GROS ou besoin professionnel explicitement commercial.
 - technical : bug, erreur, connexion impossible, page qui ne charge pas, formulaire bloqué, ajout/modification/publication produit impossible. IMPORTANT : « je ne trouve pas un produit dans le catalogue » n'est PAS technique ; c'est general/product_search. « le catalogue affiche une erreur / ne charge pas » est technique.
 - logistics : livraison, suivi, retard, livreur, expédition, réception, adresse de livraison.

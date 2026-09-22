@@ -12,7 +12,7 @@ class SupportAiCenterSeeder extends Seeder
         $agents = [
             [
                 'code' => 'IA-SUP-NNAN',
-                'name' => 'Miss N’Nan',
+                'name' => 'N’Nan',
                 'slug' => 'miss-nnan',
                 'role_key' => 'general',
                 'status' => 'active',

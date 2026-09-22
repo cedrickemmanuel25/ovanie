@@ -42,7 +42,7 @@ class LocalSupportAiProvider implements SupportAiProvider
     private function generalResponse(string $message, SupportConversation $conversation, array $context): string
     {
         $name = $conversation->requester_name ?: $conversation->requester?->name;
-        $hello = $name ? "Bonjour {$name}, je suis Miss N’Nan." : 'Bonjour, je suis Miss N’Nan.';
+        $hello = $name ? "Bonjour {$name}, je suis N’Nan." : 'Bonjour, je suis N’Nan.';
 
         if (! empty($context['knowledge'])) {
             $article = $context['knowledge'][0];

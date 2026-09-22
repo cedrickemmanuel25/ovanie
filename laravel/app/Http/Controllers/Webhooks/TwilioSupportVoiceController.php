@@ -22,8 +22,8 @@ class TwilioSupportVoiceController extends Controller
         $call = $manager->beginTwilioCall($request->all(), $request->query('reference'));
         $name = $call->requester?->name;
         $greeting = $name
-            ? "Bonjour {$name}. Bienvenue au Support OVANIE. Je suis Miss N’Nan. Décrivez votre demande après le signal sonore."
-            : "Bonjour et bienvenue au Support OVANIE. Je suis Miss N’Nan. Décrivez votre demande après le signal sonore.";
+            ? "Bonjour {$name}. Bienvenue au Support OVANIE. Je suis N’Nan. Décrivez votre demande après le signal sonore."
+            : "Bonjour et bienvenue au Support OVANIE. Je suis N’Nan. Décrivez votre demande après le signal sonore.";
 
         return $this->xml($this->gatherTwiml($call, $greeting));
     }

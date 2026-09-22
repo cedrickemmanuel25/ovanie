@@ -554,7 +554,7 @@ class SupportAiOrchestrator
         ?User $requester,
     ): SupportConversationMessage {
         $agent = $this->router->selectByRole('general');
-        $welcome = 'Bienvenue sur le Support OVANIE 👋 Je suis Miss N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.';
+        $welcome = 'Bienvenue sur le Support OVANIE 👋 Je suis N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.';
 
         $turnState = [
             'intent' => 'welcome',
@@ -709,7 +709,7 @@ class SupportAiOrchestrator
     private function removeRepeatedOpening(string $body): string
     {
         $original = trim($body);
-        $standardWelcome = 'Bienvenue sur le Support OVANIE 👋 Je suis Miss N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.';
+        $standardWelcome = 'Bienvenue sur le Support OVANIE 👋 Je suis N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.';
         $clean = str_starts_with($original, $standardWelcome)
             ? trim(mb_substr($original, mb_strlen($standardWelcome)))
             : $original;
@@ -729,7 +729,7 @@ class SupportAiOrchestrator
         ) ?? $clean;
 
         $clean = preg_replace(
-            '/^\s*je\s+suis\s+miss\s+n[’\'`]nan\s*[,.!]?[\s]*/iu',
+            '/^\s*je\s+suis\s+(?:miss\s+)?n[’\'`]nan\s*[,.!]?[\s]*/iu',
             '',
             $clean,
             1,

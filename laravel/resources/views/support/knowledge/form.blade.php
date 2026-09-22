@@ -1,7 +1,7 @@
 @extends('layouts.staff')
 @section('title', ($article->exists ? 'Modifier' : 'Créer').' un article | OVANIE')
 @section('content')
-<div class="page-header"><div><h1 class="page-title">{{ $article->exists ? 'Modifier l’article' : 'Nouvel article de connaissance' }}</h1><p class="page-subtitle">Seules les versions publiées, approuvées et non expirées sont disponibles pour Miss N’Nan, Miss Rita et Miss Salomé.</p></div><div class="page-actions"><a class="btn" href="{{ route('support.knowledge.index') }}">Retour</a></div></div>
+<div class="page-header"><div><h1 class="page-title">{{ $article->exists ? 'Modifier l’article' : 'Nouvel article de connaissance' }}</h1><p class="page-subtitle">Seules les versions publiées, approuvées et non expirées sont disponibles pour N’Nan, Miss Rita et Miss Salomé.</p></div><div class="page-actions"><a class="btn" href="{{ route('support.knowledge.index') }}">Retour</a></div></div>
 <section class="card">
 @if($article->exists)<div class="alert alert-success">Version actuelle : v{{ $article->version }}. Toute modification du titre ou du contenu incrémente automatiquement la version.</div>@endif
 <form method="POST" action="{{ $article->exists ? route('support.knowledge.update',$article) : route('support.knowledge.store') }}">@csrf @if($article->exists) @method('PUT') @endif

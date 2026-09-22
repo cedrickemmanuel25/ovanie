@@ -85,7 +85,7 @@ TEXT,
                 'title' => 'Rôles des agentes IA et escalade humaine',
                 'category' => 'Support',
                 'content' => <<<'TEXT'
-Miss N’Nan traite l’accueil et les demandes générales. Miss Rita traite OVANIE Pro, les devis, proformas, appels d’offres et achats professionnels importants explicitement demandés. L’Assistante Technique traite les problèmes techniques de la plateforme. L’Assistante Logistique traite les demandes de livraison et incidents logistiques. Miss Salomé traite les litiges, réclamations complexes, contestations et demandes de responsable. Le numéro d’appel humain ne doit être communiqué qu’en dernier recours, lorsque Miss Salomé ne peut réellement plus résoudre ou faire avancer la demande et qu’une prise en charge humaine est nécessaire.
+N’Nan traite l’accueil et les demandes générales. Miss Rita traite OVANIE Pro, les devis, proformas, appels d’offres et achats professionnels importants explicitement demandés. L’Assistante Technique traite les problèmes techniques de la plateforme. L’Assistante Logistique traite les demandes de livraison et incidents logistiques. Miss Salomé traite les litiges, réclamations complexes, contestations et demandes de responsable. Le numéro d’appel humain ne doit être communiqué qu’en dernier recours, lorsque Miss Salomé ne peut réellement plus résoudre ou faire avancer la demande et qu’une prise en charge humaine est nécessaire.
 TEXT,
             ],
         ];
