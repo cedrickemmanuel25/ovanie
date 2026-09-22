@@ -26,8 +26,13 @@ class Authenticate
             return response()->json(['message' => 'Non authentifié'], 401);
         }
 
+        // redirect()->guest() (plutôt qu'un simple redirect()->route()) mémorise
+        // la page visée dans la session (url.intended) afin que le contrôleur
+        // de connexion puisse y renvoyer l'utilisateur avec redirect()->intended()
+        // une fois connecté, au lieu de toujours atterrir sur son tableau de bord
+        // (ex. : "Passer la commande" en visiteur -> connexion -> retour au panier).
         if ($request->is('espace-livreur') || $request->is('espace-livreur/*') || in_array('driver', $guards, true)) {
-            return redirect()->route('driver.login');
+            return redirect()->guest(route('driver.login'));
         }
 
         $isInternalPath = $request->is('administration')
@@ -43,9 +48,9 @@ class Authenticate
             || in_array('admin', $guards, true);
 
         if ($isInternalPath) {
-            return redirect()->route('admin.adminlogin');
+            return redirect()->guest(route('admin.adminlogin'));
         }
 
-        return redirect()->route('login');
+        return redirect()->guest(route('login'));
     }
 }

@@ -127,6 +127,42 @@ class GuestCartTest extends TestCase
         $this->get(route('checkout.index'))->assertRedirect(route('login'));
     }
 
+    /**
+     * Régression : app/Http/Middleware/Authenticate.php faisait un simple
+     * redirect()->route('login') au lieu de redirect()->guest(...), donc
+     * l'URL visée n'était jamais mémorisée (session url.intended) et
+     * redirect()->intended() dans UserAuthController renvoyait toujours vers
+     * le tableau de bord, même quand l'utilisateur venait de /checkout.
+     */
+    public function test_a_guest_redirected_to_login_from_checkout_returns_there_after_login(): void
+    {
+        $client = User::factory()->create(['role' => 'client', 'password' => bcrypt('password')]);
+
+        $this->get(route('checkout.index'))->assertRedirect(route('login'));
+
+        $this->post(route('login.web'), [
+            'email' => $client->email,
+            'password' => 'password',
+        ])->assertRedirect(route('checkout.index'));
+    }
+
+    public function test_a_guest_redirected_to_login_from_a_post_checkout_action_returns_to_the_previous_page(): void
+    {
+        $product = $this->makeProduct();
+        $client = User::factory()->create(['role' => 'client', 'password' => bcrypt('password')]);
+
+        $this->postJson(route('cart.add', $product->id), ['quantity' => 1])->assertOk();
+
+        $this->withHeaders(['referer' => route('cart.index')])
+            ->post(route('checkout.selection'))
+            ->assertRedirect(route('login'));
+
+        $this->post(route('login.web'), [
+            'email' => $client->email,
+            'password' => 'password',
+        ])->assertRedirect(route('cart.index'));
+    }
+
     public function test_calculator_add_to_cart_works_without_authentication(): void
     {
         $product = $this->makeProduct();
