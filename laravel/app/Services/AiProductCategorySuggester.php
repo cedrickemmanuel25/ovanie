@@ -64,7 +64,7 @@ class AiProductCategorySuggester
         if (! $chosen) {
             // L'IA a répondu un identifiant hors de la liste fournie : on
             // ignore la suggestion plutôt que de risquer une fausse catégorie.
-            Log::info('AI product category suggestion: returned id not found in the real catalog', [
+            Log::warning('AI product category suggestion: returned id not found in the real catalog', [
                 'product_name' => $productName,
                 'returned_category_id' => $chosenId,
             ]);
@@ -131,7 +131,7 @@ class AiProductCategorySuggester
         $content = $response->json('choices.0.message.content');
 
         if (! is_string($content) || $content === '') {
-            Log::info('AI product category suggestion: empty content from OpenAI', [
+            Log::warning('AI product category suggestion: empty content from OpenAI', [
                 'product_name' => $productName,
                 'response_body' => Str::limit($response->body(), 800),
             ]);
@@ -143,7 +143,7 @@ class AiProductCategorySuggester
         $categoryId = is_array($decoded) ? ($decoded['category_id'] ?? null) : null;
 
         if (! is_numeric($categoryId)) {
-            Log::info('AI product category suggestion: no usable category_id in the AI response', [
+            Log::warning('AI product category suggestion: no usable category_id in the AI response', [
                 'product_name' => $productName,
                 'content' => Str::limit($content, 500),
             ]);
