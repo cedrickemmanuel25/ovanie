@@ -37,9 +37,6 @@
         ? 'seller'
         : 'ovanie';
 
-    $commissionRate = (float) config('marketplace.default_commission_rate', 0.05);
-    $commissionPercentLabel = rtrim(rtrim(number_format($commissionRate * 100, 1, ',', ' '), '0'), ',');
-
     $unitOptions = [
         'sac' => 'Sac',
         'tonne' => 'Tonne',
@@ -1037,35 +1034,6 @@
                     </div>
                 </div>
 
-                <h3 class="pw-calc-title">Récapitulatif de calcul</h3>
-                <div class="pw-calc-grid">
-                    <div class="pw-calc-card">
-                        <span class="pw-calc-icon"><i data-lucide="receipt-text"></i></span>
-                        <div>
-                            <span>Commission estimée</span>
-                            <strong id="pwCommission">0 FCFA</strong>
-                            <small>({{ $commissionPercentLabel }}% du prix)</small>
-                        </div>
-                    </div>
-
-                    <div class="pw-calc-card">
-                        <span class="pw-calc-icon"><i data-lucide="circle-user-round"></i></span>
-                        <div>
-                            <span>Prix client estimé</span>
-                            <strong id="pwClientPrice">0 FCFA</strong>
-                            <small>(TTC)</small>
-                        </div>
-                    </div>
-
-                    <div class="pw-calc-card green">
-                        <span class="pw-calc-icon"><i data-lucide="wallet-cards"></i></span>
-                        <div>
-                            <span>Net vendeur</span>
-                            <strong id="pwNetSeller">0 FCFA</strong>
-                            <small>(Après commission)</small>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <div class="pw-actions">
@@ -1357,7 +1325,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const steps = [...root.querySelectorAll('[data-step]')];
     const panels = [...root.querySelectorAll('[data-panel]')];
     const errorBox = root.querySelector('#pwStepError');
-    const commissionRate = Number(@json($commissionRate));
     let current = 1;
 
     const qs = (selector) => root.querySelector(selector);
@@ -1651,15 +1618,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updatePriceSummary() {
         const normalPrice = Number(qs('#pwPrice')?.value || 0);
-        const promoPrice = Number(qs('#pwPromo')?.value || 0);
-        const salePrice = promoPrice > 0 && promoPrice < normalPrice ? promoPrice : normalPrice;
-        const commission = Math.round(salePrice * commissionRate);
-        const clientPrice = salePrice + commission;
-        const netSeller = salePrice;
-
-        if (qs('#pwCommission')) qs('#pwCommission').textContent = formatFcfa(commission);
-        if (qs('#pwClientPrice')) qs('#pwClientPrice').textContent = formatFcfa(clientPrice);
-        if (qs('#pwNetSeller')) qs('#pwNetSeller').textContent = formatFcfa(netSeller);
 
         const negotiable = root.querySelector('input[name="is_negotiable"]:checked')?.value === '1';
         const offersBox = qs('#pwNegotiationOffers');
