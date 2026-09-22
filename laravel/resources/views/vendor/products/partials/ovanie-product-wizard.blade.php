@@ -825,13 +825,13 @@
                     </div>
 
                     <div class="pw-field">
-                        <label for="pwBrand">Marque <span class="pw-required">*</span></label>
-                        <input class="pw-input" id="pwBrand" name="brand" value="{{ old('brand', $product?->brand) }}" placeholder="Ex. Lafarge" data-required-step="1">
+                        <label for="pwBrand">Marque</label>
+                        <input class="pw-input" id="pwBrand" name="brand" value="{{ old('brand', $product?->brand) }}" placeholder="Ex. Lafarge">
                     </div>
 
                     <div class="pw-field">
-                        <label for="pwProductType">Type de produit <span class="pw-required">*</span></label>
-                        <input class="pw-input" id="pwProductType" name="material_grade" value="{{ old('material_grade', $product?->material_grade) }}" placeholder="Ex. Ciment, peinture, carrelage..." data-required-step="1">
+                        <label for="pwProductType">Type de produit</label>
+                        <input class="pw-input" id="pwProductType" name="material_grade" value="{{ old('material_grade', $product?->material_grade) }}" placeholder="Ex. Ciment, peinture, carrelage...">
                     </div>
 
                     <div class="pw-field">
@@ -845,8 +845,8 @@
                     </div>
 
                     <div class="pw-field">
-                        <label for="pwState">État du produit <span class="pw-required">*</span></label>
-                        <select class="pw-select" id="pwState" name="product_state" data-required-step="1">
+                        <label for="pwState">État du produit</label>
+                        <select class="pw-select" id="pwState" name="product_state">
                             <option value="new" @selected($selectedProductState === 'new')>Neuf</option>
                             <option value="reconditioned" @selected($selectedProductState === 'reconditioned')>Reconditionné</option>
                             <option value="used" @selected($selectedProductState === 'used')>Occasion</option>
@@ -854,8 +854,8 @@
                     </div>
 
                     <div class="pw-field">
-                        <label for="pwShortDescription">Description courte <span class="pw-required">*</span></label>
-                        <input class="pw-input" id="pwShortDescription" name="short_description" maxlength="255" value="{{ old('short_description', $product?->short_description) }}" placeholder="Ex. Ciment gris haute résistance pour travaux de maçonnerie et gros œuvre" data-required-step="1">
+                        <label for="pwShortDescription">Description courte</label>
+                        <input class="pw-input" id="pwShortDescription" name="short_description" maxlength="255" value="{{ old('short_description', $product?->short_description) }}" placeholder="Ex. Ciment gris haute résistance pour travaux de maçonnerie et gros œuvre">
                     </div>
 
                     <div class="pw-field">
@@ -1064,20 +1064,15 @@
             <div class="pw-body">
                 <div class="pw-grid-2">
                     <div class="pw-field">
-                        <label for="pwBrandReadonly">Marque <i data-lucide="info" style="width:13px;height:13px"></i></label>
-                        <input class="pw-input" id="pwBrandReadonly" value="{{ old('brand', $product?->brand) }}" readonly>
-                        <p class="pw-help">Renseigné à l’étape 1 (Informations).</p>
-                    </div>
-
-                    <div class="pw-field">
-                        <label for="pwUsageArea">Usage recommandé <span class="pw-required">*</span></label>
-                        <input class="pw-input" id="pwUsageArea" name="usage_area" value="{{ old('usage_area', $product?->usage_area) }}" placeholder="Ex. Fondation, mur, toiture" data-required-step="3">
+                        <label for="pwUsageArea">Usage recommandé</label>
+                        <input class="pw-input" id="pwUsageArea" name="usage_area" value="{{ old('usage_area', $product?->usage_area) }}" placeholder="Ex. Fondation, mur, toiture">
+                        <p class="pw-help">À quoi sert ce produit ? Laissez vide si vous ne savez pas quoi écrire.</p>
                     </div>
 
                     <div class="pw-field pw-full">
-                        <label for="pwTechnicalDetails">Détails technique <span class="pw-required">*</span></label>
-                        <textarea class="pw-textarea tech" id="pwTechnicalDetails" name="technical_details" placeholder="Normes, composition, résistance, couleur, dimensions, précautions techniques..." data-required-step="3">{{ old('technical_details', $product?->technical_details) }}</textarea>
-                        <p class="pw-help">Décrivez précisément les caractéristiques techniques de votre produit.</p>
+                        <label for="pwTechnicalDetails">Détails technique</label>
+                        <textarea class="pw-textarea tech" id="pwTechnicalDetails" name="technical_details" placeholder="Ex. Résiste à l'humidité, couleur grise, sac de 50 kg...">{{ old('technical_details', $product?->technical_details) }}</textarea>
+                        <p class="pw-help">Facultatif : toute information utile en plus de la description. Laissez vide si vous ne savez pas quoi écrire.</p>
                     </div>
 
                     <div class="pw-field">
@@ -1545,15 +1540,6 @@ document.addEventListener('DOMContentLoaded', () => {
         qs('#pwSubCategory')?.classList.remove('is-invalid');
     });
     syncCategoryFilters();
-
-    function syncBrandReadonly() {
-        const source = qs('#pwBrand');
-        const target = qs('#pwBrandReadonly');
-        if (source && target) target.value = source.value;
-    }
-
-    qs('#pwBrand')?.addEventListener('input', syncBrandReadonly);
-    syncBrandReadonly();
 
     function syncVisibility() {
         const visibility = qs('#pwVisibility');
