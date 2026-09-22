@@ -39,7 +39,6 @@
     $fmtMoney = fn ($value) => number_format((float) $value, 0, ',', ' ') . ' FCFA';
     $homeUrl = Route::has('home') ? route('home') : url('/');
     $catalogUrl = Route::has('catalog.index') ? route('catalog.index') : url('/catalog');
-    $devisUrl = Route::has('devis.create') ? route('devis.create') : url('/devis');
     $availabilityClass = match ($availabilityStatus) {
         'on_order' => 'is-order',
         'preorder' => 'is-preorder',
@@ -190,15 +189,13 @@
                 <div class="ov-buybox-delivery"><i data-lucide="map-pin"></i><div><strong>Livraison selon votre adresse</strong><span>Frais et délai calculés avant validation de la commande.</span></div></div>
 
                 @if($isNegotiable && $canAddToCart)
-                    <div class="ov-negotiate-box" data-negotiate-box>
+                    <div class="ov-negotiate-box" data-negotiate-box hidden>
                         <div class="ov-negotiate-head">
                             <i data-lucide="handshake"></i>
-                            <div><strong>Prix négociable</strong><span>Proposez votre prix : OVANIE l’accepte automatiquement s’il convient au vendeur.</span></div>
+                            <div><strong>Proposez votre prix</strong><span>OVANIE l’accepte automatiquement s’il convient au vendeur.</span></div>
                         </div>
-                        <div class="ov-negotiate-row">
-                            <input type="number" min="1" step="1" placeholder="Votre prix en FCFA" data-negotiate-input aria-label="Votre proposition de prix">
-                            <button type="button" class="ov-negotiate-submit" data-negotiate-submit>Proposer</button>
-                        </div>
+                        <div class="ov-negotiate-step" data-negotiate-step-label>Offre 1 sur 3</div>
+                        <button type="button" class="ov-negotiate-submit" data-negotiate-submit></button>
                         <p class="ov-negotiate-message" data-negotiate-message hidden></p>
                         <button type="button" class="ov-product-btn ov-product-btn--cart" data-negotiate-add-to-cart hidden><i data-lucide="shopping-cart"></i>Ajouter au panier à ce prix</button>
                     </div>
@@ -223,7 +220,9 @@
                     <div class="ov-product-order-box is-out"><i data-lucide="circle-x"></i><div><strong>Produit indisponible</strong><p>Consultez les alternatives de la même catégorie.</p></div></div>
                 @endif
 
-                <a class="ov-product-btn ov-product-btn--quote" href="{{ $devisUrl }}?product={{ urlencode($name) }}"><i data-lucide="file-text"></i>Demander un devis</a>
+                @if($isNegotiable && $canAddToCart)
+                    <button type="button" class="ov-product-btn ov-product-btn--quote" data-negotiate-trigger><i data-lucide="handshake"></i>Négocier</button>
+                @endif
 
                 <ul class="ov-buybox-promises">
                     <li><i data-lucide="shield-check"></i>Paiement sécurisé</li>

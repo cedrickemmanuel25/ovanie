@@ -205,17 +205,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     showCalcFields();
 
-    /* Prix négociable : le client propose un prix, jamais les seuils vendeur. */
+    /* Prix négociable : le client propose un prix parmi des paliers guidés,
+       jamais les seuils vendeur (price_p1/p2/p3, jamais transmis au navigateur). */
+    const negotiateTrigger = document.querySelector('[data-negotiate-trigger]');
     const negotiateBox = document.querySelector('[data-negotiate-box]');
-    if (negotiateBox && page.dataset.isNegotiable === '1') {
-        const negotiateInput = negotiateBox.querySelector('[data-negotiate-input]');
+    if (negotiateTrigger && negotiateBox && page.dataset.isNegotiable === '1') {
         const negotiateSubmit = negotiateBox.querySelector('[data-negotiate-submit]');
+        const negotiateStepLabel = negotiateBox.querySelector('[data-negotiate-step-label]');
         const negotiateMessage = negotiateBox.querySelector('[data-negotiate-message]');
         const negotiateAddToCart = negotiateBox.querySelector('[data-negotiate-add-to-cart]');
         const negotiateUrl = page.dataset.negotiateUrl;
         const cartAddNegotiatedUrl = page.dataset.cartAddNegotiatedUrl;
         const loginUrl = page.dataset.loginUrl;
         const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
+        const displayPrice = profile.price;
+
+        // Paliers proposés au client, du plus audacieux au prix affiché (qui
+        // ne peut jamais être refusé côté serveur : voir NegotiationController).
+        const steps = [
+            Math.max(1, Math.round(displayPrice * 0.90)),
+            Math.max(1, Math.round(displayPrice * 0.95)),
+            Math.max(1, Math.round(displayPrice)),
+        ];
+        let stepIndex = 0;
         let accepted = null;
 
         const showMessage = (text, type) => {
@@ -226,16 +238,33 @@ document.addEventListener('DOMContentLoaded', () => {
             negotiateMessage.classList.toggle('is-error', type === 'error');
         };
 
+        const renderStep = () => {
+            if (negotiateStepLabel) negotiateStepLabel.textContent = `Offre ${stepIndex + 1} sur ${steps.length}`;
+            if (negotiateSubmit) {
+                negotiateSubmit.textContent = `Proposer ${money(steps[stepIndex])}`;
+                negotiateSubmit.hidden = false;
+                negotiateSubmit.disabled = false;
+            }
+            if (negotiateAddToCart) negotiateAddToCart.hidden = true;
+            showMessage('', null);
+        };
+
+        negotiateTrigger.addEventListener('click', () => {
+            const opening = negotiateBox.hidden;
+            negotiateBox.hidden = !opening;
+            if (opening) {
+                stepIndex = 0;
+                accepted = null;
+                renderStep();
+                negotiateBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+
         negotiateSubmit?.addEventListener('click', async () => {
             if (!negotiateUrl) return;
-            const proposedPrice = number(negotiateInput?.value);
-            if (proposedPrice <= 0) {
-                showMessage('Indiquez le prix que vous proposez.', 'error');
-                return;
-            }
+            const proposedPrice = steps[stepIndex];
 
             negotiateSubmit.disabled = true;
-            if (negotiateAddToCart) negotiateAddToCart.hidden = true;
             accepted = null;
 
             try {
@@ -256,9 +285,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (payload.accepted) {
                     accepted = { negotiationId: payload.negotiation_id, price: proposedPrice };
                     showMessage(payload.message || 'Proposition acceptée !', 'success');
+                    negotiateSubmit.hidden = true;
                     if (negotiateAddToCart) negotiateAddToCart.hidden = false;
+                } else if (stepIndex < steps.length - 1) {
+                    stepIndex += 1;
+                    showMessage(payload.message || 'Proposition refusée.', 'error');
+                    negotiateSubmit.textContent = `Proposer une offre plus haute : ${money(steps[stepIndex])}`;
+                    if (negotiateStepLabel) negotiateStepLabel.textContent = `Offre ${stepIndex + 1} sur ${steps.length}`;
                 } else {
-                    showMessage(payload.message || 'Proposition refusée. Essayez un montant plus proche du prix affiché.', 'error');
+                    showMessage(payload.message || 'Aucune de vos offres n’a été acceptée. Vous pouvez ajouter le produit au prix affiché.', 'error');
+                    negotiateSubmit.hidden = true;
                 }
             } catch (error) {
                 showMessage('Connexion interrompue. Réessayez.', 'error');

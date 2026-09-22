@@ -59,7 +59,12 @@ class ProductNegotiationUiTest extends TestCase
 
         $this->assertStringContainsString('ov-negotiable-badge', $html);
         $this->assertStringContainsString('data-negotiate-box', $html);
+        $this->assertStringContainsString('data-negotiate-trigger', $html);
         $this->assertStringContainsString('data-is-negotiable="1"', $html);
+
+        // "Demander un devis" est remplacé par le bouton "Négocier" (retour
+        // utilisateur : ce n'était pas assez professionnel).
+        $this->assertStringNotContainsString('Demander un devis', $html);
 
         // Les seuils vendeur ne doivent jamais fuiter dans le HTML public.
         $this->assertStringNotContainsString('9500', $html);
@@ -78,6 +83,8 @@ class ProductNegotiationUiTest extends TestCase
 
         $this->assertStringNotContainsString('ov-negotiable-badge', $html);
         $this->assertStringNotContainsString('data-negotiate-box', $html);
+        $this->assertStringNotContainsString('data-negotiate-trigger', $html);
+        $this->assertStringNotContainsString('Demander un devis', $html);
         $this->assertStringContainsString('data-is-negotiable="0"', $html);
     }
 
