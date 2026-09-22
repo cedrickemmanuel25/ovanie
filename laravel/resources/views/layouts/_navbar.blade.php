@@ -59,12 +59,16 @@
 
     // Demande utilisateur : une catégorie créée dans l'admin doit apparaître
     // automatiquement dans la barre de navigation principale, sans liste
-    // figée dans le code.
+    // figée dans le code. Limité à 5 (au lieu de toutes les catégories) pour
+    // laisser la place aux liens "Comment acheter"/"Garantie acheteur"/
+    // "Conditions de vente" : au-delà, la ligne déborde et ces liens (et
+    // même le bouton IA) sortent de l'écran sans barre de défilement
+    // visible. Le menu "Toutes les catégories" liste toujours l'ensemble.
     $_navCategories = Category::query()
         ->active()
         ->roots()
         ->ordered()
-        ->limit(8)
+        ->limit(3)
         ->get(['id', 'slug', 'name']);
 @endphp
 
