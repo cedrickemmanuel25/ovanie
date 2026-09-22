@@ -272,8 +272,8 @@ body > header.ovn-header { margin-top: 0 !important; }
 .ovn-ai-link {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 5px 11px;
+    gap: 6px;
+    padding: 4px 11px 4px 4px;
     border: 0;
     border-radius: 999px;
     background: linear-gradient(120deg, #4f46e5, #9333ea 55%, #ff6600);
@@ -284,10 +284,14 @@ body > header.ovn-header { margin-top: 0 !important; }
     letter-spacing: .2px;
     cursor: pointer;
 }
-.ovn-ai-link svg {
-    width: 13px;
-    height: 13px;
-    fill: #fff;
+.ovn-ai-link__avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, .7);
+    background: #fff;
+    flex: 0 0 auto;
 }
 .ovn-ai-link:hover {
     filter: brightness(1.08);

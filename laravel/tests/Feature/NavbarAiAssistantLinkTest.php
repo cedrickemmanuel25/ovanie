@@ -63,6 +63,9 @@ class NavbarAiAssistantLinkTest extends TestCase
         $this->assertStringContainsString('ovn-ai-link', $html);
         $this->assertStringContainsString('data-ai-panel-trigger', $html);
 
+        // Le bouton "IA" de la navbar affiche aussi la photo de N'Nan.
+        $this->assertStringContainsString('ovn-ai-link__avatar', $html);
+
         // Le panneau (avatar N'Nan + le bon nom) doit être rendu sur la page.
         $this->assertStringContainsString('ovaiPanel', $html);
         $this->assertStringContainsString('images/ai-assistant/n-nan.webp', $html);

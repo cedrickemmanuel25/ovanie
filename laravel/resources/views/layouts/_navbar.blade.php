@@ -181,7 +181,7 @@
             <nav class="ovn-primary-nav" aria-label="Navigation principale">
                 @auth
                     <button type="button" class="ovn-ai-link" data-ai-panel-trigger>
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9-1.9 5.6-1.9-5.6-5.6-1.9 5.6-1.9L12 2.5z"></path><path d="M19 14.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6z"></path></svg>
+                        <img src="{{ asset('images/ai-assistant/n-nan.webp') }}" alt="N’Nan" class="ovn-ai-link__avatar">
                         <span>IA</span>
                     </button>
                 @endauth
