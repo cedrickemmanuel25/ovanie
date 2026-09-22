@@ -98,7 +98,7 @@
     data-availability-status="{{ $availabilityStatus }}"
     data-can-add-to-cart="{{ $canAddToCart ? '1' : '0' }}"
     data-is-negotiable="{{ $isNegotiable ? '1' : '0' }}"
-    data-negotiate-url="{{ Route::has('product.negotiate') ? route('product.negotiate', $product->id) : '' }}"
+    data-negotiate-url="{{ Route::has('product.negotiate') ? route('product.negotiate', $product->slug) : '' }}"
     data-cart-add-negotiated-url="{{ Route::has('cart.addNegotiated') ? route('cart.addNegotiated') : '' }}"
     data-login-url="{{ route('login') }}"
     data-coverage-per-unit-m2="{{ $calc->get('coverage_per_unit_m2', 0) }}"

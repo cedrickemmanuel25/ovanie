@@ -100,4 +100,43 @@ class ProductNegotiationUiTest extends TestCase
         $response->assertJsonMissingPath('data.price_p2');
         $response->assertJsonMissingPath('data.price_p3');
     }
+
+    /**
+     * Bug rapporté par l'utilisateur : le bouton "Négocier" renvoyait
+     * "No query results for model [App\Models\Product] 441". Cause : la
+     * page construisait data-negotiate-url avec $product->id, alors que
+     * Product::getRouteKeyName() vaut "slug" - la liaison de route
+     * cherchait donc un produit dont le slug est "441".
+     */
+    public function test_the_rendered_negotiate_url_uses_the_product_slug_not_its_id(): void
+    {
+        $product = $this->makeProduct(negotiable: true);
+
+        $html = $this->get(route('product.show', $product->slug))->getContent();
+
+        preg_match('/data-negotiate-url="([^"]+)"/', $html, $matches);
+        $this->assertNotEmpty($matches, 'data-negotiate-url attribute not found on the page.');
+
+        $negotiateUrl = html_entity_decode($matches[1]);
+
+        $this->assertStringContainsString('/product/' . $product->slug . '/negotiate', $negotiateUrl);
+        $this->assertStringNotContainsString('/product/' . $product->id . '/negotiate', $negotiateUrl);
+    }
+
+    public function test_submitting_a_negotiation_through_the_rendered_url_succeeds(): void
+    {
+        $product = $this->makeProduct(negotiable: true);
+        $buyer = User::factory()->create(['role' => 'client']);
+
+        $html = $this->get(route('product.show', $product->slug))->getContent();
+        preg_match('/data-negotiate-url="([^"]+)"/', $html, $matches);
+        $negotiateUrl = html_entity_decode($matches[1]);
+
+        $response = $this->actingAs($buyer)->postJson($negotiateUrl, [
+            'proposed_price' => $product->price_p1,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('accepted', true);
+    }
 }
