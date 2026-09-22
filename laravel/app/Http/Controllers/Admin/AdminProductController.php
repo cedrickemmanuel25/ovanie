@@ -561,10 +561,44 @@ class AdminProductController extends Controller
     }
 
     /**
-     * Supprimer un produit
+     * Supprimer un produit.
+     *
+     * Bug rapporté par l'utilisateur : la suppression ne se répercutait
+     * parfois ni sur l'accueil ni sur la base de données. Cause : dès
+     * qu'un produit a été commandé au sein d'une commande multi-articles,
+     * il reste référencé par order_items.product_id (contrainte
+     * restrictOnDelete) même si orders.product_id (cascadeOnDelete) pointe
+     * vers un AUTRE produit de la même commande. Product::delete() levait
+     * alors une QueryException non interceptée : la requête échouait (page
+     * d'erreur), le produit restait donc bien en base et visible partout.
+     *
+     * Un produit ayant un historique de commandes ne doit de toute façon
+     * jamais être supprimé physiquement (factures, litiges, statistiques).
+     * On l'archive donc à la place (archived_at/archived_by + is_active à
+     * false), ce qui le retire immédiatement du catalogue public via
+     * PublicProductVisibilityService (qui exclut déjà archived_at non nul).
+     * Un produit jamais commandé continue d'être supprimé physiquement.
      */
     public function destroy(Product $product)
     {
+        $hasOrderHistory = $product->orderItems()->exists();
+
+        if ($hasOrderHistory) {
+            $product->update([
+                'is_active' => false,
+                'status' => 'archived',
+                'archived_at' => now(),
+                'archived_by' => auth('admin')->id(),
+                'archive_reason' => 'Archivé par un administrateur. Historique de commande conservé.',
+                'is_boosted' => false,
+                'boost_end_at' => now(),
+            ]);
+
+            return redirect()
+                ->route('admin.products.index')
+                ->with('success', 'Ce produit a des commandes associées : il a été archivé et retiré du catalogue au lieu d’être supprimé, afin de préserver l’historique des commandes.');
+        }
+
         $product->loadMissing('images');
 
         foreach ($product->images as $image) {
