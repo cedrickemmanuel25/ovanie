@@ -67,6 +67,10 @@ class ProductSheetPresenter
             'public_promo_price' => $publicPromoPrice,
             'discount_percent' => $discountPercent,
 
+            // Le client doit savoir qu'il peut négocier, mais jamais voir les
+            // seuils vendeur (price_p1/p2/p3) : voir NegotiationController::store().
+            'is_negotiable' => (bool) ($product->is_negotiable ?? false),
+
             'unit' => (string) ($product->unit ?? ''),
             'unit_label' => $unit,
             'display_unit' => $unit,

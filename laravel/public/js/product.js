@@ -205,5 +205,107 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     showCalcFields();
 
+    /* Prix négociable : le client propose un prix, jamais les seuils vendeur. */
+    const negotiateBox = document.querySelector('[data-negotiate-box]');
+    if (negotiateBox && page.dataset.isNegotiable === '1') {
+        const negotiateInput = negotiateBox.querySelector('[data-negotiate-input]');
+        const negotiateSubmit = negotiateBox.querySelector('[data-negotiate-submit]');
+        const negotiateMessage = negotiateBox.querySelector('[data-negotiate-message]');
+        const negotiateAddToCart = negotiateBox.querySelector('[data-negotiate-add-to-cart]');
+        const negotiateUrl = page.dataset.negotiateUrl;
+        const cartAddNegotiatedUrl = page.dataset.cartAddNegotiatedUrl;
+        const loginUrl = page.dataset.loginUrl;
+        const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
+        let accepted = null;
+
+        const showMessage = (text, type) => {
+            if (!negotiateMessage) return;
+            negotiateMessage.textContent = text;
+            negotiateMessage.hidden = !text;
+            negotiateMessage.classList.toggle('is-success', type === 'success');
+            negotiateMessage.classList.toggle('is-error', type === 'error');
+        };
+
+        negotiateSubmit?.addEventListener('click', async () => {
+            if (!negotiateUrl) return;
+            const proposedPrice = number(negotiateInput?.value);
+            if (proposedPrice <= 0) {
+                showMessage('Indiquez le prix que vous proposez.', 'error');
+                return;
+            }
+
+            negotiateSubmit.disabled = true;
+            if (negotiateAddToCart) negotiateAddToCart.hidden = true;
+            accepted = null;
+
+            try {
+                const response = await fetch(negotiateUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrf() },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ proposed_price: proposedPrice }),
+                });
+
+                if ([401, 419].includes(response.status) || (response.redirected && response.url.includes('/login'))) {
+                    window.location.href = loginUrl || '/login';
+                    return;
+                }
+
+                const payload = await response.json().catch(() => ({}));
+
+                if (payload.accepted) {
+                    accepted = { negotiationId: payload.negotiation_id, price: proposedPrice };
+                    showMessage(payload.message || 'Proposition acceptée !', 'success');
+                    if (negotiateAddToCart) negotiateAddToCart.hidden = false;
+                } else {
+                    showMessage(payload.message || 'Proposition refusée. Essayez un montant plus proche du prix affiché.', 'error');
+                }
+            } catch (error) {
+                showMessage('Connexion interrompue. Réessayez.', 'error');
+            } finally {
+                negotiateSubmit.disabled = false;
+            }
+        });
+
+        negotiateAddToCart?.addEventListener('click', async () => {
+            if (!accepted || !cartAddNegotiatedUrl) return;
+
+            negotiateAddToCart.disabled = true;
+            try {
+                const response = await fetch(cartAddNegotiatedUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrf() },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        product_id: Number(page.dataset.productId),
+                        negotiated_price: accepted.price,
+                        negotiation_id: accepted.negotiationId,
+                        quantity: Math.max(1, number(qtyInput?.value) || 1),
+                    }),
+                });
+
+                if ([401, 419].includes(response.status)) {
+                    window.location.href = loginUrl || '/login';
+                    return;
+                }
+
+                const payload = await response.json().catch(() => ({}));
+
+                if (payload.success) {
+                    showMessage(payload.message || 'Produit ajouté au panier.', 'success');
+                    negotiateAddToCart.hidden = true;
+                    if (typeof payload.cart_count === 'number') window.OvanieCart?.updateCartCount(payload.cart_count);
+                    window.OvanieCart?.toast(payload.message || 'Produit ajouté au panier.');
+                } else {
+                    showMessage(payload.message || 'Impossible d’ajouter ce produit au panier.', 'error');
+                }
+            } catch (error) {
+                showMessage('Connexion interrompue. Réessayez.', 'error');
+            } finally {
+                negotiateAddToCart.disabled = false;
+            }
+        });
+    }
+
     refreshIcons();
 });

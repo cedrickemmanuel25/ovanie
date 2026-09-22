@@ -21,6 +21,7 @@
     $availabilityLabel = (string) $sheet->get('availability_label', 'Indisponible');
     $canAddToCart = (bool) $sheet->get('can_add_to_cart', false);
     $isOrderable = (bool) $sheet->get('is_orderable', false);
+    $isNegotiable = (bool) $sheet->get('is_negotiable', false);
     $rating = $sheet->get('rating');
     $reviewsCount = (int) $sheet->get('reviews_count', 0);
     $category = data_get($productSheet, 'category');
@@ -90,12 +91,17 @@
 @section('content')
 <section class="ov-product-page"
     data-product-page
+    data-product-id="{{ $product->id }}"
     data-product-price="{{ (int) round($price) }}"
     data-product-unit="{{ $unit }}"
     data-product-min-qty="{{ $minimum }}"
     data-product-stock="{{ $stock }}"
     data-availability-status="{{ $availabilityStatus }}"
     data-can-add-to-cart="{{ $canAddToCart ? '1' : '0' }}"
+    data-is-negotiable="{{ $isNegotiable ? '1' : '0' }}"
+    data-negotiate-url="{{ Route::has('product.negotiate') ? route('product.negotiate', $product->id) : '' }}"
+    data-cart-add-negotiated-url="{{ Route::has('cart.addNegotiated') ? route('cart.addNegotiated') : '' }}"
+    data-login-url="{{ route('login') }}"
     data-coverage-per-unit-m2="{{ $calc->get('coverage_per_unit_m2', 0) }}"
     data-unit-volume-m3="{{ $calc->get('unit_volume_m3', 0) }}"
     data-unit-weight-kg="{{ $calc->get('unit_weight_kg', 0) }}"
@@ -148,6 +154,7 @@
                 <div class="ov-product-summary__price">
                     <strong>{{ $fmtMoney($price) }}</strong><span>/ {{ $unit }}</span>
                     @if($regularPrice > $price)<del>{{ $fmtMoney($regularPrice) }}</del>@endif
+                    @if($isNegotiable)<span class="ov-negotiable-badge"><i data-lucide="handshake"></i>Prix négociable</span>@endif
                 </div>
 
                 @if($shortDescription)
@@ -181,6 +188,21 @@
                 <div class="ov-buybox-stock"><span class="ov-product-status {{ $availabilityClass }}"><i data-lucide="{{ $availabilityIcon }}"></i>{{ $availabilityLabel }}</span></div>
 
                 <div class="ov-buybox-delivery"><i data-lucide="map-pin"></i><div><strong>Livraison selon votre adresse</strong><span>Frais et délai calculés avant validation de la commande.</span></div></div>
+
+                @if($isNegotiable && $canAddToCart)
+                    <div class="ov-negotiate-box" data-negotiate-box>
+                        <div class="ov-negotiate-head">
+                            <i data-lucide="handshake"></i>
+                            <div><strong>Prix négociable</strong><span>Proposez votre prix : OVANIE l’accepte automatiquement s’il convient au vendeur.</span></div>
+                        </div>
+                        <div class="ov-negotiate-row">
+                            <input type="number" min="1" step="1" placeholder="Votre prix en FCFA" data-negotiate-input aria-label="Votre proposition de prix">
+                            <button type="button" class="ov-negotiate-submit" data-negotiate-submit>Proposer</button>
+                        </div>
+                        <p class="ov-negotiate-message" data-negotiate-message hidden></p>
+                        <button type="button" class="ov-product-btn ov-product-btn--cart" data-negotiate-add-to-cart hidden><i data-lucide="shopping-cart"></i>Ajouter au panier à ce prix</button>
+                    </div>
+                @endif
 
                 @if($canAddToCart)
                     <form method="POST" action="{{ Route::has('cart.add') ? route('cart.add', $product->id) : '#' }}" class="ov-product-cart-form" data-product-form>

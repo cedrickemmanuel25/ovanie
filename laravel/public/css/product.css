@@ -172,6 +172,8 @@
 .ov-product-summary__price strong { color: var(--ovp-orange); font-size: clamp(30px, 2.2vw, 40px); line-height: 1; }
 .ov-product-summary__price span { color: #59667a; font-size: 12px; font-weight: 700; }
 .ov-product-summary__price del { flex-basis: 100%; color: #9aa4b2; font-size: 11px; }
+.ov-negotiable-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 99px; background: var(--ovp-orange-soft); color: var(--ovp-orange); font-size: 10.5px; font-weight: 850; text-transform: none; }
+.ov-negotiable-badge svg { width: 13px; height: 13px; }
 .ov-product-short-description { margin: 12px 0 8px; color: #3f4c60; font-size: 12px; line-height: 1.45; }
 .ov-product-meta-line { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 11px; color: #6b778a; font-size: 11px; }
 .ov-product-meta-line strong { color: #233149; }
@@ -208,6 +210,18 @@
 .ov-buybox-delivery svg { width: 17px; height: 17px; flex: 0 0 auto; color: var(--ovp-blue); }
 .ov-buybox-delivery strong { display: block; font-size: 10.5px; }
 .ov-buybox-delivery span { display: block; margin-top: 2px; color: #778397; font-size: 9.5px; line-height: 1.35; }
+.ov-negotiate-box { margin: 13px 0; padding: 12px; border: 1px solid var(--ovp-orange); border-radius: 8px; background: var(--ovp-orange-soft); }
+.ov-negotiate-head { display: flex; gap: 8px; }
+.ov-negotiate-head svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--ovp-orange); }
+.ov-negotiate-head strong { display: block; color: #7a2f00; font-size: 11px; }
+.ov-negotiate-head span { display: block; margin-top: 2px; color: #8a5a30; font-size: 9.5px; line-height: 1.35; }
+.ov-negotiate-row { display: flex; gap: 6px; margin-top: 10px; }
+.ov-negotiate-row input { flex: 1; height: 36px; padding: 0 10px; border: 1px solid #e3c19a; border-radius: 5px; background: #fff; color: #14233a; font-size: 12px; font-weight: 700; }
+.ov-negotiate-submit { flex: 0 0 auto; height: 36px; padding: 0 14px; border: 0; border-radius: 5px; background: var(--ovp-orange); color: #fff; font-size: 10.5px; font-weight: 900; text-transform: uppercase; cursor: pointer; }
+.ov-negotiate-submit:disabled { opacity: .6; cursor: not-allowed; }
+.ov-negotiate-message { margin: 9px 0 0; font-size: 10.5px; font-weight: 750; line-height: 1.4; }
+.ov-negotiate-message.is-success { color: var(--ovp-green); }
+.ov-negotiate-message.is-error { color: #a02e24; }
 .ov-buybox-qty-label { display: block; margin-bottom: 5px; color: #27364d; font-size: 10.5px; font-weight: 800; }
 .ov-product-qty-row { display: grid; grid-template-columns: 34px 52px 34px 1fr; align-items: center; gap: 0; margin-bottom: 10px; }
 .ov-product-qty-row button,
