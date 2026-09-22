@@ -74,7 +74,15 @@
     margin-top: 2px;
 }
 
-.ovai-panel__close {
+.ovai-panel__head-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ovai-panel__close,
+.ovai-panel__restart {
     flex: 0 0 auto;
     width: 32px;
     height: 32px;
@@ -87,8 +95,10 @@
     cursor: pointer;
     transition: background .16s ease;
 }
-.ovai-panel__close:hover { background: rgba(255, 255, 255, .26); }
-.ovai-panel__close svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2.2; fill: none; }
+.ovai-panel__close:hover,
+.ovai-panel__restart:hover { background: rgba(255, 255, 255, .26); }
+.ovai-panel__close svg,
+.ovai-panel__restart svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2.2; fill: none; }
 
 .ovai-panel__body {
     flex: 1;

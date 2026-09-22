@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const triggers = document.querySelectorAll('[data-ai-panel-trigger]');
     const closeButton = document.getElementById('ovaiClose');
+    const restartButton = document.getElementById('ovaiRestart');
     const body = document.getElementById('ovaiBody');
     const resumeChoice = document.getElementById('ovaiResumeChoice');
     const resumePreview = document.getElementById('ovaiResumePreview');
@@ -97,6 +98,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const showWelcome = () => {
         resumeChoice.hidden = true;
         welcome.hidden = false;
+    };
+
+    /**
+     * Repart à zéro : l'ancienne conversation reste intacte côté serveur
+     * (récupérable la prochaine fois via "Reprendre la conversation"), mais
+     * cet onglet oublie son jeton et un nouveau dossier sera créé au
+     * prochain message envoyé.
+     */
+    const startNewConversation = () => {
+        sessionStorage.removeItem(storageKey);
+        token = null;
+        pendingResumeToken = null;
+        messages.innerHTML = '';
+        if (callbackPanel) callbackPanel.hidden = true;
+        callbackToggle?.classList.remove('is-active');
+        setStatus('');
+        showWelcome();
     };
 
     const loadExisting = async () => {
@@ -203,6 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
 
     closeButton?.addEventListener('click', closePanel);
+    restartButton?.addEventListener('click', startNewConversation);
     overlay.addEventListener('click', closePanel);
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && panel.classList.contains('is-open')) closePanel();
@@ -224,10 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadExisting();
     });
 
-    resumeNew?.addEventListener('click', () => {
-        pendingResumeToken = null;
-        showWelcome();
-    });
+    resumeNew?.addEventListener('click', startNewConversation);
 
     sendButton?.addEventListener('click', () => sendMessage(input.value));
     input?.addEventListener('input', autosizeInput);

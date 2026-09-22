@@ -76,6 +76,9 @@ class NavbarAiAssistantLinkTest extends TestCase
         $this->assertStringContainsString('ovaiResumeContinue', $html);
         $this->assertStringContainsString('ovaiResumeNew', $html);
 
+        // Bouton "Nouvelle conversation" toujours disponible dans l'en-tête.
+        $this->assertStringContainsString('ovaiRestart', $html);
+
         // Le déclencheur "IA" doit précéder "Matériaux" dans le HTML rendu.
         $aiPosition = strpos($html, 'ovn-ai-link');
         $materiauxPosition = strpos($html, 'Matériaux');

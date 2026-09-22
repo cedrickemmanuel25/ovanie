@@ -12,9 +12,14 @@
                 <span>Assistante OVANIE</span>
             </div>
         </div>
-        <button type="button" class="ovai-panel__close" id="ovaiClose" aria-label="Fermer l’assistant">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
-        </button>
+        <div class="ovai-panel__head-actions">
+            <button type="button" class="ovai-panel__restart" id="ovaiRestart" aria-label="Nouvelle conversation" title="Nouvelle conversation">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path></svg>
+            </button>
+            <button type="button" class="ovai-panel__close" id="ovaiClose" aria-label="Fermer l’assistant">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+            </button>
+        </div>
     </header>
 
     <div class="ovai-panel__body" id="ovaiBody">
