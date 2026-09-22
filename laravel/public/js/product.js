@@ -205,30 +205,41 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     showCalcFields();
 
-    /* Prix négociable : le client propose un prix parmi des paliers guidés,
-       jamais les seuils vendeur (price_p1/p2/p3, jamais transmis au navigateur). */
+    /* Prix négociable : négociation guidée en 3 paliers réels (price_p1/p2/p3
+       définis par le vendeur). Le client doit être connecté pour y accéder
+       (voir NegotiationController::offers, protégé par le middleware auth),
+       choisit "Ajouter au panier à ce prix" ou "Voir un meilleur prix" à
+       chaque palier, et dispose de 2 minutes pour se décider sur la
+       dernière offre avant qu'elle n'expire. */
     const negotiateTrigger = document.querySelector('[data-negotiate-trigger]');
     const negotiateBox = document.querySelector('[data-negotiate-box]');
     if (negotiateTrigger && negotiateBox && page.dataset.isNegotiable === '1') {
-        const negotiateSubmit = negotiateBox.querySelector('[data-negotiate-submit]');
         const negotiateStepLabel = negotiateBox.querySelector('[data-negotiate-step-label]');
+        const negotiateSubtitle = negotiateBox.querySelector('[data-negotiate-subtitle]');
+        const negotiateAmount = negotiateBox.querySelector('[data-negotiate-amount]');
+        const negotiateTimer = negotiateBox.querySelector('[data-negotiate-timer]');
+        const negotiateAccept = negotiateBox.querySelector('[data-negotiate-accept]');
+        const negotiateNext = negotiateBox.querySelector('[data-negotiate-next]');
         const negotiateMessage = negotiateBox.querySelector('[data-negotiate-message]');
-        const negotiateAddToCart = negotiateBox.querySelector('[data-negotiate-add-to-cart]');
+        const negotiateOffersUrl = page.dataset.negotiateOffersUrl;
         const negotiateUrl = page.dataset.negotiateUrl;
         const cartAddNegotiatedUrl = page.dataset.cartAddNegotiatedUrl;
         const loginUrl = page.dataset.loginUrl;
+        const productId = page.dataset.productId;
         const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
-        const displayPrice = profile.price;
 
-        // Paliers proposés au client, du plus audacieux au prix affiché (qui
-        // ne peut jamais être refusé côté serveur : voir NegotiationController).
-        const steps = [
-            Math.max(1, Math.round(displayPrice * 0.90)),
-            Math.max(1, Math.round(displayPrice * 0.95)),
-            Math.max(1, Math.round(displayPrice)),
-        ];
+        const FINAL_OFFER_TTL_MS = 120000;
+        const expiredKey = `ov_negotiate_expired_${productId}`;
+        const finalStartKey = `ov_negotiate_final_started_${productId}`;
+        const storage = {
+            get(key) { try { return sessionStorage.getItem(key); } catch (error) { return null; } },
+            set(key, value) { try { sessionStorage.setItem(key, value); } catch (error) { /* ignore */ } },
+            remove(key) { try { sessionStorage.removeItem(key); } catch (error) { /* ignore */ } },
+        };
+
+        let offers = null;
         let stepIndex = 0;
-        let accepted = null;
+        let timerInterval = null;
 
         const showMessage = (text, type) => {
             if (!negotiateMessage) return;
@@ -238,35 +249,134 @@ document.addEventListener('DOMContentLoaded', () => {
             negotiateMessage.classList.toggle('is-error', type === 'error');
         };
 
-        const renderStep = () => {
-            if (negotiateStepLabel) negotiateStepLabel.textContent = `Offre ${stepIndex + 1} sur ${steps.length}`;
-            if (negotiateSubmit) {
-                negotiateSubmit.textContent = `Proposer ${money(steps[stepIndex])}`;
-                negotiateSubmit.hidden = false;
-                negotiateSubmit.disabled = false;
+        const stopTimer = () => {
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+        };
+
+        const lockTrigger = () => {
+            negotiateTrigger.disabled = true;
+            negotiateTrigger.classList.add('is-disabled');
+            negotiateTrigger.title = 'Le délai pour négocier ce produit est expiré.';
+        };
+
+        if (storage.get(expiredKey) === '1') lockTrigger();
+
+        const expireNegotiation = () => {
+            stopTimer();
+            storage.set(expiredKey, '1');
+            storage.remove(finalStartKey);
+            lockTrigger();
+            if (negotiateTimer) negotiateTimer.hidden = true;
+            if (negotiateAccept) negotiateAccept.hidden = true;
+            if (negotiateNext) negotiateNext.hidden = true;
+            showMessage('Le délai de 2 minutes est écoulé. Ce produit n’est plus négociable pour vous.', 'error');
+        };
+
+        const renderTimer = () => {
+            let startedAt = Number(storage.get(finalStartKey));
+            if (!startedAt) {
+                startedAt = Date.now();
+                storage.set(finalStartKey, String(startedAt));
             }
-            if (negotiateAddToCart) negotiateAddToCart.hidden = true;
+
+            if (negotiateTimer) negotiateTimer.hidden = false;
+
+            const tick = () => {
+                const remainingMs = FINAL_OFFER_TTL_MS - (Date.now() - startedAt);
+                if (remainingMs <= 0) {
+                    expireNegotiation();
+                    return;
+                }
+                const totalSeconds = Math.ceil(remainingMs / 1000);
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                if (negotiateTimer) negotiateTimer.textContent = `Dernière offre : ${minutes}:${String(seconds).padStart(2, '0')} restantes`;
+            };
+
+            stopTimer();
+            tick();
+            timerInterval = setInterval(tick, 1000);
+        };
+
+        const renderStep = () => {
+            if (!offers) return;
+            stopTimer();
             showMessage('', null);
+
+            const isLast = stepIndex >= offers.length - 1;
+            if (negotiateStepLabel) negotiateStepLabel.textContent = `Offre ${stepIndex + 1} sur ${offers.length}`;
+            if (negotiateAmount) negotiateAmount.textContent = money(offers[stepIndex]);
+            if (negotiateSubtitle) {
+                negotiateSubtitle.textContent = isLast
+                    ? 'Dernière offre possible sur ce produit.'
+                    : 'OVANIE vous propose ce prix. Vous pouvez demander mieux.';
+            }
+            if (negotiateAccept) { negotiateAccept.hidden = false; negotiateAccept.disabled = false; }
+            if (negotiateNext) negotiateNext.hidden = isLast;
+            if (negotiateTimer) negotiateTimer.hidden = true;
+
+            if (isLast) renderTimer();
+        };
+
+        const loadOffers = async () => {
+            if (!negotiateOffersUrl) return;
+            if (negotiateSubtitle) negotiateSubtitle.textContent = 'Chargement de votre offre…';
+            if (negotiateAccept) negotiateAccept.hidden = true;
+            if (negotiateNext) negotiateNext.hidden = true;
+
+            try {
+                const response = await fetch(negotiateOffersUrl, {
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                });
+
+                if ([401, 419].includes(response.status) || (response.redirected && response.url.includes('/login'))) {
+                    window.location.href = loginUrl || '/login';
+                    return;
+                }
+
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload.success || !Array.isArray(payload.offers) || !payload.offers.length) {
+                    throw new Error(payload.message || 'Impossible de charger votre offre.');
+                }
+
+                offers = payload.offers;
+                stepIndex = 0;
+                renderStep();
+            } catch (error) {
+                showMessage(error.message || 'Connexion interrompue. Réessayez.', 'error');
+            }
         };
 
         negotiateTrigger.addEventListener('click', () => {
+            if (negotiateTrigger.disabled) return;
+
+            if (negotiateOffersUrl && negotiateOffersUrl.includes('/login')) {
+                window.location.href = negotiateOffersUrl;
+                return;
+            }
+
             const opening = negotiateBox.hidden;
             negotiateBox.hidden = !opening;
             if (opening) {
-                stepIndex = 0;
-                accepted = null;
-                renderStep();
                 negotiateBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (offers) renderStep(); else loadOffers();
+            } else {
+                stopTimer();
             }
         });
 
-        negotiateSubmit?.addEventListener('click', async () => {
-            if (!negotiateUrl) return;
-            const proposedPrice = steps[stepIndex];
+        negotiateNext?.addEventListener('click', () => {
+            if (!offers || stepIndex >= offers.length - 1) return;
+            stepIndex += 1;
+            renderStep();
+        });
 
-            negotiateSubmit.disabled = true;
-            accepted = null;
+        negotiateAccept?.addEventListener('click', async () => {
+            if (!offers || !negotiateUrl) return;
+            const proposedPrice = offers[stepIndex];
 
+            negotiateAccept.disabled = true;
             try {
                 const response = await fetch(negotiateUrl, {
                     method: 'POST',
@@ -280,65 +390,47 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                const payload = await response.json().catch(() => ({}));
-
-                if (payload.accepted) {
-                    accepted = { negotiationId: payload.negotiation_id, price: proposedPrice };
-                    showMessage(payload.message || 'Proposition acceptée !', 'success');
-                    negotiateSubmit.hidden = true;
-                    if (negotiateAddToCart) negotiateAddToCart.hidden = false;
-                } else if (stepIndex < steps.length - 1) {
-                    stepIndex += 1;
-                    showMessage(payload.message || 'Proposition refusée.', 'error');
-                    negotiateSubmit.textContent = `Proposer une offre plus haute : ${money(steps[stepIndex])}`;
-                    if (negotiateStepLabel) negotiateStepLabel.textContent = `Offre ${stepIndex + 1} sur ${steps.length}`;
-                } else {
-                    showMessage(payload.message || 'Aucune de vos offres n’a été acceptée. Vous pouvez ajouter le produit au prix affiché.', 'error');
-                    negotiateSubmit.hidden = true;
+                const negotiatePayload = await response.json().catch(() => ({}));
+                if (!negotiatePayload.accepted) {
+                    showMessage(negotiatePayload.message || 'Cette offre n’est plus disponible.', 'error');
+                    negotiateAccept.disabled = false;
+                    return;
                 }
-            } catch (error) {
-                showMessage('Connexion interrompue. Réessayez.', 'error');
-            } finally {
-                negotiateSubmit.disabled = false;
-            }
-        });
 
-        negotiateAddToCart?.addEventListener('click', async () => {
-            if (!accepted || !cartAddNegotiatedUrl) return;
+                stopTimer();
+                if (negotiateTimer) negotiateTimer.hidden = true;
+                if (negotiateNext) negotiateNext.hidden = true;
 
-            negotiateAddToCart.disabled = true;
-            try {
-                const response = await fetch(cartAddNegotiatedUrl, {
+                const cartResponse = await fetch(cartAddNegotiatedUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrf() },
                     credentials: 'same-origin',
                     body: JSON.stringify({
-                        product_id: Number(page.dataset.productId),
-                        negotiated_price: accepted.price,
-                        negotiation_id: accepted.negotiationId,
+                        product_id: Number(productId),
+                        negotiated_price: proposedPrice,
+                        negotiation_id: negotiatePayload.negotiation_id,
                         quantity: Math.max(1, number(qtyInput?.value) || 1),
                     }),
                 });
 
-                if ([401, 419].includes(response.status)) {
+                if ([401, 419].includes(cartResponse.status) || (cartResponse.redirected && cartResponse.url.includes('/login'))) {
                     window.location.href = loginUrl || '/login';
                     return;
                 }
 
-                const payload = await response.json().catch(() => ({}));
-
-                if (payload.success) {
-                    showMessage(payload.message || 'Produit ajouté au panier.', 'success');
-                    negotiateAddToCart.hidden = true;
-                    if (typeof payload.cart_count === 'number') window.OvanieCart?.updateCartCount(payload.cart_count);
-                    window.OvanieCart?.toast(payload.message || 'Produit ajouté au panier.');
-                } else {
-                    showMessage(payload.message || 'Impossible d’ajouter ce produit au panier.', 'error');
+                const cartPayload = await cartResponse.json().catch(() => ({}));
+                if (!cartResponse.ok || cartPayload.success === false) {
+                    throw new Error(cartPayload.message || 'Impossible d’ajouter ce produit au panier.');
                 }
+
+                storage.remove(finalStartKey);
+                negotiateAccept.hidden = true;
+                showMessage(cartPayload.message || 'Produit ajouté au panier à ce prix !', 'success');
+                if (typeof cartPayload.cart_count === 'number') window.OvanieCart?.updateCartCount(cartPayload.cart_count);
+                window.OvanieCart?.toast(cartPayload.message || 'Produit ajouté au panier.');
             } catch (error) {
-                showMessage('Connexion interrompue. Réessayez.', 'error');
-            } finally {
-                negotiateAddToCart.disabled = false;
+                showMessage(error.message || 'Connexion interrompue. Réessayez.', 'error');
+                negotiateAccept.disabled = false;
             }
         });
     }

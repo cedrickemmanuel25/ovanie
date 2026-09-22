@@ -215,12 +215,16 @@
 .ov-negotiate-head svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--ovp-orange); }
 .ov-negotiate-head strong { display: block; color: #7a2f00; font-size: 11px; }
 .ov-negotiate-head span { display: block; margin-top: 2px; color: #8a5a30; font-size: 9.5px; line-height: 1.35; }
-.ov-negotiate-step { margin-top: 10px; color: #8a5a30; font-size: 9.5px; font-weight: 800; text-transform: uppercase; }
-.ov-negotiate-submit { display: flex; align-items: center; justify-content: center; width: 100%; height: 40px; margin-top: 6px; padding: 0 14px; border: 0; border-radius: 5px; background: var(--ovp-orange); color: #fff; font-size: 11px; font-weight: 900; cursor: pointer; }
-.ov-negotiate-submit:disabled { opacity: .6; cursor: not-allowed; }
+.ov-negotiate-amount { margin-top: 8px; color: var(--ovp-blue); font-size: 21px; font-weight: 900; }
+.ov-negotiate-timer { margin: 6px 0 0; color: #a02e24; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.ov-negotiate-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.ov-negotiate-next { display: flex; align-items: center; justify-content: center; width: 100%; height: 36px; padding: 0 14px; border: 1px solid var(--ovp-orange); border-radius: 5px; background: #fff; color: var(--ovp-orange); font-size: 10.5px; font-weight: 800; cursor: pointer; }
+.ov-negotiate-next:disabled { opacity: .6; cursor: not-allowed; }
 .ov-negotiate-message { margin: 9px 0 0; font-size: 10.5px; font-weight: 750; line-height: 1.4; }
 .ov-negotiate-message.is-success { color: var(--ovp-green); }
 .ov-negotiate-message.is-error { color: #a02e24; }
+.ov-product-btn:disabled,
+.ov-product-btn.is-disabled { opacity: .55; cursor: not-allowed; }
 .ov-buybox-qty-label { display: block; margin-bottom: 5px; color: #27364d; font-size: 10.5px; font-weight: 800; }
 .ov-product-qty-row { display: grid; grid-template-columns: 34px 52px 34px 1fr; align-items: center; gap: 0; margin-bottom: 10px; }
 .ov-product-qty-row button,

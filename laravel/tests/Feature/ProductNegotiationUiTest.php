@@ -15,6 +15,11 @@ use Tests\TestCase;
  * la fiche produit publique, et le client n'avait aucun moyen de proposer un
  * prix - alors que NegotiationController::store() et
  * CartController::addNegotiatedToCart() existaient déjà côté serveur.
+ *
+ * Négociation guidée en 3 paliers réels (price_p1/p2/p3) : le client doit
+ * être connecté pour voir les montants (NegotiationController::offers,
+ * protégé par "auth"), les découvre un par un du bouton "Négocier", et
+ * choisit "Ajouter au panier à ce prix" ou "Voir un meilleur prix".
  */
 class ProductNegotiationUiTest extends TestCase
 {
@@ -60,13 +65,18 @@ class ProductNegotiationUiTest extends TestCase
         $this->assertStringContainsString('ov-negotiable-badge', $html);
         $this->assertStringContainsString('data-negotiate-box', $html);
         $this->assertStringContainsString('data-negotiate-trigger', $html);
+        $this->assertStringContainsString('data-negotiate-amount', $html);
+        $this->assertStringContainsString('data-negotiate-accept', $html);
+        $this->assertStringContainsString('data-negotiate-next', $html);
         $this->assertStringContainsString('data-is-negotiable="1"', $html);
 
         // "Demander un devis" est remplacé par le bouton "Négocier" (retour
         // utilisateur : ce n'était pas assez professionnel).
         $this->assertStringNotContainsString('Demander un devis', $html);
 
-        // Les seuils vendeur ne doivent jamais fuiter dans le HTML public.
+        // Les seuils vendeur ne doivent jamais fuiter dans le HTML public,
+        // même quand le produit est négociable : ils ne sont donnés qu'à un
+        // client connecté, via l'endpoint dédié (voir tests ci-dessous).
         $this->assertStringNotContainsString('9500', $html);
         $this->assertStringNotContainsString('9000', $html);
         $this->assertStringNotContainsString('8500', $html);
@@ -138,5 +148,64 @@ class ProductNegotiationUiTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonPath('accepted', true);
+    }
+
+    public function test_a_guest_sees_the_login_url_instead_of_the_real_negotiation_offers_url(): void
+    {
+        $product = $this->makeProduct(negotiable: true);
+
+        $html = $this->get(route('product.show', $product->slug))->getContent();
+
+        preg_match('/data-negotiate-offers-url="([^"]+)"/', $html, $matches);
+        $this->assertNotEmpty($matches, 'data-negotiate-offers-url attribute not found on the page.');
+
+        $this->assertStringContainsString('/login', html_entity_decode($matches[1]));
+    }
+
+    public function test_an_authenticated_buyer_sees_the_real_negotiation_offers_url(): void
+    {
+        $product = $this->makeProduct(negotiable: true);
+        $buyer = User::factory()->create(['role' => 'client']);
+
+        $html = $this->actingAs($buyer)->get(route('product.show', $product->slug))->getContent();
+
+        preg_match('/data-negotiate-offers-url="([^"]+)"/', $html, $matches);
+        $this->assertNotEmpty($matches, 'data-negotiate-offers-url attribute not found on the page.');
+
+        $offersUrl = html_entity_decode($matches[1]);
+        $this->assertStringContainsString('/product/' . $product->slug . '/negotiation-offers', $offersUrl);
+    }
+
+    public function test_a_guest_cannot_fetch_the_real_negotiation_offers(): void
+    {
+        $product = $this->makeProduct(negotiable: true);
+
+        $response = $this->getJson(route('product.negotiationOffers', $product->slug));
+
+        $response->assertUnauthorized();
+    }
+
+    public function test_an_authenticated_buyer_receives_the_offers_in_order_from_highest_to_lowest(): void
+    {
+        $product = $this->makeProduct(negotiable: true);
+        $buyer = User::factory()->create(['role' => 'client']);
+
+        $response = $this->actingAs($buyer)->getJson(route('product.negotiationOffers', $product->slug));
+
+        $response->assertOk();
+        $response->assertJson([
+            'success' => true,
+            'offers' => [9500, 9000, 8500],
+        ]);
+    }
+
+    public function test_the_offers_endpoint_refuses_a_non_negotiable_product(): void
+    {
+        $product = $this->makeProduct(negotiable: false);
+        $buyer = User::factory()->create(['role' => 'client']);
+
+        $response = $this->actingAs($buyer)->getJson(route('product.negotiationOffers', $product->slug));
+
+        $response->assertForbidden();
     }
 }

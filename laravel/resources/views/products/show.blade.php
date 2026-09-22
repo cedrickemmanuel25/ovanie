@@ -98,6 +98,7 @@
     data-availability-status="{{ $availabilityStatus }}"
     data-can-add-to-cart="{{ $canAddToCart ? '1' : '0' }}"
     data-is-negotiable="{{ $isNegotiable ? '1' : '0' }}"
+    data-negotiate-offers-url="{{ auth()->check() ? (Route::has('product.negotiationOffers') ? route('product.negotiationOffers', $product->slug) : '') : route('login') }}"
     data-negotiate-url="{{ Route::has('product.negotiate') ? route('product.negotiate', $product->slug) : '' }}"
     data-cart-add-negotiated-url="{{ Route::has('cart.addNegotiated') ? route('cart.addNegotiated') : '' }}"
     data-login-url="{{ route('login') }}"
@@ -192,12 +193,15 @@
                     <div class="ov-negotiate-box" data-negotiate-box hidden>
                         <div class="ov-negotiate-head">
                             <i data-lucide="handshake"></i>
-                            <div><strong>Proposez votre prix</strong><span>OVANIE l’accepte automatiquement s’il convient au vendeur.</span></div>
+                            <div><strong data-negotiate-step-label>Offre</strong><span data-negotiate-subtitle>Chargement de votre offre…</span></div>
                         </div>
-                        <div class="ov-negotiate-step" data-negotiate-step-label>Offre 1 sur 3</div>
-                        <button type="button" class="ov-negotiate-submit" data-negotiate-submit></button>
+                        <div class="ov-negotiate-amount" data-negotiate-amount></div>
+                        <p class="ov-negotiate-timer" data-negotiate-timer hidden></p>
+                        <div class="ov-negotiate-actions">
+                            <button type="button" class="ov-product-btn ov-product-btn--cart" data-negotiate-accept hidden><i data-lucide="shopping-cart"></i>Ajouter au panier à ce prix</button>
+                            <button type="button" class="ov-negotiate-next" data-negotiate-next hidden>Voir un meilleur prix</button>
+                        </div>
                         <p class="ov-negotiate-message" data-negotiate-message hidden></p>
-                        <button type="button" class="ov-product-btn ov-product-btn--cart" data-negotiate-add-to-cart hidden><i data-lucide="shopping-cart"></i>Ajouter au panier à ce prix</button>
                     </div>
                 @endif
 

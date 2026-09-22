@@ -240,6 +240,9 @@ Route::post('/calculator/add-to-cart', [CalculatorController::class, 'addToCart'
     ->middleware('throttle:30,1')
     ->name('calculator.addToCart');
 
+Route::get('/product/{product}/negotiation-offers', [NegotiationController::class, 'offers'])
+    ->middleware('auth')
+    ->name('product.negotiationOffers');
 Route::post('/product/{product}/negotiate', [NegotiationController::class, 'store'])
     ->middleware('auth')
     ->name('product.negotiate');

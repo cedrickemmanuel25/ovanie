@@ -9,14 +9,48 @@ use Illuminate\Http\Request;
 class NegotiationController extends Controller
 {
     /**
-     * Vérifie une proposition client sans afficher les seuils vendeur.
-     *
-     * Logique :
-     * - Le vendeur définit en interne 3 seuils : price_p1, price_p2, price_p3.
-     * - Le client ne voit jamais ces seuils.
-     * - Si la proposition est au moins égale au dernier seuil accepté par le vendeur,
-     *   elle est acceptée et le client peut ajouter au panier au prix proposé.
-     * - Si la proposition est trop basse, elle est refusée sans révéler le minimum.
+     * Durée pendant laquelle la dernière offre (la plus basse) reste valable
+     * une fois affichée au client, avant que la négociation n'expire.
+     */
+    public const FINAL_OFFER_TTL_SECONDS = 120;
+
+    /**
+     * Donne au client connecté les 3 offres définies par le vendeur
+     * (price_p1/p2/p3), du prix le plus proche du prix affiché au plus
+     * intéressant, pour la négociation guidée en 3 paliers de la fiche
+     * produit. Route protégée par le middleware "auth" : un visiteur non
+     * connecté n'accède jamais à ces montants.
+     */
+    public function offers(Product $product)
+    {
+        if (! $product->is_negotiable || ! $product->price_p3) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ce produit n’est pas négociable.',
+            ], 403);
+        }
+
+        $displayPrice = (float) ($product->final_price ?? $product->promo_price ?? $product->price ?? 0);
+        $offer1 = (float) ($product->price_p1 ?: $displayPrice);
+        $offer2 = (float) ($product->price_p2 ?: $offer1);
+        $offer3 = (float) ($product->price_p3 ?: $offer2);
+
+        return response()->json([
+            'success' => true,
+            'offers' => [
+                (int) round($offer1),
+                (int) round($offer2),
+                (int) round($offer3),
+            ],
+            'final_offer_ttl_seconds' => self::FINAL_OFFER_TTL_SECONDS,
+        ]);
+    }
+
+    /**
+     * Valide qu'un montant choisi par le client parmi les offres ci-dessus
+     * correspond bien à un seuil réellement défini par le vendeur, et
+     * enregistre la négociation. Ne fait jamais confiance à un montant
+     * envoyé par le client sans le revérifier contre price_p1/p2/p3.
      */
     public function store(Request $request, Product $product)
     {

@@ -1008,7 +1008,7 @@
 
                 <div id="pwNegotiationOffers" style="display:none">
                     <h3 class="pw-calc-title">Offres automatiques proposées au client</h3>
-                    <p class="pw-help" style="margin:-6px 0 10px;">Le client ne voit jamais ces montants directement : il propose un prix et OVANIE accepte automatiquement s’il atteint l’une de ces offres.</p>
+                    <p class="pw-help" style="margin:-6px 0 10px;">Un client connecté qui clique sur "Négocier" voit ces montants un par un, du plus proche du prix affiché au plus avantageux, et peut ajouter au panier dès que l’un lui convient.</p>
                     <div class="pw-calc-grid">
                         <div class="pw-calc-card">
                             <span class="pw-calc-icon"><i data-lucide="handshake"></i></span>
