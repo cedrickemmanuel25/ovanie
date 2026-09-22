@@ -193,7 +193,7 @@
                     <div class="ov-negotiate-box" data-negotiate-box hidden>
                         <div class="ov-negotiate-head">
                             <i data-lucide="handshake"></i>
-                            <div><strong data-negotiate-step-label>Offre</strong><span data-negotiate-subtitle>Chargement de votre offre…</span></div>
+                            <div><strong>Proposition OVANIE</strong><span data-negotiate-subtitle>Chargement de votre offre…</span></div>
                         </div>
                         <div class="ov-negotiate-amount" data-negotiate-amount></div>
                         <p class="ov-negotiate-timer" data-negotiate-timer hidden></p>

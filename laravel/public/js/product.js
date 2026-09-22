@@ -214,7 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const negotiateTrigger = document.querySelector('[data-negotiate-trigger]');
     const negotiateBox = document.querySelector('[data-negotiate-box]');
     if (negotiateTrigger && negotiateBox && page.dataset.isNegotiable === '1') {
-        const negotiateStepLabel = negotiateBox.querySelector('[data-negotiate-step-label]');
         const negotiateSubtitle = negotiateBox.querySelector('[data-negotiate-subtitle]');
         const negotiateAmount = negotiateBox.querySelector('[data-negotiate-amount]');
         const negotiateTimer = negotiateBox.querySelector('[data-negotiate-timer]');
@@ -304,7 +303,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showMessage('', null);
 
             const isLast = stepIndex >= offers.length - 1;
-            if (negotiateStepLabel) negotiateStepLabel.textContent = `Offre ${stepIndex + 1} sur ${offers.length}`;
             if (negotiateAmount) negotiateAmount.textContent = money(offers[stepIndex]);
             if (negotiateSubtitle) {
                 negotiateSubtitle.textContent = isLast

@@ -1266,16 +1266,6 @@ class _NegotiationSheetState extends State<_NegotiationSheet> {
                 ),
               ] else if (_offers.isNotEmpty) ...[
                 Text(
-                  'Offre ${_stepIndex + 1} sur ${_offers.length}',
-                  style: const TextStyle(
-                    color: OvanieColors.muted,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: .3,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
                   formatFcfa(_offers[_stepIndex]),
                   style: const TextStyle(color: OvanieColors.blue, fontSize: 26, fontWeight: FontWeight.w900),
                 ),
