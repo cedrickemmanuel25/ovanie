@@ -7,109 +7,50 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Demande utilisateur : quand on crée une catégorie principale dans l'admin,
- * elle doit apparaître automatiquement dans la barre de navigation
- * principale, sans modification de code ni redéploiement.
+ * Demande utilisateur : la barre de navigation principale débordait dès
+ * qu'il y avait trop de catégories dynamiques à côté du bouton IA, du menu
+ * "Aide & infos" et du bouton "Vendre sur OVANIE" (mesuré avec un rendu réel
+ * de la barre : au-delà de 4 catégories, ça dépasse déjà un écran de
+ * portable 1280px). L'utilisateur a choisi de retirer les catégories de
+ * cette barre - elles restent listées en entier via "Toutes les
+ * catégories" - et d'y afficher à la place des liens qui n'y apparaissaient
+ * pas encore : Comment acheter, Conditions vendeurs, OVANIE Pro,
+ * Partenaires & Fournisseurs et Garantie acheteur.
  */
 class NavbarCategoryLinksTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_a_freshly_created_root_category_appears_in_the_main_navbar(): void
+    public function test_the_primary_nav_shows_the_requested_links_instead_of_categories(): void
     {
         Category::create([
-            'name' => 'Catégorie fraîchement créée',
-            'slug' => 'categorie-fraichement-creee-' . uniqid(),
-            'status' => 'actif',
-            'sort_order' => 0,
-        ]);
-
-        $html = $this->get('/')->assertOk()->getContent();
-
-        $this->assertStringContainsString('Catégorie fraîchement créée', $html);
-    }
-
-    public function test_an_inactive_category_does_not_appear_in_the_navbar(): void
-    {
-        Category::create([
-            'name' => 'Catégorie inactive navbar',
-            'slug' => 'categorie-inactive-navbar-' . uniqid(),
-            'status' => 'inactif',
-            'sort_order' => 0,
-        ]);
-
-        $html = $this->get('/')->assertOk()->getContent();
-
-        $this->assertStringNotContainsString('Catégorie inactive navbar', $html);
-    }
-
-    public function test_a_subcategory_is_not_shown_directly_in_the_top_level_navbar(): void
-    {
-        $parent = Category::create([
-            'name' => 'Catégorie parente navbar',
-            'slug' => 'categorie-parente-navbar-' . uniqid(),
-            'status' => 'actif',
-            'sort_order' => 0,
-        ]);
-
-        Category::create([
-            'name' => 'Sous-catégorie navbar unique',
-            'slug' => 'sous-categorie-navbar-' . uniqid(),
-            'parent_id' => $parent->id,
-            'status' => 'actif',
-            'sort_order' => 0,
-        ]);
-
-        $html = $this->get('/')->assertOk()->getContent();
-
-        $this->assertStringContainsString('Catégorie parente navbar', $html);
-        $this->assertStringNotContainsString('Sous-catégorie navbar unique', $html);
-    }
-
-    public function test_the_static_gift_card_link_no_longer_duplicates_a_real_category(): void
-    {
-        // Bug rapporté par l'utilisateur : un lien statique "Cartes OVANIE"
-        // et une vraie catégorie "Cartes & Bons OVANIE" apparaissaient tous
-        // les deux dans la barre, l'un juste après l'autre - la barre ne
-        // doit plus contenir ce lien statique en plus des vraies catégories.
-        Category::create([
-            'name' => 'Cartes & Bons OVANIE',
-            'slug' => 'cartes-et-bons-ovanie-' . uniqid(),
+            'name' => 'Catégorie qui ne doit plus apparaître ici',
+            'slug' => 'categorie-absente-navbar-' . uniqid(),
             'status' => 'actif',
             'sort_order' => 0,
         ]);
 
         $navHtml = $this->extractPrimaryNavHtml($this->get('/')->assertOk()->getContent());
 
-        $this->assertStringContainsString('Cartes &amp; Bons OVANIE', $navHtml);
-        $this->assertSame(1, substr_count($navHtml, 'Cartes'));
+        $this->assertStringContainsString('Comment acheter', $navHtml);
+        $this->assertStringContainsString('Conditions vendeurs', $navHtml);
+        $this->assertStringContainsString('OVANIE Pro', $navHtml);
+        $this->assertStringContainsString('Partenaires &amp; Fournisseurs', $navHtml);
+        $this->assertStringContainsString('Garantie acheteur', $navHtml);
+        $this->assertStringNotContainsString('Catégorie qui ne doit plus apparaître ici', $navHtml);
     }
 
-    public function test_only_4_dynamic_categories_show_in_the_primary_nav(): void
+    public function test_the_ai_trigger_still_comes_first_in_the_primary_nav(): void
     {
-        // Vérifié avec un rendu réel de la barre (voir l'historique de ce
-        // fichier) : au-delà de 4 catégories affichées, le bouton IA et le
-        // menu "Aide & infos" débordent déjà sur un écran de portable
-        // 1280px. Le menu "Toutes les catégories" liste toujours tout.
-        foreach (range(1, 6) as $i) {
-            Category::create([
-                'name' => "Catégorie limite {$i}",
-                'slug' => "categorie-limite-{$i}-" . uniqid(),
-                'status' => 'actif',
-                'sort_order' => $i,
-            ]);
-        }
+        $navHtml = $this->extractPrimaryNavHtml(
+            $this->actingAs(\App\Models\User::factory()->create(['role' => 'client']))
+                ->get('/')->assertOk()->getContent()
+        );
 
-        $navHtml = $this->extractPrimaryNavHtml($this->get('/')->assertOk()->getContent());
-
-        $shown = 0;
-        foreach (range(1, 6) as $i) {
-            if (str_contains($navHtml, "Catégorie limite {$i}")) {
-                $shown++;
-            }
-        }
-
-        $this->assertSame(4, $shown);
+        $this->assertLessThan(
+            strpos($navHtml, 'Comment acheter'),
+            strpos($navHtml, 'ovn-ai-link')
+        );
     }
 
     private function extractPrimaryNavHtml(string $html): string

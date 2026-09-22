@@ -10,16 +10,18 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Demande utilisateur : les catégories affichées sur la page d'accueil et
- * dans la barre de navigation principale doivent venir de la base de
- * données - une catégorie créée dans l'admin doit s'y afficher
- * automatiquement, au lieu d'une liste de 8 catégories figée dans le code.
+ * Demande utilisateur : les catégories affichées sur la page d'accueil
+ * doivent venir de la base de données - une catégorie créée dans l'admin
+ * doit s'y afficher automatiquement, au lieu d'une liste de 8 catégories
+ * figée dans le code. (La barre de navigation principale n'affiche plus les
+ * catégories du tout depuis NavbarCategoryLinksTest - elles restent
+ * accessibles via "Toutes les catégories".)
  */
 class HomepageCategoryCardsTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_a_freshly_created_category_appears_on_the_homepage_and_in_the_navbar(): void
+    public function test_a_freshly_created_category_appears_on_the_homepage(): void
     {
         $vendor = User::factory()->create(['role' => 'vendor']);
         $shop = Shop::create([
