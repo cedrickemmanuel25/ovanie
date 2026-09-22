@@ -46,6 +46,7 @@ class ProductModel {
   final int stock;
   final int minOrderQuantity;
   final bool canAddToCart;
+  final bool isNegotiable;
   final bool isOrderable;
   final String availabilityLabel;
   final double? rating;
@@ -100,6 +101,7 @@ class ProductModel {
     required this.stock,
     required this.minOrderQuantity,
     required this.canAddToCart,
+    required this.isNegotiable,
     required this.isOrderable,
     required this.availabilityLabel,
     required this.rating,
@@ -254,6 +256,7 @@ class ProductModel {
           ? 1
           : toInt(json['min_order_quantity']),
       canAddToCart: json['can_add_to_cart'] == true,
+      isNegotiable: json['is_negotiable'] == true,
       isOrderable: json['is_orderable'] == true,
       availabilityLabel: clean(json['availability_label'] ??
           (toInt(json['stock']) > 0 ? 'En stock' : 'Indisponible')),
@@ -367,6 +370,7 @@ class ProductModel {
         'stock': stock,
         'min_order_quantity': minOrderQuantity,
         'can_add_to_cart': canAddToCart,
+        'is_negotiable': isNegotiable,
         'is_orderable': isOrderable,
         'availability_label': availabilityLabel,
         'rating': rating,

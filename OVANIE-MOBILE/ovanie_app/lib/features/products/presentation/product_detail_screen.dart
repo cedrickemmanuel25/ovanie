@@ -1,14 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/storage/device_storage.dart';
 import '../../../core/utils/formatters.dart';
 import '../../auth/domain/session_store.dart';
+import '../../auth/presentation/login_screen.dart';
+import '../../auth/presentation/register_screen.dart';
 import '../../cart/domain/cart_store.dart';
 import '../../cart/presentation/cart_screen.dart';
 import '../../favorites/domain/favorites_store.dart';
 import '../../home/data/marketplace_repository.dart';
 import '../../recent/domain/recently_viewed_store.dart';
+import '../data/negotiation_repository.dart';
 import '../domain/product_model.dart';
 
 /// Fiche produit OVANIE reconstruite selon la maquette mobile.
@@ -194,6 +200,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onGalleryChanged: (index) => setState(() => _galleryIndex = index),
                       onShare: _share,
                     ),
+                    if (_product.isNegotiable && _canBuy) ...[
+                      const SizedBox(height: 14),
+                      _NegotiateSection(product: _product, quantity: _quantity),
+                    ],
                     const SizedBox(height: 20),
                     _QuantitySection(
                       product: _product,
@@ -696,13 +706,40 @@ class _ProductSummary extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 13),
-        Text(
-          formatFcfa(product.homeDisplayPrice),
-          style: const TextStyle(
-            color: OvanieColors.orange,
-            fontSize: 19,
-            fontWeight: FontWeight.w900,
-          ),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            Text(
+              formatFcfa(product.homeDisplayPrice),
+              style: const TextStyle(
+                color: OvanieColors.orange,
+                fontSize: 19,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            if (product.isNegotiable)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF5ED),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: OvanieColors.orange.withValues(alpha: .35)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.handshake_outlined, color: OvanieColors.orange, size: 12),
+                    SizedBox(width: 4),
+                    Text(
+                      'Prix négociable',
+                      style: TextStyle(color: OvanieColors.orange, fontSize: 9.5, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
         if (product.homeOriginalPrice > 0) ...[
           const SizedBox(height: 3),
@@ -776,6 +813,555 @@ List<String> _productFacts(ProductModel product) {
     ]);
   }
   return facts;
+}
+
+/// Bouton "Négocier" affiché sur la fiche produit quand le produit est
+/// négociable. L'utilisateur a explicitement demandé que la négociation
+/// exige une authentification, et qu'une fois la dernière offre expirée
+/// (2 minutes sans ajout au panier), le produit ne soit plus négociable
+/// pour ce client — d'où l'état persisté localement (DeviceStorage) plutôt
+/// que recalculé à chaque ouverture de la fiche.
+class _NegotiateSection extends StatefulWidget {
+  final ProductModel product;
+  final int quantity;
+
+  const _NegotiateSection({required this.product, required this.quantity});
+
+  @override
+  State<_NegotiateSection> createState() => _NegotiateSectionState();
+}
+
+class _NegotiateSectionState extends State<_NegotiateSection> {
+  bool _checkingExpiry = true;
+  bool _expired = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExpiryState();
+  }
+
+  Future<void> _loadExpiryState() async {
+    final raw = await DeviceStorage.instance.readString(_negotiateExpiredKey(widget.product.id));
+    if (!mounted) return;
+    setState(() {
+      _expired = raw == '1';
+      _checkingExpiry = false;
+    });
+  }
+
+  Future<void> _openNegotiation() async {
+    if (_expired) return;
+
+    if (!SessionStore.instance.isAuthenticated) {
+      final action = await _showNegotiationAuthRequired(context);
+      if (!mounted || action == null) return;
+
+      final bool? connected;
+      if (action == _NegotiateAuthAction.login) {
+        connected = await Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(builder: (_) => const LoginScreen()),
+        );
+      } else {
+        connected = await Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(builder: (_) => const RegisterScreen()),
+        );
+      }
+
+      if (!mounted) return;
+      if (connected != true && !SessionStore.instance.isAuthenticated) return;
+    }
+
+    if (!mounted) return;
+    final expiredNow = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      builder: (_) => _NegotiationSheet(product: widget.product, quantity: widget.quantity),
+    );
+
+    if (expiredNow == true && mounted) {
+      setState(() => _expired = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_checkingExpiry) return const SizedBox.shrink();
+
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _expired ? null : _openNegotiation,
+        icon: Icon(
+          Icons.handshake_outlined,
+          size: 18,
+          color: _expired ? OvanieColors.muted : OvanieColors.orange,
+        ),
+        label: Text(
+          _expired ? 'Négociation expirée pour ce produit' : 'Négocier',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+            color: _expired ? OvanieColors.muted : OvanieColors.orange,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(46),
+          side: BorderSide(color: _expired ? OvanieColors.border : OvanieColors.orange),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+    );
+  }
+}
+
+String _negotiateExpiredKey(int productId) => 'ov_negotiate_expired_$productId';
+String _negotiateFinalStartedKey(int productId) => 'ov_negotiate_final_started_$productId';
+
+enum _NegotiateAuthAction { login, register }
+
+/// Même maquette que le bottom sheet d'authentification du panier
+/// (cart_screen.dart), dupliquée ici car privée à chaque écran.
+Future<_NegotiateAuthAction?> _showNegotiationAuthRequired(BuildContext context) {
+  return showModalBottomSheet<_NegotiateAuthAction>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    useSafeArea: true,
+    builder: (sheetContext) {
+      return Container(
+        margin: const EdgeInsets.all(14),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: const [
+            BoxShadow(color: Color(0x24000000), blurRadius: 28, offset: Offset(0, 12)),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: OvanieColors.blue.withValues(alpha: .08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.handshake_outlined, color: OvanieColors.blue, size: 30),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Connectez-vous pour négocier',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: OvanieColors.text, fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'La négociation d’un prix est réservée aux clients connectés OVANIE.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: OvanieColors.muted, fontSize: 12.5, height: 1.45),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: () => Navigator.of(sheetContext).pop(_NegotiateAuthAction.login),
+                style: FilledButton.styleFrom(
+                  backgroundColor: OvanieColors.orange,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Se connecter', style: TextStyle(fontWeight: FontWeight.w900)),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(sheetContext).pop(_NegotiateAuthAction.register),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: OvanieColors.navy,
+                  side: const BorderSide(color: OvanieColors.navy),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Créer un compte', style: TextStyle(fontWeight: FontWeight.w900)),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+/// Bottom sheet de négociation guidée : offres réelles une par une
+/// (price_p1/p2/p3 côté serveur), "Ajouter au panier à ce prix" ou "Voir
+/// un meilleur prix", et un compte à rebours de 2 minutes sur la dernière
+/// offre. Retourne `true` via Navigator.pop si la négociation a expiré,
+/// pour que _NegotiateSection désactive durablement le bouton "Négocier".
+class _NegotiationSheet extends StatefulWidget {
+  final ProductModel product;
+  final int quantity;
+
+  const _NegotiationSheet({required this.product, required this.quantity});
+
+  @override
+  State<_NegotiationSheet> createState() => _NegotiationSheetState();
+}
+
+class _NegotiationSheetState extends State<_NegotiationSheet> {
+  static const NegotiationRepository _repository = NegotiationRepository();
+
+  bool _loading = true;
+  Object? _loadError;
+  List<int> _offers = const [];
+  int _finalOfferTtlSeconds = 120;
+  int _stepIndex = 0;
+  int? _remainingSeconds;
+  Timer? _timer;
+  bool _submitting = false;
+  bool _accepted = false;
+  String? _resultMessage;
+  bool _resultIsError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOffers();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  bool get _isLastStep => _offers.isNotEmpty && _stepIndex >= _offers.length - 1;
+
+  int get _effectiveQuantity {
+    final minimum = widget.product.minOrderQuantity <= 0 ? 1 : widget.product.minOrderQuantity;
+    return widget.quantity < minimum ? minimum : widget.quantity;
+  }
+
+  Future<void> _loadOffers() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+
+    try {
+      final offers = await _repository.getOffers(widget.product.slug);
+      if (!mounted) return;
+      setState(() {
+        _offers = offers.amounts;
+        _finalOfferTtlSeconds = offers.finalOfferTtlSeconds;
+        _stepIndex = 0;
+        _loading = false;
+      });
+      unawaited(_maybeStartTimer());
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _maybeStartTimer() async {
+    _timer?.cancel();
+    if (!_isLastStep) {
+      if (mounted) setState(() => _remainingSeconds = null);
+      return;
+    }
+
+    final key = _negotiateFinalStartedKey(widget.product.id);
+    final raw = await DeviceStorage.instance.readString(key);
+    var startedAtMs = int.tryParse(raw ?? '');
+    if (startedAtMs == null) {
+      startedAtMs = DateTime.now().millisecondsSinceEpoch;
+      await DeviceStorage.instance.writeString(key, '$startedAtMs');
+    }
+    final effectiveStart = startedAtMs;
+
+    void tick() {
+      final elapsedMs = DateTime.now().millisecondsSinceEpoch - effectiveStart;
+      final remainingMs = (_finalOfferTtlSeconds * 1000) - elapsedMs;
+      if (remainingMs <= 0) {
+        _timer?.cancel();
+        unawaited(_expireNegotiation());
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _remainingSeconds = (remainingMs / 1000).ceil());
+    }
+
+    tick();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => tick());
+  }
+
+  Future<void> _expireNegotiation() async {
+    await DeviceStorage.instance.writeString(_negotiateExpiredKey(widget.product.id), '1');
+    await DeviceStorage.instance.remove(_negotiateFinalStartedKey(widget.product.id));
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
+  void _showNext() {
+    if (_isLastStep) return;
+    _timer?.cancel();
+    setState(() {
+      _stepIndex += 1;
+      _remainingSeconds = null;
+      _resultMessage = null;
+    });
+    unawaited(_maybeStartTimer());
+  }
+
+  Future<void> _acceptCurrentOffer() async {
+    if (_offers.isEmpty || _submitting) return;
+    final proposedPrice = _offers[_stepIndex];
+
+    setState(() {
+      _submitting = true;
+      _resultMessage = null;
+    });
+
+    try {
+      final result = await _repository.acceptOffer(widget.product.slug, proposedPrice);
+      if (!result.accepted || result.negotiationId == null) {
+        if (!mounted) return;
+        setState(() {
+          _submitting = false;
+          _resultMessage = result.message.isNotEmpty ? result.message : 'Cette offre n’est plus disponible.';
+          _resultIsError = true;
+        });
+        return;
+      }
+
+      final cartMessage = await _repository.addNegotiatedToCart(
+        productId: widget.product.id,
+        negotiatedPrice: proposedPrice,
+        negotiationId: result.negotiationId!,
+        quantity: _effectiveQuantity,
+      );
+
+      CartStore.instance.applyNegotiatedLine(
+        widget.product,
+        _effectiveQuantity,
+        proposedPrice.toDouble(),
+      );
+
+      _timer?.cancel();
+      await DeviceStorage.instance.remove(_negotiateFinalStartedKey(widget.product.id));
+
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _accepted = true;
+        _resultMessage = cartMessage;
+        _resultIsError = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _resultMessage = ApiClient.friendlyError(error);
+        _resultIsError = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      minChildSize: 0.35,
+      maxChildSize: 0.85,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: OvanieColors.border, borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Icon(Icons.handshake_outlined, color: OvanieColors.orange, size: 22),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Proposition OVANIE',
+                      style: TextStyle(color: OvanieColors.navy, fontSize: 16, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5),
+              ),
+              const SizedBox(height: 18),
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 30),
+                  child: Center(child: CircularProgressIndicator(color: OvanieColors.orange)),
+                )
+              else if (_loadError != null) ...[
+                Text(
+                  ApiClient.friendlyError(_loadError!),
+                  style: const TextStyle(color: OvanieColors.danger, fontSize: 12.5),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: OutlinedButton(
+                    onPressed: _loadOffers,
+                    child: const Text('Réessayer'),
+                  ),
+                ),
+              ] else if (_accepted) ...[
+                const Icon(Icons.check_circle, color: OvanieColors.success, size: 42),
+                const SizedBox(height: 10),
+                Text(
+                  _resultMessage ?? 'Produit ajouté au panier à ce prix !',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: OvanieColors.navy, fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: OvanieColors.orange,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Fermer', style: TextStyle(fontWeight: FontWeight.w900)),
+                  ),
+                ),
+              ] else if (_offers.isNotEmpty) ...[
+                Text(
+                  'Offre ${_stepIndex + 1} sur ${_offers.length}',
+                  style: const TextStyle(
+                    color: OvanieColors.muted,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .3,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  formatFcfa(_offers[_stepIndex]),
+                  style: const TextStyle(color: OvanieColors.blue, fontSize: 26, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _isLastStep
+                      ? 'Dernière offre possible sur ce produit.'
+                      : 'OVANIE vous propose ce prix. Vous pouvez demander mieux.',
+                  style: const TextStyle(color: OvanieColors.muted, fontSize: 11),
+                ),
+                if (_isLastStep && _remainingSeconds != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: const Color(0xFFFDEDEC), borderRadius: BorderRadius.circular(6)),
+                    child: Text(
+                      'Dernière offre : ${_formatNegotiationDuration(_remainingSeconds!)} restantes',
+                      style: const TextStyle(color: OvanieColors.danger, fontSize: 10.5, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+                if (_resultMessage != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _resultMessage!,
+                    style: TextStyle(
+                      color: _resultIsError ? OvanieColors.danger : OvanieColors.success,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton.icon(
+                    onPressed: _submitting ? null : _acceptCurrentOffer,
+                    icon: _submitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.shopping_cart_outlined, size: 18),
+                    label: const Text(
+                      'Ajouter au panier à ce prix',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: OvanieColors.orange,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                if (!_isLastStep) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: OutlinedButton(
+                      onPressed: _submitting ? null : _showNext,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: OvanieColors.orange,
+                        side: const BorderSide(color: OvanieColors.orange),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text('Voir un meilleur prix', style: TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                ],
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _formatNegotiationDuration(int totalSeconds) {
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
 class _QuantitySection extends StatelessWidget {

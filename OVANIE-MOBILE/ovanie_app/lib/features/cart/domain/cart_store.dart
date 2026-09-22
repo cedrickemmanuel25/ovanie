@@ -199,6 +199,24 @@ class CartStore extends ChangeNotifier {
     );
   }
 
+  /// Reflète localement une ligne déjà créée côté serveur au prix négocié
+  /// (voir NegotiationRepository.addNegotiatedToCart). Contrairement à
+  /// addQuantity(), n'appelle jamais _afterLocalQuantityChanged : cette
+  /// méthode programmerait une synchronisation via /api/cart, qui
+  /// recalculerait le prix normal du produit et écraserait le prix
+  /// négocié déjà appliqué côté serveur.
+  void applyNegotiatedLine(ProductModel product, int quantity, double negotiatedPrice) {
+    final current = _lines[product.id]?.quantity ?? 0;
+    _lines[product.id] = CartLine(
+      product: product,
+      quantity: current + quantity,
+      unitPrice: negotiatedPrice,
+    );
+    _localMutationRevision++;
+    notifyListeners();
+    _persistSoon();
+  }
+
   CartAddResult addQuantity(ProductModel product, int quantity) {
     if (!product.canAddToCart || product.stock <= 0) {
       return CartAddResult(
