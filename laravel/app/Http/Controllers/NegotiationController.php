@@ -89,7 +89,7 @@ class NegotiationController extends Controller
         $negotiation = Negotiation::create([
             'product_id' => $product->id,
             'shop_id' => $product->shop_id,
-            'buyer_id' => auth()->id(),
+            'buyer_id' => $request->user()->id,
             'proposed_price' => $proposedPrice,
             'status' => $status,
         ]);

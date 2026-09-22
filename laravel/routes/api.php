@@ -49,6 +49,7 @@ use App\Http\Controllers\Api\MobileReferenceDataController;
 use App\Http\Controllers\Api\Auth\MobileAuthController;
 use App\Http\Controllers\Api\Vendor\VendorMobileController;
 use App\Http\Controllers\Api\NegotiationController as ApiNegotiationController;
+use App\Http\Controllers\NegotiationController as GuidedNegotiationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController as ApiPaymentController;
 use App\Http\Controllers\Api\PaymentProofController;
@@ -353,6 +354,10 @@ Route::middleware(['auth:sanctum', 'throttle:240,1,private-api:'])->group(functi
     Route::put('/cart/{cartItem}', [ApiCartController::class, 'update']);
     Route::delete('/cart/{cartItem}', [ApiCartController::class, 'destroy']);
     Route::delete('/cart', [ApiCartController::class, 'clear']);
+    // Ajout au panier au prix négocié via NegotiationController::offers/store
+    // ci-dessous. Même contrôleur que le Web (App\Http\Controllers\ProductController).
+    Route::post('/cart/add-negotiated', [ProductController::class, 'addNegotiatedToCart'])
+        ->name('api.cart.addNegotiated');
 
     // Favoris — même table favorites que l’espace client Web
     Route::get('/favorites', [ClientFavoriteController::class, 'index']);
@@ -486,6 +491,15 @@ Route::middleware(['auth:sanctum', 'throttle:240,1,private-api:'])->group(functi
     Route::put('/negotiations/{negotiation}', [ApiNegotiationController::class, 'update']);
     Route::delete('/negotiations/{negotiation}', [ApiNegotiationController::class, 'destroy']);
     Route::post('/products/{product}/negotiate', [ApiNegotiationController::class, 'storeFromProduct'])->name('products.negotiate');
+
+    // Négociation guidée en 3 offres réelles définies par le vendeur
+    // (price_p1/p2/p3), identique au flux Web ("Négocier" sur la fiche
+    // produit). Distincte du CRUD ci-dessus, qui crée une négociation
+    // "pending" en attente de contre-offre manuelle du vendeur.
+    Route::get('/products/{product}/negotiation-offers', [GuidedNegotiationController::class, 'offers'])
+        ->name('api.products.negotiationOffers');
+    Route::post('/products/{product}/negotiation-offers/accept', [GuidedNegotiationController::class, 'store'])
+        ->name('api.products.negotiationOffers.accept');
 
     // Avis
     Route::post('/reviews', [ApiReviewController::class, 'store']);
