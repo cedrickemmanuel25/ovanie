@@ -32,6 +32,11 @@ class DepartmentHandoffController extends Controller
         return $this->index($request, 'logistique', 'logistics');
     }
 
+    public function administration(Request $request)
+    {
+        return $this->index($request, 'administration', 'administration');
+    }
+
     public function showLogistics(Request $request, SupportAgentHandoff $handoff)
     {
         $this->ensureDepartment($request, $handoff);
@@ -98,7 +103,7 @@ class DepartmentHandoffController extends Controller
             'sender_user_id' => $agent?->id,
             'body' => trim($data['message']),
             'format' => 'text',
-            'is_internal' => false,
+            'is_internal' => true,
             'provider' => 'logistics_workspace',
             'metadata' => [
                 'sender_label' => 'Équipe Logistique - '.($agent?->name ?? 'Responsable Logistique'),
@@ -106,7 +111,7 @@ class DepartmentHandoffController extends Controller
         ]);
         $handoff->conversation?->update(['last_message_at' => now()]);
 
-        return back()->with('success', 'Message envoyé dans la conversation du dossier.');
+        return back()->with('success', 'Information interne transmise au Support. Le Support reste chargé d’informer le demandeur.');
     }
 
     public function resolve(Request $request, SupportAgentHandoff $handoff, SupportHandoffQueueService $queues)
@@ -128,7 +133,7 @@ class DepartmentHandoffController extends Controller
             $data['resolution_code'],
         );
 
-        return back()->with('success', 'Résolution enregistrée. Le dossier est maintenant résolu.');
+        return back()->with('success', 'Réponse enregistrée et retournée au Support OVANIE.');
     }
 
     public function attachment(
@@ -221,7 +226,11 @@ class DepartmentHandoffController extends Controller
         $all = (clone $base)->get();
         $stats = $this->dashboardStats($all);
 
-        return view('internal.handoffs.index', [
+        $view = $workspace === 'administration'
+            ? 'admin.support-handoffs.index'
+            : 'internal.handoffs.index';
+
+        return view($view, [
             'handoffs' => $query->paginate(10)->withQueryString(),
             'latest' => (clone $base)->with($this->listRelations())->latest('requested_at')->limit(5)->get(),
             'department' => $department,
@@ -771,7 +780,14 @@ class DepartmentHandoffController extends Controller
 
     private function ensureDepartment(Request $request, SupportAgentHandoff $handoff): void
     {
-        $expected = $request->user('admin')?->role;
+        $user = $request->user('admin');
+        $expected = $user?->role;
+
+        if ($handoff->target_department === 'administration') {
+            abort_unless($user && ($expected === 'admin' || (bool) $user->is_admin), 403, 'Ce dossier appartient à l’Administration OVANIE.');
+            return;
+        }
+
         abort_unless($expected && $handoff->target_department === $expected, 403, 'Ce dossier appartient à un autre service.');
     }
 

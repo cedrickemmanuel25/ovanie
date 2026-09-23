@@ -23,11 +23,11 @@ class SupportHandoffQueueService
      * Crée un transfert vers un service.
      *
      * IMPORTANT :
-     * - commercial et logistique = transfert métier parallèle.
-     *   La conversation IA continue.
+     * - logistique, commercial et administration = action métier parallèle.
+     *   Le Support reste l’interlocuteur du demandeur.
      *
-     * - support et administration = véritable transfert humain.
-     *   La conversation passe en attente humaine.
+     * - support = véritable transfert humain vers un conseiller Support.
+     *   La conversation passe alors en attente humaine.
      */
     public function enqueue(
         SupportConversation $conversation,
@@ -157,9 +157,11 @@ class SupportHandoffQueueService
              * véritable prise en charge humaine.
              * L'IA est suspendue.
              */
+            // Seul un transfert vers le Support change le propriétaire de la
+            // conversation. Logistique, Commercial et Administration travaillent
+            // en parallèle : le Support reste l'interlocuteur du demandeur.
             $humanConversationDepartments = [
                 'support',
-                'administration',
             ];
 
             if (in_array(

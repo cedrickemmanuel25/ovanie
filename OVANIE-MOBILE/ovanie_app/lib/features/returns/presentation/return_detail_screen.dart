@@ -46,7 +46,12 @@ class _ReturnDetailScreenState extends State<ReturnDetailScreen> {
 
   void _openSupport() {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SupportCenterScreen()),
+      MaterialPageRoute<void>(builder: (_) => SupportCenterScreen(
+        initialCategory: 'returns',
+        contextType: 'return',
+        contextId: _item.id,
+        initialSubject: 'Assistance retour ${_item.orderNumber.isNotEmpty ? _item.orderNumber : '#${_item.id}'}',
+      )),
     );
   }
 

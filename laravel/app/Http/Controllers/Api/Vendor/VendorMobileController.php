@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Vendor;
 
+use Carbon\Carbon;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\ShopController;
 use App\Http\Controllers\VendorDeliverySettingsController;
@@ -918,7 +919,9 @@ class VendorMobileController extends Controller
         });
 
         return response()->json([
-            'message' => $target === 'ready' ? 'Préparation validée. La commande est prête.' : 'État de préparation mis à jour.',
+            'message' => $target === 'ready'
+                ? 'Préparation validée. OVANIE Logistics est informé automatiquement lorsque la commande est prise en charge par OVANIE.'
+                : 'État de préparation mis à jour.',
             'vendor_status' => $target,
         ]);
     }
@@ -1479,10 +1482,27 @@ class VendorMobileController extends Controller
         }
 
         if (Schema::hasTable('delivery_assignments') && $itemIds !== []) {
-            $assignment = DeliveryAssignment::query()
+            $assignmentBase = DeliveryAssignment::query()
                 ->where('order_id', $order->id)
                 ->whereIn('order_item_id', $itemIds)
-                ->with(['driver.currentLocation'])
+                ->with(['driver.currentLocation']);
+
+            // Une mission peut contenir de nombreuses offres expirées. Le
+            // vendeur doit voir le livreur qui a réellement réservé la mission,
+            // jamais le dernier livreur à qui une offre a simplement été envoyée.
+            $winnerStatuses = ['accepted', 'assigned', 'collecting', 'picked_up', 'in_transit', 'arrived', 'delivered'];
+            $assignment = (clone $assignmentBase)
+                ->whereIn('status', $winnerStatuses)
+                ->orderByDesc('accepted_at')
+                ->latest('id')
+                ->first();
+
+            $assignment ??= (clone $assignmentBase)
+                ->where('status', 'offered')
+                ->latest('id')
+                ->first();
+
+            $assignment ??= (clone $assignmentBase)
                 ->latest('id')
                 ->first();
         }
@@ -1496,8 +1516,19 @@ class VendorMobileController extends Controller
                 ->first();
         }
 
+        $winnerStatuses = ['accepted', 'assigned', 'collecting', 'picked_up', 'in_transit', 'arrived', 'delivered'];
+        $driverReserved = $assignment !== null && in_array((string) $assignment->status, $winnerStatuses, true);
+        $vendorPickupReady = collect($items)->isNotEmpty()
+            && collect($items)->every(fn ($line) => in_array((string) ($line->delivery_status ?? ''), [
+                OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
+                OrderWorkflowService::DELIVERY_ASSIGNED,
+                OrderWorkflowService::DELIVERY_PICKED_UP,
+                OrderWorkflowService::DELIVERY_IN_TRANSIT,
+                OrderWorkflowService::DELIVERY_DELIVERED,
+            ], true));
+
         $driverPayload = null;
-        if ($assignment?->driver) {
+        if ($driverReserved && $assignment?->driver) {
             $location = $assignment->driver->currentLocation ?: $shipment?->latestDriverLocation;
             $driverPayload = [
                 'id' => $assignment->driver->id,
@@ -1537,12 +1568,38 @@ class VendorMobileController extends Controller
         $deliveryLat = $shipment?->delivery_latitude ?? $order->delivery_latitude ?? $order->delivery_lat;
         $deliveryLng = $shipment?->delivery_longitude ?? $order->delivery_longitude ?? $order->delivery_lng;
 
+        $pickupArrivedAt = data_get($assignment?->meta, 'pickup_arrived_at');
+        $pickupVerifiedAt = data_get($assignment?->meta, 'pickup_verified_at');
+        $pickupCompletedAt = data_get($assignment?->meta, 'pickup_completed_at');
+        $pickupHandoverCode = filled($pickupArrivedAt) && ! filled($pickupCompletedAt)
+            ? (string) data_get($assignment?->meta, 'pickup_handover_code')
+            : null;
+
+        $assignmentMessage = null;
+        if ($provider === OrderWorkflowService::PROVIDER_OVANIE) {
+            $assignmentMessage = match (true) {
+                filled($pickupCompletedAt) => 'La remise au livreur partenaire est confirmée. OVANIE Logistics prend désormais en charge la livraison.',
+                filled($pickupVerifiedAt) => 'Le livreur a vérifié les articles. Chargez complètement la commande puis communiquez-lui le code de remise affiché ci-dessous.',
+                filled($pickupArrivedAt) => 'Le livreur partenaire est arrivé à votre point de collecte. Ne communiquez le code de remise qu’après vérification et chargement complet.',
+                $driverReserved && $vendorPickupReady => 'Votre point de collecte est prêt. Le livreur réservé a été informé automatiquement.',
+                $driverReserved => 'Un livreur a réservé cette mission. Il attend la fin de votre préparation avant de pouvoir collecter.',
+                (string) ($assignment?->status ?? '') === 'offered' => 'La mission est proposée aux livreurs partenaires. En attente de réservation.',
+                default => 'OVANIE Logistics recherche un livreur partenaire compatible.',
+            };
+        }
+
         return [
             'provider' => $provider,
             'mission_number' => $assignment?->resolved_mission_number,
             'tracking_number' => $shipment?->tracking_number,
             'status' => $assignment?->status ?: $shipment?->status ?: $sellerSession?->mission_status,
-            'assignment_message' => $driverPayload ? null : 'En attente de l’affectation d’un livreur par OVANIE Logistics.',
+            'driver_reserved' => $driverReserved,
+            'vendor_pickup_ready' => $vendorPickupReady,
+            'assignment_message' => $assignmentMessage,
+            'pickup_arrived_at' => filled($pickupArrivedAt) ? Carbon::parse($pickupArrivedAt)->toIso8601String() : null,
+            'pickup_verified_at' => filled($pickupVerifiedAt) ? Carbon::parse($pickupVerifiedAt)->toIso8601String() : null,
+            'pickup_completed_at' => filled($pickupCompletedAt) ? Carbon::parse($pickupCompletedAt)->toIso8601String() : null,
+            'pickup_handover_code' => filled($pickupHandoverCode) ? $pickupHandoverCode : null,
             'estimated_delivery_at' => $this->isoDate($estimated),
             'estimated_delivery_label' => $estimated ? 'Livraison estimée : ' . optional($estimated)->format('d/m/Y H:i') : null,
             'pickup_address' => $shipment?->pickup_address ?: $shop->address,

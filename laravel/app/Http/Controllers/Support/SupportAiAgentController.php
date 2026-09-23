@@ -14,12 +14,17 @@ class SupportAiAgentController extends Controller
     public function index(SupportServiceStatusService $services)
     {
         $agents = SupportAiAgent::query()
+            ->where('code', '!=', 'AI-LOGISTICS-SUPPORT')
             ->withCount([
-                'conversations as active_conversations_count' => fn ($query) => $query->active(),
-                'handoffs as pending_handoffs_count' => fn ($query) => $query->open(),
+                'conversations as active_conversations_count' => fn ($query) => $query->operational()->active(),
+                'handoffs as pending_handoffs_count' => fn ($query) => $query->operational()->open(),
                 'tickets as ai_tickets_count' => fn ($query) => $query->where('created_by_ai', true),
                 'calls as active_calls_count' => fn ($query) => $query->whereIn('status', ['waiting', 'queued', 'ringing', 'in_progress', 'waiting_transfer']),
+                'conversations as conversations_today_count' => fn ($query) => $query->operational()->whereDate('last_message_at', today()),
+                'handoffs as handoffs_today_count' => fn ($query) => $query->operational()->whereDate('requested_at', today()),
             ])
+            ->withMax(['conversations as last_conversation_at' => fn ($query) => $query->operational()], 'last_message_at')
+            ->withMax(['handoffs as last_handoff_at' => fn ($query) => $query->operational()], 'requested_at')
             ->orderBy('id')
             ->get();
 

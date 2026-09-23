@@ -18,6 +18,10 @@ class SupportCenterScreen extends StatefulWidget {
   final VoidCallback? onOpenCategories;
   final VoidCallback? onOpenCart;
   final VoidCallback? onOpenFavorites;
+  final String? initialCategory;
+  final String? contextType;
+  final int? contextId;
+  final String? initialSubject;
 
   const SupportCenterScreen({
     super.key,
@@ -25,6 +29,10 @@ class SupportCenterScreen extends StatefulWidget {
     this.onOpenCategories,
     this.onOpenCart,
     this.onOpenFavorites,
+    this.initialCategory,
+    this.contextType,
+    this.contextId,
+    this.initialSubject,
   });
 
   @override
@@ -68,7 +76,12 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
 
   Future<void> _newTicket() async {
     final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(builder: (_) => const NewSupportTicketScreen()),
+      MaterialPageRoute<bool>(builder: (_) => NewSupportTicketScreen(
+        initialCategory: widget.initialCategory,
+        contextType: widget.contextType,
+        contextId: widget.contextId,
+        initialSubject: widget.initialSubject,
+      )),
     );
     if (created == true) await _load();
   }
@@ -886,12 +899,12 @@ class _TicketRow extends StatelessWidget {
 
   String get _statusLabel {
     final value = ticket.status.toLowerCase();
-    if (value.contains('resolv') || value.contains('clos') || value.contains('closed')) return 'Résolu';
+    if (value.contains('resolv') || value.contains('clos') || value.contains('closed')) return 'Terminé';
     if (value.contains('cancel') || value.contains('reject') || value.contains('refus')) return 'Fermé';
     return 'En cours';
   }
 
-  bool get _resolved => _statusLabel == 'Résolu';
+  bool get _resolved => _statusLabel == 'Terminé';
 
   String _dateLabel(DateTime? date) {
     if (date == null) return '';

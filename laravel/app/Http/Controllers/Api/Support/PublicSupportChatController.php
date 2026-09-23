@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Support;
 use App\Http\Controllers\Controller;
 use App\Models\SupportCallbackRequest;
 use App\Models\SupportConversation;
+use App\Services\Support\SupportCaseService;
 use App\Services\SupportAi\SupportAiOrchestrator;
 use App\Services\SupportAi\SupportIdentityResolver;
 use App\Services\SupportAi\SupportServiceStatusService;
@@ -28,6 +29,7 @@ class PublicSupportChatController extends Controller
         Request $request,
         SupportAiOrchestrator $orchestrator,
         SupportServiceStatusService $services,
+        SupportCaseService $cases,
     ) {
         $data = $request->validate([
             'name' => ['nullable', 'string', 'max:255'],
@@ -52,12 +54,15 @@ class PublicSupportChatController extends Controller
         }
 
         $user = $request->user('sanctum');
+        $requester = $cases->requesterFor($user, 'client');
         $conversation = SupportConversation::create([
+            'support_requester_id' => $requester->id,
             'requester_user_id' => $user->id,
             'requester_name' => $user->name,
             'requester_email' => $user->email,
             'requester_phone' => $data['phone'] ?? $user->phone,
             'channel' => $channel,
+            'source_app' => 'client_mobile',
             'status' => 'active',
             'subject' => $data['subject'] ?? 'Assistance '.($data['service'] ?? 'client').' OVANIE',
             'metadata' => [

@@ -192,6 +192,11 @@ class User extends Authenticatable
         return $this->hasOne(StaffProfile::class);
     }
 
+    public function supportRequesterProfiles()
+    {
+        return $this->hasMany(SupportRequester::class);
+    }
+
     public function assignedSupportTickets()
     {
         return $this->hasMany(SupportTicket::class, 'assigned_to');

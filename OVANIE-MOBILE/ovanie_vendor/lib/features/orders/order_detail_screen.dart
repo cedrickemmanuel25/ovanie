@@ -844,9 +844,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       status,
       deliveryStatus: _order['delivery_status'],
     );
+    final isOvanieLogistics =
+        _text(_order['delivery_provider'], '').toLowerCase() == 'ovanie';
     final canPrepare = ['pending', 'accepted', 'preparing'].contains(status);
-    final canShip = status == 'ready';
-    final track = step >= 3;
+
+    // OVANIE Logistics : une fois la commande prête, le vendeur ne doit pas
+    // "expédier" lui-même. Il attend le livreur réservé et suit simplement la
+    // prise en charge. Le bouton Expédier reste réservé à la logistique propre.
+    final canShip = status == 'ready' && !isOvanieLogistics;
+    final track = step >= 3 || (isOvanieLogistics && status == 'ready');
     return _card(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -856,7 +862,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           if (canPrepare || canShip || track) ...[
             _action(
               track
-                  ? 'Suivre la livraison'
+                  ? (isOvanieLogistics
+                      ? 'Suivre la prise en charge'
+                      : 'Suivre la livraison')
                   : canShip
                   ? 'Expédier la commande'
                   : 'Préparer la commande',

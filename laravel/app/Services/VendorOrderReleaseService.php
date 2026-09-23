@@ -27,7 +27,10 @@ use Illuminate\Support\Facades\Schema;
  */
 class VendorOrderReleaseService
 {
-    public function __construct(private readonly OrderWorkflowService $workflow) {}
+    public function __construct(
+        private readonly OrderWorkflowService $workflow,
+        private readonly LogisticsShipmentWorkflowService $logisticsWorkflow,
+    ) {}
 
     /**
      * Rend visibles les lignes de commande non encore libérées.
@@ -136,6 +139,13 @@ class VendorOrderReleaseService
                 ],
             ]);
 
+            // Correction logistique 01 : dès que la commande est réellement
+            // libérée au vendeur, les lignes OVANIE Logistics sont proposées
+            // aux livreurs éligibles. Le vendeur continue sa préparation en
+            // parallèle ; l'acceptation d'un livreur réserve la mission mais
+            // ne permet pas la collecte tant que le vendeur n'est pas prêt.
+            $this->scheduleEarlyLogisticsOffers($items, $order);
+
             return $releasedCount;
         });
     }
@@ -203,7 +213,67 @@ class VendorOrderReleaseService
                 ],
             ]);
 
+            $this->scheduleEarlyLogisticsOffers($items, $order);
+
             return $releasedCount;
+        });
+    }
+
+
+    /**
+     * Programme, après validation de la transaction de libération vendeur,
+     * la diffusion anticipée des missions OVANIE Logistics.
+     *
+     * On attend le commit externe afin qu'un webhook ou un checkout qui
+     * rollback ne puisse jamais créer de fausses offres livreur. Le service
+     * de diffusion recharge chaque ligne et reste lui-même idempotent.
+     */
+    private function scheduleEarlyLogisticsOffers($items, Order $order): void
+    {
+        $itemIds = collect($items)
+            ->filter(fn (OrderItem $item) => (string) $item->delivery_provider === OrderWorkflowService::PROVIDER_OVANIE)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($itemIds === []) {
+            return;
+        }
+
+        $orderId = (int) $order->id;
+        $orderNumber = (string) $order->order_number;
+
+        DB::afterCommit(function () use ($itemIds, $orderId, $orderNumber) {
+            $offeredDrivers = 0;
+
+            $freshItems = OrderItem::query()
+                ->with(['shipment', 'product.shop'])
+                ->whereIn('id', $itemIds)
+                ->orderBy('id')
+                ->get();
+
+            foreach ($freshItems as $item) {
+                try {
+                    $offeredDrivers += $this->logisticsWorkflow->broadcastToEligibleDrivers($item);
+                } catch (\Throwable $e) {
+                    Log::error('OVANIE Logistics : échec de diffusion anticipée d’une mission.', [
+                        'order_id' => $orderId,
+                        'order_number' => $orderNumber,
+                        'order_item_id' => $item->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            Log::info('OVANIE Logistics : diffusion anticipée après libération vendeur terminée.', [
+                'order_id' => $orderId,
+                'order_number' => $orderNumber,
+                'order_item_ids' => $itemIds,
+                'offers_created_for_drivers' => $offeredDrivers,
+            ]);
         });
     }
 

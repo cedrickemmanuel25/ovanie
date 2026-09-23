@@ -281,7 +281,11 @@
     ])->get($categoryPageSlug) : null;
 
     if ($categoryPage) {
-        $categoryPage['image_url'] = asset('storage/logos/' . rawurlencode($categoryPage['image']));
+        // Même pour les catégories historiques, la photo choisie dans
+        // l'administration doit remplacer immédiatement l'ancien visuel.
+        $categoryPage['image_url'] = ! empty($categoryRecord?->image_url)
+            ? $categoryRecord->image_url
+            : asset('storage/logos/' . rawurlencode($categoryPage['image']));
     }
 
     // Demande utilisateur : une catégorie créée dans l'admin doit avoir la

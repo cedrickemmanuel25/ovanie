@@ -12,6 +12,7 @@ import '../driver/data/driver_repository.dart';
 import '../driver/models/driver_dashboard.dart';
 import '../driver/models/driver_profile.dart';
 import '../missions/widgets/mission_ui.dart';
+import '../support/driver_support_screen.dart';
 
 /// Onglet "Profil" : identité, véhicule, zones, disponibilité et actions du
 /// compte. Les données viennent de `GET /driver/dashboard` (le même contrat
@@ -217,7 +218,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _SettingsCard(
                       onNotifications: () => _comingSoon('Notifications'),
                       onPrivacy: () => _comingSoon('Confidentialité'),
-                      onSupport: () => _comingSoon('Aide & support'),
+                      onSupport: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DriverSupportScreen())),
                       onLogout: _loggingOut ? null : _logout,
                       loggingOut: _loggingOut,
                     ),

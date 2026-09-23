@@ -28,12 +28,17 @@ class DriverDashboardController
         $driver->loadMissing('currentLocation');
 
         $all = $missions->listForDriver($driver);
-        $activeStatuses = ['accepted', 'collecting', 'picked_up', 'in_transit', 'arrived', 'incident'];
-        $waitingStatuses = ['assigned', 'planned'];
+        // Une mission acceptée est une réservation future tant que le livreur
+        // n'a pas démarré les collectes. Elle ne doit donc pas être présentée
+        // comme une livraison déjà en cours sur l'accueil.
+        $roadStatuses = ['collecting', 'picked_up', 'in_transit', 'arrived', 'incident'];
+        $reservedStatuses = ['accepted'];
+        $waitingStatuses = ['offered', 'assigned', 'planned'];
 
-        $currentMission = $this->pickCurrentMission($all, $activeStatuses);
-        $priorityMission = $currentMission ?: $this->pickPriorityMission($all, $waitingStatuses);
-        $nextMission = $this->pickNextMission($all, $priorityMission, $waitingStatuses);
+        $currentMission = $this->pickCurrentMission($all, $roadStatuses);
+        $reservedMission = $this->pickPriorityMission($all, $reservedStatuses);
+        $priorityMission = $currentMission ?: $reservedMission ?: $this->pickPriorityMission($all, $waitingStatuses);
+        $nextMission = $this->pickNextMission($all, $priorityMission, array_merge($reservedStatuses, $waitingStatuses));
 
         $deliveredTodayMissionNumbers = DeliveryAssignment::query()
             ->where('driver_id', $driver->id)
@@ -118,9 +123,12 @@ class DriverDashboardController
                 'rejection_reason' => $driver->rejection_reason,
             ],
             'availability' => [
-                'status' => $currentMission ? 'En mission' : ($driver->status ?: 'Indisponible'),
-                'can_change' => $currentMission === null,
+                'status' => $currentMission
+                    ? 'En mission'
+                    : ($reservedMission ? 'Mission réservée' : ($driver->status ?: 'Indisponible')),
+                'can_change' => $currentMission === null && $reservedMission === null,
                 'can_receive_missions' => $currentMission === null
+                    && $reservedMission === null
                     && $driver->status === 'Disponible'
                     && $driver->isOnboardingActive(),
             ],
@@ -129,7 +137,7 @@ class DriverDashboardController
             'next_mission' => $this->serializeMission($nextMission),
             'summary' => [
                 'missions_today' => $todayMissions,
-                'active_missions' => $all->whereIn('status', array_merge($activeStatuses, $waitingStatuses))->count(),
+                'active_missions' => $all->whereIn('status', array_merge($roadStatuses, $reservedStatuses, $waitingStatuses))->count(),
                 'completed_today' => $completedToday,
                 'completed_total' => $all->where('status', 'delivered')->count(),
                 'unread_notifications' => $unreadCount,
@@ -161,7 +169,13 @@ class DriverDashboardController
         return $missions
             ->filter(fn (array $mission) => in_array($mission['status'] ?? '', $statuses, true))
             ->sortBy(function (array $mission) {
-                $statusRank = ($mission['status'] ?? '') === 'assigned' ? 0 : 1;
+                $statusRank = match ($mission['status'] ?? '') {
+                    'accepted' => 0,
+                    'offered' => 1,
+                    'assigned' => 2,
+                    'planned' => 3,
+                    default => 9,
+                };
                 $scheduled = $mission['pickup_scheduled_at'] ?? $mission['estimated_delivery_at'] ?? null;
                 $timestamp = $scheduled instanceof Carbon ? $scheduled->timestamp : PHP_INT_MAX;
 
@@ -201,13 +215,17 @@ class DriverDashboardController
             'commune' => $mission['commune'] ?? null,
             'status' => $mission['status'] ?? null,
             'status_label' => $mission['status_label'] ?? null,
+            'reservation_state' => $mission['reservation_state'] ?? null,
+            'can_start' => (bool) ($mission['can_start'] ?? false),
             'pickup_scheduled_at' => $pickup instanceof Carbon ? $pickup->toIso8601String() : null,
             'estimated_delivery_at' => $eta instanceof Carbon ? $eta->toIso8601String() : null,
             'pickup_count' => (int) ($mission['pickup_count'] ?? 0),
+            'ready_pickup_count' => (int) ($mission['ready_pickup_count'] ?? 0),
             'item_count' => (int) ($mission['item_count'] ?? 0),
             'total_weight_kg' => (float) ($mission['total_weight_kg'] ?? 0),
             'vehicle_label' => $mission['vehicle_label'] ?? null,
             'preparation_percent' => (int) ($mission['preparation_percent'] ?? 0),
+            'net_amount' => (float) ($mission['net_amount'] ?? 0),
         ];
     }
 }

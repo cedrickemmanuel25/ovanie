@@ -262,3 +262,16 @@ Artisan::command('ovanie:delivery-health {order? : ID ou numéro de commande à 
 
     return $failed ? self::FAILURE : self::SUCCESS;
 })->purpose('Contrôle les routes, colonnes et liaisons réelles du suivi de livraison OVANIE.');
+
+Artisan::command('ovanie:logistics-monitor', function () {
+    $result = app(\App\Services\LogisticsMissionMonitoringService::class)->run();
+    $this->info(sprintf(
+        '%d mission(s) en dépassement contrôlée(s), %d nouvelle(s) alerte(s) créée(s).',
+        $result['checked'],
+        $result['created']
+    ));
+})->purpose('Surveille les ETA OVANIE Logistics et crée les alertes de retard réelles sans bloquer les missions.');
+
+Schedule::command('ovanie:logistics-monitor')
+    ->everyTenMinutes()
+    ->withoutOverlapping();

@@ -52,6 +52,19 @@ class SupportAgentHandoff extends Model
      * SupportHandoffQueueService et produit une clé d'idempotence ainsi qu'une
      * file `logistique_incidents` ou `logistique_critique`.
      */
+
+    /**
+     * Transferts créés par les workflows actuels. Les files delivery_support
+     * et delivery_support_archive proviennent de l'ancien seeder de maquette.
+     */
+    public function scopeOperational(Builder $query): Builder
+    {
+        return $query->where(function ($builder) {
+            $builder->whereNull('queue_key')
+                ->orWhereNotIn('queue_key', ['delivery_support', 'delivery_support_archive']);
+        });
+    }
+
     public function scopeOperationalLogistics(Builder $query): Builder
     {
         return $query

@@ -12,6 +12,10 @@ html, body { margin: 0 !important; padding: 0 !important; }
 body > .ovn-header:first-child,
 body > header.ovn-header { margin-top: 0 !important; }
 
+/* La navbar OVANIE actuelle n'est pas fixe : neutralise les anciens offsets
+   mobiles de responsive.css qui créaient un grand espace au-dessus de la page. */
+body { padding-top: 0 !important; }
+
 .ovn-header,
 .ovn-header * { box-sizing: border-box; }
 
@@ -249,6 +253,7 @@ body > header.ovn-header { margin-top: 0 !important; }
 }
 
 .ovn-primary-nav {
+    min-width: 0;
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -299,6 +304,8 @@ body > header.ovn-header { margin-top: 0 !important; }
 }
 
 .ovn-sell-button {
+    position: relative;
+    z-index: 2;
     min-height: 38px;
     padding: 0 17px;
     display: inline-flex;
@@ -312,6 +319,13 @@ body > header.ovn-header { margin-top: 0 !important; }
     white-space: nowrap;
 }
 .ovn-sell-button:hover { background: #ed5f00; color: #fff; }
+
+@media (max-width: 1380px) and (min-width: 861px) {
+    .ovn-header__nav-inner { gap: 15px; }
+    .ovn-primary-nav { gap: 14px; }
+    .ovn-primary-nav a { font-size: 11.5px; }
+    .ovn-sell-button { padding-inline: 14px; }
+}
 
 @media (max-width: 1180px) {
     .ovn-header__top-inner {
@@ -330,12 +344,14 @@ body > header.ovn-header { margin-top: 0 !important; }
     .ovn-shell { width: min(100% - 24px, 1500px); }
     .ovn-header__top-inner {
         padding-block: 10px;
-        grid-template-columns: 150px 1fr;
+        grid-template-columns: minmax(130px, 150px) minmax(0, 1fr);
+        gap: 12px;
     }
     .ovn-search { grid-column: 1 / -1; grid-row: 2; grid-template-columns: 158px minmax(0,1fr) 52px; height: 48px; }
     .ovn-header__actions {
+        min-width: 0;
         justify-content: flex-end;
-        gap: 10px;
+        gap: 9px;
     }
     .ovn-header__action span { display: none; }
     .ovn-header__nav-inner {
@@ -346,12 +362,16 @@ body > header.ovn-header { margin-top: 0 !important; }
 }
 
 @media (max-width: 620px) {
-    .ovn-header__top-inner { grid-template-columns: 132px 1fr; }
+    .ovn-header__top-inner { grid-template-columns: 126px minmax(0, 1fr); gap: 8px; }
     .ovn-search { grid-template-columns: minmax(0,1fr) 50px; height: 46px; border-radius: 9px; }
     .ovn-search__category { display: none; }
     .ovn-search__field { grid-column: 1; }
     .ovn-search button { grid-column: 2; }
     .ovn-header__logo img { width: 128px; height: 45px; }
+    .ovn-header__brand-zone { gap: 0; }
+    .ovn-header__phone { display: none; }
+    .ovn-account__trigger { padding-inline: 5px; }
+    .ovn-header__actions { gap: 6px; }
     .ovn-header__nav-inner { display: flex; overflow-x: auto; padding-block: 9px; }
     .ovn-all-categories {
         flex: 0 0 auto;
@@ -422,6 +442,13 @@ body > header.ovn-header { margin-top: 0 !important; }
 .ovn-header__cart > svg { width: 28px !important; height: 28px !important; stroke-width: 1.65; }
 .ovn-header__cart b { position: absolute; top: -2px; right: -5px; min-width: 20px; height: 20px; border: 2px solid #06295f; transition: transform .18s ease; }
 .ovn-header__cart b[data-count]:not([data-count="0"]) { transform: scale(1.05); }
+
+@media (max-width: 1380px) and (min-width: 861px) {
+    .ovn-header__nav-inner { gap: 15px; }
+    .ovn-primary-nav { gap: 14px; }
+    .ovn-primary-nav a { font-size: 11.5px; }
+    .ovn-sell-button { padding-inline: 14px; }
+}
 
 @media (max-width: 1180px) { .ovn-header__phone { display: none; } }
 @media (max-width: 860px) {

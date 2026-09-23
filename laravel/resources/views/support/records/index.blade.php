@@ -7,7 +7,7 @@
         <p class="page-subtitle">Consultation en temps réel des données centrales de la marketplace. Aucun enregistrement n’est dupliqué dans l’espace Support.</p>
     </div>
     <div class="page-actions">
-        @if(auth()->user()->hasStaffPermission('tickets.write'))<a class="btn btn-primary" href="{{ route('support.tickets.create') }}"><i data-lucide="circle-plus"></i>Créer un ticket</a>@endif
+        @if(auth()->user()->hasStaffPermission('tickets.write'))<a class="btn btn-primary" href="{{ route('support.tickets.create') }}"><i data-lucide="circle-plus"></i>Créer un dossier</a>@endif
     </div>
 </div>
 <form class="filters" method="GET">

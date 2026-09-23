@@ -15,9 +15,22 @@ class SupportCallController extends Controller
 {
     public function index(Request $request, SupportServiceStatusService $services)
     {
+        $tab = trim((string) $request->query('tab', 'calls'));
+        if (! in_array($tab, ['calls', 'missed', 'callbacks', 'history'], true)) {
+            $tab = 'calls';
+        }
+
         $query = SupportCall::query()
             ->with(['requester', 'aiAgent', 'handler', 'conversation.order', 'conversation.shipment', 'ticket'])
             ->latest('started_at');
+
+        if ($tab === 'missed') {
+            $query->where('status', 'missed');
+        } elseif ($tab === 'history') {
+            $query->whereIn('status', ['completed', 'failed', 'transferred']);
+        } elseif ($tab === 'calls') {
+            $query->whereIn('status', ['queued', 'waiting', 'ringing', 'in_progress', 'waiting_transfer']);
+        }
 
         foreach (['status', 'direction'] as $filter) {
             if ($request->filled($filter)) {
@@ -36,10 +49,25 @@ class SupportCallController extends Controller
             });
         }
 
+        $callbacks = SupportCallbackRequest::with(['requester', 'assignee', 'call', 'ticket'])
+            ->latest();
+        if ($request->filled('callback_status')) {
+            $callbacks->where('status', $request->query('callback_status'));
+        }
+
         return view('support.calls.index', [
-            'calls' => $query->paginate(25)->withQueryString(),
+            'calls' => $query->paginate(25, ['*'], 'calls_page')->withQueryString(),
+            'callbacks' => $callbacks->paginate(25, ['*'], 'callbacks_page')->withQueryString(),
+            'agents' => \App\Models\User::where('role', 'support')->where('status', 'active')->orderBy('name')->get(['id', 'name']),
             'services' => $services->all(),
             'telephonyConfigured' => $services->telephonyConfigured(),
+            'tab' => $tab,
+            'callStats' => [
+                'missed' => SupportCall::where('status', 'missed')->count(),
+                'callbacks' => SupportCallbackRequest::whereIn('status', ['pending', 'scheduled'])->count(),
+                'active' => SupportCall::whereIn('status', ['queued', 'waiting', 'ringing', 'in_progress', 'waiting_transfer'])->count(),
+                'history' => SupportCall::whereIn('status', ['completed', 'failed', 'transferred'])->count(),
+            ],
         ]);
     }
 
@@ -120,7 +148,7 @@ class SupportCallController extends Controller
             'status' => 'pending',
         ]));
 
-        return redirect()->route('support.callbacks.index')->with('success', "Demande de rappel {$callback->reference} créée.");
+        return redirect()->route('support.calls.index', ['tab' => 'callbacks'])->with('success', "Demande de rappel {$callback->reference} créée.");
     }
 
     public function transfer(Request $request, SupportCall $call, SupportTelephonyManager $manager, SupportServiceStatusService $services)

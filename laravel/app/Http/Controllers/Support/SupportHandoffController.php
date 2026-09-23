@@ -14,9 +14,11 @@ class SupportHandoffController extends Controller
     public function index(Request $request, SupportHandoffQueueService $queues)
     {
         $query = SupportAgentHandoff::query()
+            ->operational()
+            ->whereIn('target_department', ['logistique', 'commercial', 'administration'])
             ->with([
-                'conversation.requester', 'conversation.order', 'conversation.shipment',
-                'call', 'aiAgent', 'assignee', 'ticket', 'deliveryIncident',
+                'conversation.requester', 'conversation.requesterProfile', 'conversation.order', 'conversation.payment', 'conversation.shipment', 'conversation.shop',
+                'call', 'aiAgent', 'assignee', 'ticket.requesterProfile', 'ticket.order', 'ticket.payment', 'ticket.shipment', 'ticket.shop', 'deliveryIncident',
                 'commercialLead', 'completedBy',
             ])
             ->latest('requested_at');
@@ -43,10 +45,22 @@ class SupportHandoffController extends Controller
             'handoffs' => $query->paginate(25)->withQueryString(),
             'supportAgents' => $queues->agentsForDepartment('support'),
             'queueStats' => [
-                'pending' => SupportAgentHandoff::open()->where('target_department', 'support')->whereNull('assigned_to')->count(),
-                'mine' => SupportAgentHandoff::open()->where('assigned_to', $request->user('admin')->id)->count(),
-                'overdue' => SupportAgentHandoff::open()->whereNotNull('due_at')->where('due_at', '<', now())->count(),
-                'all_open' => SupportAgentHandoff::open()->count(),
+                'pending' => SupportAgentHandoff::query()
+                    ->operational()
+                    ->whereIn('target_department', ['logistique', 'commercial', 'administration'])
+                    ->where('status', 'pending')->count(),
+                'in_progress' => SupportAgentHandoff::query()
+                    ->operational()
+                    ->whereIn('target_department', ['logistique', 'commercial', 'administration'])
+                    ->whereIn('status', ['assigned', 'accepted', 'in_progress'])->count(),
+                'overdue' => SupportAgentHandoff::query()
+                    ->operational()
+                    ->whereIn('target_department', ['logistique', 'commercial', 'administration'])
+                    ->open()->whereNotNull('due_at')->where('due_at', '<', now())->count(),
+                'resolved' => SupportAgentHandoff::query()
+                    ->operational()
+                    ->whereIn('target_department', ['logistique', 'commercial', 'administration'])
+                    ->whereIn('status', ['resolved', 'closed'])->count(),
             ],
         ]);
     }

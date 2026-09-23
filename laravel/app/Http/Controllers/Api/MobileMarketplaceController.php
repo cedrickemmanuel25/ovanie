@@ -329,19 +329,18 @@ class MobileMarketplaceController extends Controller
                 'parent_id' => null,
                 'name' => (string) ($card['name'] ?? $category?->name ?? 'Catégorie'),
                 'slug' => $slug,
-                // Priorité à la photo importée pour la catégorie dans l'admin,
-                // puis aux visuels officiels des catégories historiques,
-                // puis à un vrai produit de la catégorie.
+                // La photo importée dans l'administration est prioritaire.
+                // Aucun produit n'est utilisé comme image de catégorie.
                 'icon' => $category?->image_url
                     ?? ($filename ? asset('storage/logos/'.rawurlencode($filename)) : null)
-                    ?? (string) ($card['product']?->card_image_url ?? ''),
+                    ?? asset('images/home/product-placeholder.svg'),
                 'children' => $category?->relationLoaded('children')
                     ? $category->children->map(fn (Category $child) => [
                         'id' => (int) $child->id,
                         'parent_id' => (int) $category->id,
                         'name' => (string) $child->name,
                         'slug' => (string) $child->slug,
-                        'icon' => '',
+                        'icon' => (string) ($child->image_url ?? ''),
                         'children' => [],
                     ])->values()->all()
                     : [],
@@ -381,7 +380,7 @@ class MobileMarketplaceController extends Controller
                     'parent_id' => (int) $category->id,
                     'name' => ovanie_public_text((string) $child->name, (string) $child->slug),
                     'slug' => (string) $child->slug,
-                    'icon' => (string) ($child->icon ?? ''),
+                    'icon' => (string) ($child->image_url ?? $child->icon ?? ''),
                     'children' => [],
                 ])->values()->all()
                 : [],

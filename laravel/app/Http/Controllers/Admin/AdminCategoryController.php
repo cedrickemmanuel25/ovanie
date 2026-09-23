@@ -225,7 +225,7 @@ class AdminCategoryController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:1200'],
             'icon' => ['nullable', 'string', 'max:80'],
-            'image' => ['nullable', 'image', 'max:4096'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'remove_image' => ['nullable', 'boolean'],
             'status' => ['required', 'in:actif,inactif'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],

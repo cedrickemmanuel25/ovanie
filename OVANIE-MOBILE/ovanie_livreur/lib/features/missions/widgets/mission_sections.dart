@@ -560,13 +560,13 @@ class _CollectingStatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = stop.completed
-        ? 'Collecte terminée'
-        : stop.current
-            ? 'Point en cours'
-            : 'À venir';
-    final color = stop.completed || stop.current ? OvanieColors.green : MissionPalette.slate;
-    final bg = stop.completed || stop.current ? const Color(0xFFDFF7EC) : const Color(0xFFEEF1F5);
+    final label = stop.workflowLabel;
+    final color = stop.completed || stop.current || stop.arrived
+        ? OvanieColors.green
+        : MissionPalette.slate;
+    final bg = stop.completed || stop.current || stop.arrived
+        ? const Color(0xFFDFF7EC)
+        : const Color(0xFFEEF1F5);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(15)),
@@ -574,7 +574,13 @@ class _CollectingStatusPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            stop.completed ? Icons.check_circle_rounded : Icons.play_circle_fill_rounded,
+            stop.completed
+                ? Icons.check_circle_rounded
+                : stop.verified
+                    ? Icons.inventory_2_rounded
+                    : stop.arrived
+                        ? Icons.fact_check_rounded
+                        : Icons.play_circle_fill_rounded,
             color: color,
             size: 18,
           ),

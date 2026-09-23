@@ -2,6 +2,7 @@
 
 namespace App\Services\SupportAi;
 
+use App\Models\SupportContextLink;
 use App\Models\SupportConversation;
 use App\Models\SupportTicket;
 
@@ -27,11 +28,13 @@ class SupportTicketFactory
         }
 
         $ticket = SupportTicket::create(array_merge([
+            'support_requester_id' => $conversation->support_requester_id,
             'requester_user_id' => $conversation->requester_user_id,
             'requester_name' => $conversation->requester_name,
             'requester_email' => $conversation->requester_email,
             'requester_phone' => $conversation->requester_phone,
             'channel' => $conversation->channel === 'phone' ? 'ai_call' : 'ai_chat',
+            'source_app' => $conversation->source_app ?: 'support_ai',
             'category' => $conversation->aiAgent?->role_key === 'business' ? 'business' : 'general',
             'priority' => $priority,
             'status' => 'open',
@@ -56,6 +59,25 @@ class SupportTicketFactory
                 'ai_agent' => $conversation->aiAgent?->name,
             ],
         ], $overrides));
+
+        $contextMap = [
+            'order' => $conversation->order_id,
+            'shop' => $conversation->shop_id,
+            'payment' => $conversation->payment_id,
+            'shipment' => $conversation->shipment_id,
+            'return' => $conversation->return_id,
+            'dispute' => $conversation->dispute_id,
+            'delivery_incident' => $conversation->delivery_incident_id,
+        ];
+        $primary = true;
+        foreach ($contextMap as $type => $id) {
+            if (! $id) continue;
+            SupportContextLink::firstOrCreate(
+                ['support_ticket_id' => $ticket->id, 'context_type' => $type, 'context_id' => (int) $id],
+                ['is_primary' => $primary]
+            );
+            $primary = false;
+        }
 
         $ticket->messages()->create([
             'author_id' => null,

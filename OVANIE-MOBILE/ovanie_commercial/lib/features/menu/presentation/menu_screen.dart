@@ -12,6 +12,7 @@ import 'preferences_screen.dart';
 import 'profile_screen.dart';
 import 'synchronization_screen.dart';
 import 'visited_shops_screen.dart';
+import '../../support/commercial_support_screen.dart';
 
 class CommercialMenuScreen extends StatefulWidget {
   const CommercialMenuScreen({
@@ -131,16 +132,7 @@ class _CommercialMenuScreenState extends State<CommercialMenuScreen> {
         ),
       );
 
-  void _support() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Aide & support OVANIE'),
-        content: const Text('Pour toute assistance, contactez le support OVANIE au 01 61 78 18 18.'),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer'))],
-      ),
-    );
-  }
+  Future<void> _support() => _push(CommercialSupportScreen(api: widget.menuService.api));
 
   @override
   Widget build(BuildContext context) {

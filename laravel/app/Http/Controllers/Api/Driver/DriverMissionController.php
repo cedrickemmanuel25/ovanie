@@ -87,7 +87,7 @@ class DriverMissionController extends Controller
 
         return $this->missionResponse(
             $service->detail($driver->fresh(), $missionNumber),
-            'Mission acceptée.'
+            'Mission réservée. Attendez que les vendeurs soient prêts avant de démarrer les collectes.'
         );
     }
 
@@ -101,7 +101,7 @@ class DriverMissionController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Mission refusée et renvoyée au centre logistique.',
+            'message' => 'Mission refusée. Elle reste disponible pour les autres livreurs éligibles.',
         ]);
     }
 
@@ -122,12 +122,35 @@ class DriverMissionController extends Controller
         string $stopId,
         DriverMissionService $service
     ): JsonResponse {
+        $validated = $request->validate([
+            'action' => ['required', 'in:arrived,verified,loaded'],
+            'items_checked' => ['nullable', 'boolean'],
+            'quantities_checked' => ['nullable', 'boolean'],
+            'condition_checked' => ['nullable', 'boolean'],
+            'handover_confirmed' => ['nullable', 'boolean'],
+            'pickup_code' => ['nullable', 'digits:6'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
         $driver = $this->driver($request);
-        $service->completePickup($driver, $missionNumber, $stopId);
+        $service->completePickup(
+            $driver,
+            $missionNumber,
+            $stopId,
+            (string) $validated['action'],
+            $validated,
+        );
+
+        $message = match ($validated['action']) {
+            'arrived' => 'Arrivée au point de collecte confirmée. Le vendeur peut maintenant vous remettre la commande.',
+            'verified' => 'Vérification des articles enregistrée. Procédez au chargement puis demandez le code de remise au vendeur.',
+            'loaded' => 'Remise vendeur → livreur confirmée. Le point de collecte est terminé.',
+            default => 'Étape de collecte enregistrée.',
+        };
 
         return $this->missionResponse(
             $service->detail($driver->fresh(), $missionNumber),
-            'Collecte confirmée.'
+            $message
         );
     }
 
@@ -196,7 +219,7 @@ class DriverMissionController extends Controller
     public function incident(Request $request, string $missionNumber, DriverMissionService $service): JsonResponse
     {
         $validated = $request->validate([
-            'incident_type' => ['required', 'in:traffic_jam,client_absent,address_issue,vehicle_breakdown,accident,product_damaged,access_impossible,other'],
+            'incident_type' => ['required', 'in:traffic_jam,client_absent,address_issue,vehicle_breakdown,accident,product_damaged,access_impossible,delivery_refused,other'],
             'description' => ['nullable', 'string', 'max:1500'],
         ]);
 
@@ -218,18 +241,21 @@ class DriverMissionController extends Controller
     {
         $validated = $request->validate([
             'delivery_otp_code' => ['required', 'digits:6'],
+            'handover_confirmed' => ['required', 'accepted'],
         ]);
 
+        $driver = $this->driver($request);
         $service->verifyOtp(
-            $this->driver($request),
+            $driver,
             $missionNumber,
             $validated['delivery_otp_code'],
+            (bool) $validated['handover_confirmed'],
         );
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Livraison confirmée.',
-        ]);
+        return $this->missionResponse(
+            $service->detail($driver->fresh(), $missionNumber),
+            'Livraison confirmée. La mission est terminée.'
+        );
     }
 
     private function driver(Request $request): DeliveryDriver
@@ -263,6 +289,8 @@ class DriverMissionController extends Controller
             'commune' => $mission['commune'] ?? null,
             'status' => $mission['status'] ?? null,
             'status_label' => $mission['status_label'] ?? null,
+            'reservation_state' => $mission['reservation_state'] ?? null,
+            'can_start' => (bool) ($mission['can_start'] ?? false),
             'pickup_scheduled_at' => $pickup instanceof Carbon ? $pickup->toIso8601String() : null,
             'estimated_delivery_at' => $eta instanceof Carbon ? $eta->toIso8601String() : null,
             'accepted_at' => ($mission['accepted_at'] ?? null) instanceof Carbon
@@ -273,6 +301,7 @@ class DriverMissionController extends Controller
             'delivered_at' => ($mission['delivered_at'] ?? null) instanceof Carbon
                 ? $mission['delivered_at']->toIso8601String() : null,
             'pickup_count' => (int) ($mission['pickup_count'] ?? 0),
+            'ready_pickup_count' => (int) ($mission['ready_pickup_count'] ?? 0),
             'item_count' => (int) ($mission['item_count'] ?? 0),
             'line_count' => (int) ($mission['line_count'] ?? 0),
             'total_weight_kg' => (float) ($mission['total_weight_kg'] ?? 0),
@@ -299,10 +328,28 @@ class DriverMissionController extends Controller
             $items = collect($stop['items'] ?? [])->values();
             $itemIds = $items->pluck('id')->filter()->values();
             $assignmentRows = $itemIds->map(fn ($itemId) => $assignmentsByItem->get($itemId))->filter();
+            $arrivedTimes = $assignmentRows
+                ->map(fn ($assignment) => data_get($assignment->meta, 'pickup_arrived_at'))
+                ->filter()
+                ->map(fn ($value) => Carbon::parse($value));
+            $verifiedTimes = $assignmentRows
+                ->map(fn ($assignment) => data_get($assignment->meta, 'pickup_verified_at'))
+                ->filter()
+                ->map(fn ($value) => Carbon::parse($value));
+            $loadedTimes = $assignmentRows
+                ->map(fn ($assignment) => data_get($assignment->meta, 'pickup_loaded_at'))
+                ->filter()
+                ->map(fn ($value) => Carbon::parse($value));
             $completedTimes = $assignmentRows
                 ->map(fn ($assignment) => data_get($assignment->meta, 'pickup_completed_at'))
                 ->filter()
                 ->map(fn ($value) => Carbon::parse($value));
+            $arrived = $itemIds->isNotEmpty()
+                && $assignmentRows->count() === $itemIds->count()
+                && $assignmentRows->every(fn ($assignment) => filled(data_get($assignment->meta, 'pickup_arrived_at')));
+            $verified = $itemIds->isNotEmpty()
+                && $assignmentRows->count() === $itemIds->count()
+                && $assignmentRows->every(fn ($assignment) => filled(data_get($assignment->meta, 'pickup_verified_at')));
             $completed = $terminalPickupStatus || (
                 $itemIds->isNotEmpty()
                 && $assignmentRows->count() === $itemIds->count()
@@ -327,6 +374,16 @@ class DriverMissionController extends Controller
                 'volume_m3' => (float) ($stop['volume'] ?? 0),
                 'item_count' => (int) $items->sum(fn ($item) => max(1, (int) ($item->quantity ?? 1))),
                 'ready' => (bool) ($stop['ready'] ?? false),
+                'arrived' => $arrived || $completed,
+                'arrived_at' => $arrivedTimes->sortDesc()->first()?->toIso8601String(),
+                'verified' => $verified || $completed,
+                'verified_at' => $verifiedTimes->sortDesc()->first()?->toIso8601String(),
+                'loaded' => $completed,
+                'loaded_at' => $loadedTimes->sortDesc()->first()?->toIso8601String(),
+                'handover_confirmed' => $completed || $assignmentRows->every(fn ($assignment) => filled(data_get($assignment->meta, 'vendor_handover_confirmed_at'))),
+                'items_checked' => $verified || $completed,
+                'quantities_checked' => $verified || $completed,
+                'condition_checked' => $verified || $completed,
                 'completed' => $completed,
                 'completed_at' => $completedTimes->sortDesc()->first()?->toIso8601String()
                     ?: ($terminalPickupStatus ? optional($assignmentRows->pluck('picked_up_at')->filter()->sortDesc()->first())->toIso8601String() : null),

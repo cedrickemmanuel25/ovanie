@@ -10,7 +10,8 @@ use App\ViewModels\LogisticsDirectoryData as D;
 $open = $allIncidents->where('status','open')->count();
 $progress = $allIncidents->whereIn('status',['in_progress','rescheduled'])->count();
 $resolved = $allIncidents->whereIn('status',['resolved','closed'])->count();
-$critical = $allIncidents->where('severity','critical')->whereNotIn('status',['resolved','closed'])->count();
+$critical = $allIncidents->whereIn('severity',['critical','high'])->whereNotIn('status',['resolved','closed'])->count();
+$automatic = $allIncidents->filter(fn($incident) => data_get($incident->meta,'signal_source') === 'system_alert' || $incident->reported_by_type === 'system_alert')->whereNotIn('status',['resolved','closed'])->count();
 $vendorReviewTypes = ['produit_endommage','produit_incomplet','quantite_incorrecte','probleme_chargement','litige_client'];
 @endphp
 
@@ -23,9 +24,9 @@ $vendorReviewTypes = ['produit_endommage','produit_incomplet','quantite_incorrec
 <div class="directory-kpis four">
 @foreach([
     ['alert','Incidents ouverts',$open,'red'],
-    ['alert','Incidents critiques',$critical,'red'],
-    ['check','Incidents résolus',$resolved,'green'],
-    ['clock','En cours de traitement',$progress,'orange']
+    ['alert','Priorité élevée',$critical,'red'],
+    ['clock','Alertes automatiques',$automatic,'orange'],
+    ['check','Incidents résolus',$resolved,'green']
 ] as [$icon,$label,$value,$tone])
     <x-operations.kpi :icon="$icon" :label="$label" :value="$value" :tone="$tone"/>
 @endforeach
@@ -73,6 +74,7 @@ $vendorReviewTypes = ['produit_endommage','produit_incomplet','quantite_incorrec
                         if (!$actorName && $isDriver) $actorName = $incident->orderItem?->latestDeliveryAssignment?->driver?->name;
                         if (!$actorName && $isClient) $actorName = $incident->order?->delivery_recipient_name ?: $incident->order?->customer_name ?: $incident->order?->client?->name;
                         if (!$actorName && $isSeller) $actorName = $incident->orderItem?->product?->shop?->display_name ?: $incident->orderItem?->product?->shop?->name;
+                        if (!$actorName && $sourceCode === 'system_alert') $actorName = 'Supervision automatique OVANIE';
                         $actorName = $actorName ?: 'Signalant identifié par la source';
 
                         $typeLabel = $types[$incident->incident_type] ?? ucfirst(str_replace('_',' ',(string)$incident->incident_type));

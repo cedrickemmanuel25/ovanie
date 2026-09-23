@@ -22,14 +22,25 @@
         && $ovanieLines->every(fn ($line) => $line->vendor_status === 'ready');
     $allOvanieTransferred = $ovanieLines->isNotEmpty()
         && $ovanieLines->every(fn ($line) => in_array($line->delivery_status, ['ready_for_pickup', 'assigned', 'picked_up', 'in_transit', 'delivered'], true));
-    // 'ready_for_pickup' : en attente qu'OVANIE affecte un livreur.
-    // 'assigned' : un livreur a été affecté MAIS n'est pas encore passé à la
-    // boutique — la marchandise reste physiquement chez le vendeur jusqu'à ce
-    // que le livreur confirme la collecte (picked_up). Le confondre avec un
-    // enlèvement réel affichait "remise confirmée" avant même que le livreur
-    // soit arrivé.
-    $allOvanieAssigned = $ovanieLines->isNotEmpty()
-        && $ovanieLines->every(fn ($line) => $line->delivery_status === 'assigned');
+    // La réservation du livreur est indépendante du statut physique du colis :
+    // depuis la correction 01/03, un livreur peut réserver la mission pendant
+    // que le vendeur prépare encore la commande.
+    $ovanieWinnerStatuses = ['accepted', 'assigned', 'collecting', 'picked_up', 'in_transit', 'arrived', 'delivered'];
+    $ovanieWinnerAssignments = $ovanieLines
+        ->flatMap(fn ($line) => $line->relationLoaded('deliveryAssignments') ? $line->deliveryAssignments : collect())
+        ->filter(fn ($assignment) => in_array((string) $assignment->status, $ovanieWinnerStatuses, true))
+        ->sortByDesc(fn ($assignment) => optional($assignment->accepted_at ?: $assignment->updated_at)->timestamp ?? 0)
+        ->values();
+    $ovanieMissionReserved = $ovanieWinnerAssignments->isNotEmpty();
+    $ovanieReservedAssignment = $ovanieWinnerAssignments->first();
+    $ovanieReservedDriver = $ovanieReservedAssignment?->driver;
+    $ovaniePickupArrivedAt = data_get($ovanieReservedAssignment?->meta, 'pickup_arrived_at');
+    $ovaniePickupVerifiedAt = data_get($ovanieReservedAssignment?->meta, 'pickup_verified_at');
+    $ovaniePickupCompletedAt = data_get($ovanieReservedAssignment?->meta, 'pickup_completed_at');
+    $ovaniePickupHandoverCode = filled($ovaniePickupArrivedAt) && ! filled($ovaniePickupCompletedAt)
+        ? (string) data_get($ovanieReservedAssignment?->meta, 'pickup_handover_code')
+        : null;
+
     $allOvaniePickedUp = $ovanieLines->isNotEmpty()
         && $ovanieLines->every(fn ($line) => in_array($line->delivery_status, ['picked_up', 'in_transit', 'delivered'], true));
 
@@ -252,9 +263,11 @@
                 'key' => 'handed_over',
                 'label' => 'Remise à OVANIE Logistics',
                 'icon' => 'truck',
-                'date' => optional($ovanieLines->pluck('delivery_status_updated_at')->filter()->sort()->last())->format('d/m/Y H:i') ?: ($allOvaniePickedUp ? 'Confirmée' : ($allOvanieAssigned ? 'Livreur affecté' : ($allOvanieTransferred ? 'En attente d’enlèvement' : '—'))),
-                'done' => $allOvaniePickedUp,
-                'active' => ! $allOvaniePickedUp && ($allOvanieTransferred || $displayStatus === 'shipped'),
+                'date' => filled($ovaniePickupCompletedAt)
+                    ? \Illuminate\Support\Carbon::parse($ovaniePickupCompletedAt)->format('d/m/Y H:i')
+                    : (optional($ovanieLines->pluck('delivery_status_updated_at')->filter()->sort()->last())->format('d/m/Y H:i') ?: ($allOvaniePickedUp ? 'Confirmée' : ($allOvanieAssigned ? 'Livreur affecté' : ($allOvanieTransferred ? 'En attente d’enlèvement' : '—')))),
+                'done' => $allOvaniePickedUp || filled($ovaniePickupCompletedAt),
+                'active' => ! filled($ovaniePickupCompletedAt) && ! $allOvaniePickedUp && ($allOvanieTransferred || $displayStatus === 'shipped'),
             ],
         ];
     }
@@ -1075,7 +1088,7 @@
                 </div>
             </section>
 
-            @if(!$hasSellerDelivery && $hasOvanieDelivery && $allOvanieTransferred)
+            @if(!$hasSellerDelivery && $hasOvanieDelivery && ($allOvanieTransferred || $ovanieMissionReserved))
                 <section class="od-card od-full-span" style="margin-bottom:14px;">
                     @if($ovanieIncident)
                         <div class="od-alert red">
@@ -1103,24 +1116,53 @@
                                 Vous serez informé lorsque la livraison sera terminée.
                             </div>
                         </div>
-                    @elseif($allOvanieAssigned)
-                        <div class="od-alert orange">
-                            <i data-lucide="truck"></i>
+                    @elseif(filled($ovaniePickupCompletedAt))
+                        <div class="od-alert green">
+                            <i data-lucide="package-check"></i>
                             <div>
-                                <strong>Livreur affecté par OVANIE Logistics</strong><br>
-                                Un livreur a été désigné et se dirige vers votre boutique pour récupérer la commande.<br>
-                                Statut : En route pour la collecte — pas encore récupérée<br>
-                                Vous serez informé dès que le livreur aura la commande.
+                                <strong>Remise à OVANIE Logistics confirmée</strong><br>
+                                Les produits de votre boutique ont été vérifiés, chargés et remis au livreur partenaire avec le code de remise.<br>
+                                Votre responsabilité de préparation/remise est terminée. OVANIE Logistics poursuit les autres collectes éventuelles puis la livraison au client.
+                            </div>
+                        </div>
+                    @elseif(filled($ovaniePickupHandoverCode))
+                        <div class="od-alert orange">
+                            <i data-lucide="key-round"></i>
+                            <div style="width:100%;">
+                                <strong>{{ filled($ovaniePickupVerifiedAt) ? 'Articles vérifiés · chargement en cours' : 'Livreur arrivé pour la collecte' }}</strong><br>
+                                Le livreur partenaire est présent au point de collecte. Vérifiez que tous les articles sont chargés avant de lui communiquer ce code.<br>
+                                <div style="margin-top:10px;padding:10px 14px;border:1px dashed #f59e0b;border-radius:10px;background:#fff7ed;display:inline-block;">
+                                    <span style="display:block;font-size:11px;font-weight:700;color:#9a5a00;text-transform:uppercase;letter-spacing:.04em;">Code de remise vendeur → livreur</span>
+                                    <strong style="display:block;font-size:28px;letter-spacing:8px;color:#7c3f00;margin-top:3px;">{{ $ovaniePickupHandoverCode }}</strong>
+                                </div><br>
+                                <small>Ne communiquez ce code qu’après la remise physique complète des produits.</small>
+                            </div>
+                        </div>
+                    @elseif($ovanieMissionReserved && !$allOvaniePreparationReady)
+                        <div class="od-alert blue">
+                            <i data-lucide="user-check"></i>
+                            <div>
+                                <strong>Mission réservée par un livreur partenaire</strong><br>
+                                {{ $ovanieReservedDriver?->name ?: 'Un livreur partenaire' }} a réservé la mission.<br>
+                                Statut : le livreur attend la fin de votre préparation. Il ne démarre pas la collecte tant que la commande n’est pas marquée prête.
+                            </div>
+                        </div>
+                    @elseif($ovanieMissionReserved && $allOvaniePreparationReady)
+                        <div class="od-alert green">
+                            <i data-lucide="bell-ring"></i>
+                            <div>
+                                <strong>Commande prête · livreur informé</strong><br>
+                                Votre préparation est terminée. Le livreur qui a réservé la mission a été informé automatiquement par OVANIE Logistics.<br>
+                                Statut : prête pour enlèvement. La collecte démarre uniquement lorsque toute la mission est prête.
                             </div>
                         </div>
                     @else
                         <div class="od-alert orange">
                             <i data-lucide="clock"></i>
                             <div>
-                                <strong>En attente d’enlèvement par OVANIE Logistics</strong><br>
-                                Votre commande est prête et visible par le service logistique.<br>
-                                Statut : En attente qu’un livreur OVANIE vienne la récupérer<br>
-                                Vous serez informé dès que la commande sera prise en charge.
+                                <strong>Commande prête · réservation du livreur en cours</strong><br>
+                                Votre commande est prête et OVANIE Logistics la propose automatiquement aux livreurs partenaires compatibles.<br>
+                                Aucune affectation manuelle n’est nécessaire de votre part.
                             </div>
                         </div>
                     @endif

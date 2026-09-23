@@ -4,6 +4,7 @@ import '../models/menu_data.dart';
 class MenuService {
   MenuService(this._api);
   final ApiClient _api;
+  ApiClient get api => _api;
 
   Future<MenuOverviewData> overview() async {
     return MenuOverviewData.fromJson(

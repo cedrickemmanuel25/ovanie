@@ -376,14 +376,43 @@ class ShipmentTrackingController extends Controller
         bool $forLogistics,
     ): array {
         $trackingKey = 'ovanie-' . sha1((string) ($group['key'] ?? $group['mission_number'] ?? $groupItems->pluck('id')->implode('-')));
+        $phase = (string) ($group['operational_phase'] ?? 'to_offer');
+        $assignmentStatuses = collect($group['assignment_statuses'] ?? [])->map(fn ($status) => strtolower((string) $status));
+        $arrivedAtCustomer = $assignmentStatuses->contains('arrived');
+
+        // Le client suit le parcours métier réel et non les statuts techniques
+        // de DeliveryAssignment. Cette traduction est commune Web + mobile.
+        $publicStatus = match ($phase) {
+            'waiting_acceptance' => 'waiting_driver',
+            'accepted_waiting_vendor' => 'driver_reserved',
+            'ready_for_pickup' => 'ready_for_pickup',
+            'collecting' => 'collecting',
+            'in_delivery' => $arrivedAtCustomer ? 'arrived' : 'in_transit',
+            'delivered' => 'delivered',
+            'incident' => 'problem',
+            default => 'preparing',
+        };
+
         $payload['tracking_key'] = $trackingKey;
-        $payload['delivery_status'] = $tracking->publicStatus($group['status'] ?? $payload['delivery_status'] ?? null);
+        $payload['delivery_status'] = $publicStatus;
+        $payload['tracking_phase'] = match ($phase) {
+            'waiting_acceptance' => 'waiting_assignment',
+            'accepted_waiting_vendor' => 'waiting_vendor',
+            'ready_for_pickup' => 'waiting_pickup',
+            'collecting' => 'to_pickup',
+            'in_delivery' => $arrivedAtCustomer ? 'arrived_customer' : 'to_customer',
+            'delivered' => 'completed',
+            'incident' => 'problem',
+            default => 'preparing',
+        };
+
         $payload['delivery'] = [
             'label' => $this->publicItemsLabel($groupItems),
             'item_count' => (int) $groupItems->sum(fn (OrderItem $item) => max(1, (int) $item->quantity)),
             'reference_count' => $groupItems->count(),
             'items' => $this->publicItemsPayload($groupItems),
         ];
+
         $hasActualAssignment = $groupItems->contains(fn (OrderItem $item) => (bool) $item->latestDeliveryAssignment);
         $payload['vehicle'] = array_merge($payload['vehicle'] ?? [], [
             'assigned' => $hasActualAssignment,
@@ -399,6 +428,58 @@ class ShipmentTrackingController extends Controller
             'total_weight_kg' => ($forLogistics || $hasActualAssignment) ? (float) ($group['weight'] ?? 0) : null,
             'total_volume_m3' => ($forLogistics || $hasActualAssignment) ? (float) ($group['volume'] ?? 0) : null,
         ]);
+
+        $payload['mission'] = [
+            'number' => (string) ($group['mission_number'] ?? ''),
+            'phase' => $phase,
+            'label' => (string) ($group['operational_label'] ?? 'Préparation en cours'),
+            'preparation_percent' => max(0, min(100, (int) ($group['preparation_percent'] ?? 0))),
+            'pickup_count' => max(0, (int) ($group['pickup_count'] ?? 0)),
+            'ready_pickup_count' => max(0, (int) ($group['ready_pickup_count'] ?? 0)),
+            'driver_reserved' => filled($group['driver_id'] ?? null),
+            'accepted_at' => optional($group['accepted_at'] ?? null)?->toIso8601String(),
+        ];
+
+        // Le client reçoit son code de sécurité dans ses notifications dès le
+        // départ. Dans l'écran de suivi, le code n'est révélé qu'après que le
+        // livreur a confirmé son arrivée chez le client.
+        $otpCodes = $groupItems->pluck('delivery_otp_code')->filter()->map(fn ($code) => trim((string) $code))->unique()->values();
+        $otpAvailable = $otpCodes->count() === 1;
+        $otpVisible = ! $forLogistics && $arrivedAtCustomer && $otpAvailable && $publicStatus !== 'delivered';
+        $payload['delivery_security'] = [
+            'otp_required' => in_array($publicStatus, ['in_transit', 'arrived'], true),
+            'otp_visible' => $otpVisible,
+            'otp_code' => $otpVisible ? (string) $otpCodes->first() : null,
+            'message' => match ($publicStatus) {
+                'arrived' => 'Vérifiez tous vos articles puis communiquez le code au livreur.',
+                'in_transit' => 'Gardez votre code confidentiel jusqu’à la remise complète des articles.',
+                'delivered' => 'Livraison confirmée avec votre code de sécurité.',
+                default => 'Le code de sécurité sera utilisé au moment de la remise au client.',
+            },
+        ];
+
+        // Fenêtre lisible pour le client. L'ETA en temps réel reste la source
+        // prioritaire lorsqu'une position GPS récente est disponible.
+        $etaIso = $payload['eta'] ?? null;
+        $payload['eta_window'] = null;
+        if (filled($etaIso)) {
+            try {
+                $eta = \Carbon\Carbon::parse($etaIso);
+                $spread = ($payload['eta_source'] ?? null) === 'live_route' ? 10 : 30;
+                $payload['eta_window'] = [
+                    'start' => $eta->copy()->subMinutes($spread)->toIso8601String(),
+                    'end' => $eta->copy()->addMinutes($spread)->toIso8601String(),
+                    'source' => $payload['eta_source'] ?? 'planned',
+                ];
+            } catch (\Throwable) {
+                $payload['eta_window'] = null;
+            }
+        }
+
+        if (isset($payload['driver']) && is_array($payload['driver'])) {
+            $payload['driver']['contact_allowed'] = in_array($payload['tracking_phase'], ['to_customer', 'arrived_customer'], true);
+        }
+
         $payload['sort_order'] = (int) $groupItems->min('id');
 
         if ($forLogistics) {
@@ -422,7 +503,7 @@ class ShipmentTrackingController extends Controller
     private function sharedClientTrackingMeta(Order $order): array
     {
         return [
-            'tracking_contract_version' => 3,
+            'tracking_contract_version' => 4,
             'poll_seconds' => max(5, min(60, (int) config('delivery.client_poll_seconds', 12))),
             'order' => [
                 'id' => (int) $order->id,
@@ -434,6 +515,10 @@ class ShipmentTrackingController extends Controller
                 'address' => (string) ($order->delivery_address ?: $order->address ?: ''),
                 'commune' => (string) ($order->delivery_commune ?: ''),
                 'quartier' => (string) ($order->delivery_quartier ?: ''),
+                'recipient_name' => (string) ($order->delivery_recipient_name ?: $order->customer_name ?: $order->client?->name ?: ''),
+                'phone' => (string) ($order->delivery_recipient_phone ?: $order->phone ?: $order->client?->phone ?: ''),
+                'delivery_min_date' => $order->delivery_min_date?->toDateString(),
+                'delivery_max_date' => $order->delivery_max_date?->toDateString(),
                 'created_at' => $order->created_at?->toIso8601String(),
                 'updated_at' => $order->updated_at?->toIso8601String(),
             ],

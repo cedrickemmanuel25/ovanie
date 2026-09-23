@@ -2,6 +2,12 @@
 @php
     [$tone, $text, $icon] = match($status) {
         'in_progress' => ['green', 'En cours', 'check-circle'],
+        'to_offer' => ['gray', 'À proposer', 'clock'],
+        'waiting_acceptance' => ['orange', 'En attente d’acceptation', 'clock'],
+        'accepted_waiting_vendor' => ['orange', 'Acceptée · préparation vendeur', 'clock'],
+        'ready_for_pickup' => ['green', 'Prête pour collecte', 'check-circle'],
+        'collecting' => ['blue', 'Collecte en cours', 'truck'],
+        'in_delivery' => ['blue', 'En livraison', 'truck'],
         'done', 'delivered' => ['green', 'Livrée', 'check-circle'],
         'finished' => ['gray', 'Terminée', 'check-circle'],
         'planned' => ['blue', 'Planifiée', null],
@@ -15,7 +21,7 @@
         'in_transit', 'picked_up' => ['blue', 'En transit', 'check-circle'],
         'current' => ['blue', 'En cours', 'check-circle'],
         'late' => ['orange', 'En retard', 'clock'],
-        'ready_for_pickup', 'to_assign' => ['orange', 'À affecter', null],
+        'to_assign' => ['orange', 'Ancienne affectation', null],
         'unassigned' => ['orange', 'À affecter', null],
         'incident', 'delivery_failed' => ['red', 'Incident ouvert', 'warning'],
         default => ['gray', 'En attente', 'check-circle'],

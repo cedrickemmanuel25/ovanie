@@ -266,8 +266,8 @@ class VendorProductController extends Controller
         $this->storeProductImages($product, $request);
 
         if ($request->expectsJson()) {
-            // Les routes API mobiles (routes/api_vendor_mobile.php) n'ont pas de
-            // middleware de session : flash() y ferait planter la création de
+            // Les routes API mobiles centralisées dans routes/api.php n'utilisent pas
+            // de middleware de session : flash() y ferait planter la création de
             // produit pour l'app mobile (RuntimeException "Session store not
             // set on request").
             if ($request->hasSession()) {

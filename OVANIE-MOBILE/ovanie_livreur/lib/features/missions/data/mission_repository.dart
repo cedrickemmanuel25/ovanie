@@ -63,12 +63,28 @@ class MissionRepository {
     return _missionFromResponse(response.data);
   }
 
-  Future<DriverMissionDetail> completePickup(
+  Future<DriverMissionDetail> updatePickupStep(
     String missionNumber,
-    String stopId,
-  ) async {
+    String stopId, {
+    required String action,
+    bool? itemsChecked,
+    bool? quantitiesChecked,
+    bool? conditionChecked,
+    bool? handoverConfirmed,
+    String? pickupCode,
+    String? notes,
+  }) async {
     final response = await ApiClient.dio.post<dynamic>(
       '/driver/missions/${Uri.encodeComponent(missionNumber)}/pickups/${Uri.encodeComponent(stopId)}/complete',
+      data: {
+        'action': action,
+        if (itemsChecked != null) 'items_checked': itemsChecked,
+        if (quantitiesChecked != null) 'quantities_checked': quantitiesChecked,
+        if (conditionChecked != null) 'condition_checked': conditionChecked,
+        if (handoverConfirmed != null) 'handover_confirmed': handoverConfirmed,
+        if ((pickupCode ?? '').trim().isNotEmpty) 'pickup_code': pickupCode!.trim(),
+        if ((notes ?? '').trim().isNotEmpty) 'notes': notes!.trim(),
+      },
     );
     ApiClient.ensureSuccess(response);
     return _missionFromResponse(response.data);
@@ -86,15 +102,20 @@ class MissionRepository {
     return _missionFromResponse(response.data);
   }
 
-  Future<void> verifyOtp(
+  Future<DriverMissionDetail> verifyOtp(
     String missionNumber,
-    String otpCode,
-  ) async {
+    String otpCode, {
+    required bool handoverConfirmed,
+  }) async {
     final response = await ApiClient.dio.post<dynamic>(
       '/driver/missions/${Uri.encodeComponent(missionNumber)}/verify-otp',
-      data: {'delivery_otp_code': otpCode},
+      data: {
+        'delivery_otp_code': otpCode,
+        'handover_confirmed': handoverConfirmed,
+      },
     );
     ApiClient.ensureSuccess(response);
+    return _missionFromResponse(response.data);
   }
 
   Future<void> recordLocation(

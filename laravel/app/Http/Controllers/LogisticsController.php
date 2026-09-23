@@ -19,6 +19,7 @@ use App\Services\DeliveryGroupCollectionService;
 use App\Services\OvanieShipmentConsolidationService;
 use App\Services\DeliveryScheduleService;
 use App\Services\LogisticsShipmentWorkflowService;
+use App\Services\LogisticsMissionMonitoringService;
 use App\Services\Geo\MissionRoutingService;
 use App\Services\Geo\RoutingService;
 use App\Services\ReturnRefundService;
@@ -36,8 +37,9 @@ use Illuminate\Validation\ValidationException;
 
 class LogisticsController extends Controller
 {
-    public function dashboard(Request $request, OvanieShipmentConsolidationService $consolidation)
+    public function dashboard(Request $request, OvanieShipmentConsolidationService $consolidation, LogisticsMissionMonitoringService $monitor)
     {
+        $monitor->run();
         $orders = $this->orderBase()
             ->whereHas('items', function ($itemQuery) {
                 $this->onlyOvanieItems($itemQuery)
@@ -56,24 +58,33 @@ class LogisticsController extends Controller
         $drivers = $this->storedDrivers($items);
         $stats = $this->stats();
         $shipmentGroups = $consolidation->groups($this->deliveryItems()->get());
-        $readyToAssignCount = $shipmentGroups
-            ->where('status', OrderWorkflowService::DELIVERY_READY_FOR_PICKUP)
-            ->count();
+        $missionCounts = $consolidation->counts($shipmentGroups);
 
-        $missionsToAssign = $shipmentGroups
-            ->whereIn('status', [OrderWorkflowService::DELIVERY_PENDING, OrderWorkflowService::DELIVERY_READY_FOR_PICKUP])
+        // Correction logistique 02 : l'espace Logistique supervise le flux
+        // automatique. Il ne présente plus des missions "à affecter" : une
+        // mission est soit à proposer automatiquement, en attente
+        // d'acceptation, réservée pendant la préparation vendeur, prête pour
+        // collecte, en collecte ou en livraison.
+        $missionsWaitingAcceptance = $shipmentGroups
+            ->filter(fn (array $group) => in_array((string) ($group['operational_phase'] ?? ''), ['to_offer', 'waiting_acceptance'], true))
+            ->take(8)
+            ->values();
+        $missionsAcceptedWaitingVendor = $shipmentGroups
+            ->where('operational_phase', 'accepted_waiting_vendor')
+            ->take(8)
+            ->values();
+        $missionsReadyForPickup = $shipmentGroups
+            ->where('operational_phase', 'ready_for_pickup')
             ->take(8)
             ->values();
         $missionsEnRoute = $shipmentGroups
-            ->whereIn('status', [OrderWorkflowService::DELIVERY_ASSIGNED, OrderWorkflowService::DELIVERY_PICKED_UP, OrderWorkflowService::DELIVERY_IN_TRANSIT])
+            ->filter(fn (array $group) => in_array((string) ($group['operational_phase'] ?? ''), ['collecting', 'in_delivery'], true))
             ->take(8)
             ->values();
-        $enRouteMissionsCount = $shipmentGroups
-            ->whereIn('status', [OrderWorkflowService::DELIVERY_ASSIGNED, OrderWorkflowService::DELIVERY_PICKED_UP, OrderWorkflowService::DELIVERY_IN_TRANSIT])->count();
-        $mapMissionGroups = $shipmentGroups->whereIn('status', [
-            OrderWorkflowService::DELIVERY_PENDING, OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
-            OrderWorkflowService::DELIVERY_ASSIGNED, OrderWorkflowService::DELIVERY_PICKED_UP, OrderWorkflowService::DELIVERY_IN_TRANSIT,
-        ])->values();
+        $enRouteMissionsCount = ($missionCounts['collecting'] ?? 0) + ($missionCounts['in_delivery'] ?? 0);
+        $mapMissionGroups = $shipmentGroups
+            ->reject(fn (array $group) => in_array((string) ($group['operational_phase'] ?? ''), ['delivered'], true))
+            ->values();
 
         $driversTotalCount = $this->realDriversQuery()->where('is_active', true)->count();
         $driversOnlineCount = $this->realDriversQuery()->gpsOnline()->count();
@@ -152,19 +163,15 @@ class LogisticsController extends Controller
 
         $sellerTrackingRows = app(\App\Services\SellerDeliverySupervisionService::class)->trackingRows();
 
-        // Nécessaire pour que le bouton « Affecter » du flux des missions de
-        // l'accueil ouvre la même boîte de dialogue d'affectation que la page
-        // Expéditions (même liste de livreurs réellement disponibles).
-        $activeDrivers = $this->realDriversQuery()->where('is_active', true)->orderBy('name')->get();
-
         return view('logistics.dashboard', compact(
             'orders',
             'items',
             'drivers',
-            'activeDrivers',
             'stats',
-            'readyToAssignCount',
-            'missionsToAssign',
+            'missionCounts',
+            'missionsWaitingAcceptance',
+            'missionsAcceptedWaitingVendor',
+            'missionsReadyForPickup',
             'missionsEnRoute',
             'enRouteMissionsCount',
             'mapMissionGroups',
@@ -238,8 +245,9 @@ class LogisticsController extends Controller
         ]);
     }
 
-    public function shipments(Request $request, OvanieShipmentConsolidationService $consolidation)
+    public function shipments(Request $request, OvanieShipmentConsolidationService $consolidation, LogisticsMissionMonitoringService $monitor)
     {
+        $monitor->run();
         $allGroups = $consolidation->groups($this->deliveryItems()->get());
         $counts = $consolidation->counts($allGroups);
         $groups = $consolidation->filter(
@@ -273,21 +281,6 @@ class LogisticsController extends Controller
 
         $vehicles = collect(OvanieShipmentConsolidationService::vehicleOptions());
 
-        $activeDrivers = $this->realDriversQuery()->where('is_active', true)->orderBy('name')->get();
-
-        // Le bouton « Affecter une mission » ne pré-sélectionne jamais une commande.
-        // On transmet toutes les missions réellement affectables afin que l'opérateur
-        // choisisse explicitement la commande avant de rechercher un livreur.
-        $assignmentMissions = $allGroups
-            ->filter(fn (array $group) => in_array((string) ($group['status'] ?? ''), [
-                OrderWorkflowService::DELIVERY_PENDING,
-                OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
-                OrderWorkflowService::DELIVERY_FAILED,
-            ], true))
-            ->map(fn (array $group) => \App\ViewModels\LogisticsOperationsData::mission($group))
-            ->values()
-            ->all();
-
         $incidentsOpenCount = $this->realIncidentsQuery()->whereNotIn('status', ['resolved', 'closed'])->count();
         $latestOpenIncident = $this->realIncidentsQuery()->with(['order', 'orderItem.latestDeliveryAssignment'])
             ->whereNotIn('status', ['resolved', 'closed'])
@@ -305,8 +298,6 @@ class LogisticsController extends Controller
             'counts' => $counts,
             'destinations' => $destinations,
             'vehicles' => $vehicles,
-            'activeDrivers' => $activeDrivers,
-            'assignmentMissions' => $assignmentMissions,
             'incidentsOpenCount' => $incidentsOpenCount,
             'latestOpenIncident' => $latestOpenIncident,
             'driversOnlineCount' => $driversOnlineCount,
@@ -319,10 +310,8 @@ class LogisticsController extends Controller
 
     public function assignments(Request $request, OvanieShipmentConsolidationService $consolidation)
     {
-        // L'entrée « Affectation » ne choisit plus silencieusement la première
-        // commande disponible. L'opérateur revient sur la liste des expéditions
-        // à affecter et sélectionne explicitement la mission.
-        return redirect()->route('logistics.shipments', ['status' => 'to_assign']);
+        return redirect()->route('logistics.shipments')
+            ->with('info', 'L’affectation manuelle est désactivée : les missions sont proposées automatiquement aux livreurs partenaires éligibles.');
     }
 
     public function shipmentDetails(
@@ -349,9 +338,13 @@ class LogisticsController extends Controller
             ->findForItem($order, (int) $item->id);
 
         $plannedAssignment = $group['items']
-            ->map(fn (OrderItem $groupItem) => $groupItem->latestDeliveryAssignment)
-            ->filter()
-            ->sortByDesc('id')
+            ->flatMap(fn (OrderItem $groupItem) => $groupItem->relationLoaded('deliveryAssignments')
+                ? $groupItem->deliveryAssignments
+                : $groupItem->deliveryAssignments()->with('driver')->get())
+            ->filter(fn ($assignment) => in_array((string) $assignment->status, [
+                'accepted', 'assigned', 'collecting', 'picked_up', 'in_transit', 'arrived', 'delivered',
+            ], true))
+            ->sortByDesc(fn ($assignment) => optional($assignment->accepted_at ?: $assignment->updated_at)->timestamp ?? 0)
             ->first();
 
         $estimatedAt = $schedule->estimatedFor($group['items']);
@@ -474,82 +467,10 @@ class LogisticsController extends Controller
         LogisticsShipmentWorkflowService $shipmentWorkflow,
         RoutingService $routing
     ) {
-        $this->ensureOvanieShipment($item);
-        $group = $consolidation->groupForItem($item);
-        $rep = $group['representative'];
-        $order = $group['order'];
-
-        $planningReferenceAt = now()->ceilMinute();
-        $minimumPickupAt = now()->addMinutes(5)->ceilMinute();
-        $estimatedAt = $schedule->estimatedFor($group['items']);
-
-        $firstStop = $group['pickup_stops']->first();
-        [$shopLat, $shopLng] = $this->verifiedShopCoordinates($firstStop['shop'] ?? null);
-        [$destLat, $destLng] = $this->verifiedDestinationCoordinates($order);
-
-        // ETA client = trajet routier réel entre le point de collecte de la
-        // boutique et l'adresse de livraison du client. Les coordonnées viennent
-        // des enregistrements réels de la boutique et de la commande.
-        $clientLeg = $this->assignmentRoadMetrics($routing, $shopLat, $shopLng, $destLat, $destLng);
-        $clientEtaMinutes = $clientLeg['duration_minutes'];
-
-        // La comparaison n'affiche que le type de véhicule réellement requis
-        // par la mission. Une mission Moto ne propose donc pas un Tricycle,
-        // Pickup ou Camion comme choix de substitution.
-        $drivers = $this->assignmentDriversForGroup(
-            $group,
-            $shipmentWorkflow,
-            $routing,
-            $shopLat,
-            $shopLng,
-            $clientLeg
-        );
-
-        $bestDriver = $drivers
-            ->filter(fn (DeliveryDriver $driver) => ! (bool) $driver->busy && $driver->eta_collecte_min !== null)
-            ->sortBy('eta_collecte_min')
-            ->first()
-            ?: $drivers->first(fn (DeliveryDriver $driver) => ! (bool) $driver->busy);
-        $bestDriverId = $bestDriver?->id;
-
-        // Les horaires initiaux sont des prévisions calculées à partir de la
-        // dernière position GPS réellement enregistrée du livreur et des durées
-        // routières réelles. Ils restent modifiables par l'opérateur.
-        $pickupValue = $bestDriver?->eta_collecte_min !== null
-            ? $planningReferenceAt->copy()->addMinutes((int) $bestDriver->eta_collecte_min)
-            : $minimumPickupAt->copy();
-        if ($pickupValue->lt($minimumPickupAt)) {
-            $pickupValue = $minimumPickupAt->copy();
-        }
-
-        $deliveryValue = $clientEtaMinutes !== null
-            ? $pickupValue->copy()->addMinutes((int) $clientEtaMinutes)
-            : ($estimatedAt && Carbon::parse($estimatedAt)->gt($pickupValue)
-                ? Carbon::parse($estimatedAt)
-                : null);
-
-        return view('logistics.shipments-assign', [
-            'group' => $group,
-            'rep' => $rep,
-            'order' => $order,
-            'drivers' => $drivers,
-            'bestDriverId' => $bestDriverId,
-            'hasRealCoordinates' => $shopLat !== null && $destLat !== null,
-            'minimumPickupValue' => $minimumPickupAt->format('Y-m-d\\TH:i'),
-            'pickupScheduledAt' => $pickupValue->format('Y-m-d\\TH:i'),
-            'deliveryScheduledAt' => $deliveryValue?->format('Y-m-d\\TH:i') ?? '',
-            'clientLegDistanceKm' => $clientLeg['distance_km'],
-            'clientLegEtaMinutes' => $clientEtaMinutes,
-            'clientLegProvider' => $clientLeg['provider'],
-            'planningReferenceAt' => $planningReferenceAt->toIso8601String(),
-        ]);
+        return redirect()->route('logistics.shipments.details', $item)
+            ->with('info', 'Planification manuelle désactivée : la mission est proposée automatiquement aux livreurs éligibles.');
     }
 
-    /**
-     * Retourne au modal d'affectation les données fraîches de la mission réelle
-     * et des vrais DeliveryDriver. Aucun client, produit, poids ou livreur n'est
-     * reconstruit côté navigateur.
-     */
     public function assignmentData(
         Request $request,
         OrderItem $item,
@@ -558,105 +479,9 @@ class LogisticsController extends Controller
         LogisticsShipmentWorkflowService $shipmentWorkflow,
         RoutingService $routing
     ) {
-        $this->ensureOvanieShipment($item);
-        abort_unless(
-            $this->deliveryItems()->whereKey($item->getKey())->exists(),
-            404,
-            'Cette commande n’est pas encore éligible aux opérations logistiques.'
-        );
-
-        $group = $consolidation->groupForItem($item);
-        $representative = $group['representative'];
-        $representative->loadMissing([
-            'order.client',
-            'order.items.product.shop',
-            'product.shop',
-            'shipment',
-            'latestDeliveryAssignment.driver',
-        ]);
-
-        $order = $group['order'];
-
-        if (! in_array((string) $group['status'], [
-            OrderWorkflowService::DELIVERY_PENDING,
-            OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
-            OrderWorkflowService::DELIVERY_FAILED,
-        ], true)) {
-            return response()->json([
-                'message' => 'Cette mission n’est plus disponible pour une nouvelle affectation.',
-            ], 409);
-        }
-
-        $minimumPickupAt = now()->addMinutes(5)->ceilMinute();
-        $estimatedAt = $schedule->estimatedFor($group['items']);
-        $pickupValue = $minimumPickupAt->copy();
-
-        $firstStop = $group['pickup_stops']->first();
-        [$shopLat, $shopLng] = $this->verifiedShopCoordinates($firstStop['shop'] ?? null);
-        [$destLat, $destLng] = $this->verifiedDestinationCoordinates($order);
-
-        $clientLeg = $this->assignmentRoadMetrics($routing, $shopLat, $shopLng, $destLat, $destLng);
-        $clientEtaMinutes = $clientLeg['duration_minutes'];
-        $deliveryValue = $estimatedAt && Carbon::parse($estimatedAt)->gt($pickupValue)
-            ? Carbon::parse($estimatedAt)
-            : $pickupValue->copy()->addMinutes($clientEtaMinutes ?: 60);
-
-        $drivers = $this->assignmentDriversForGroup(
-            $group,
-            $shipmentWorkflow,
-            $routing,
-            $shopLat,
-            $shopLng,
-            $clientLeg
-        )->map(function (DeliveryDriver $driver) {
-            $row = \App\ViewModels\LogisticsOperationsData::driver($driver);
-            $available = ! (bool) $driver->busy;
-            $row['available'] = $available;
-            $row['compatible'] = true;
-            $row['selectable'] = $available;
-            $row['vehicleReference'] = $this->driverAssignmentVehicleReference($driver);
-            $row['busyReason'] = $available ? null : ($driver->assignment_busy_reason ?: 'Indisponible');
-            $row['pickupDistanceKm'] = $driver->eta_collecte_distance_km;
-            $row['clientDistanceKm'] = $driver->eta_client_distance_km;
-            $row['pickupEtaSource'] = $driver->eta_collecte_source;
-            $row['clientEtaSource'] = $driver->eta_client_source;
-            $row['gpsRecordedAt'] = $driver->assignment_gps_recorded_at;
-            $row['zoneMatch'] = (bool) $driver->assignment_zone_match;
-            $row['pickupZone'] = $driver->assignment_pickup_zone;
-            $row['recommendation'] = $driver->assignment_recommendation;
-
-            return $row;
-        })->values();
-
-        $mission = \App\ViewModels\LogisticsOperationsData::mission($group);
-        $mission['destination'] = $this->orderDeliveryAddress($order);
-        $mission['destinationCommune'] = $order?->delivery_commune
-            ?: ($order?->delivery_zone ?: ($order?->delivery_city ?: 'À préciser'));
-        $mission['pickup'] = $group['shops']->pluck('name')->filter()->implode(', ') ?: 'Lieu à préciser';
-        $mission['pickupZone'] = $group['pickup_stops']
-            ->map(fn (array $stop) => $stop['shop']?->commune ?: $stop['shop']?->city)
-            ->filter()
-            ->unique()
-            ->implode(', ') ?: 'À préciser';
-        $mission['referencesCount'] = (int) $group['reference_count'];
-        $mission['preparationPercent'] = (int) $group['preparation_percent'];
-        $mission['assignUrl'] = route('logistics.shipments.assign', $representative);
-        $mission['detailsUrl'] = route('logistics.shipments.details', $representative);
-
         return response()->json([
-            'mission' => $mission,
-            'drivers' => $drivers,
-            'pickupScheduledAt' => $pickupValue->format('Y-m-d\\TH:i'),
-            'deliveryScheduledAt' => $deliveryValue->format('Y-m-d\\TH:i'),
-            'minimumPickupAt' => $minimumPickupAt->format('Y-m-d\\TH:i'),
-            'hasRealCoordinates' => $shopLat !== null && $destLat !== null,
-            'clientLeg' => [
-                'distanceKm' => $clientLeg['distance_km'],
-                'durationMinutes' => $clientEtaMinutes,
-                'provider' => $clientLeg['provider'],
-                'source' => $clientLeg['source'],
-            ],
-        ]);
+            'message' => 'L’affectation manuelle est désactivée. La mission est proposée automatiquement aux livreurs partenaires éligibles.',
+        ], 409);
     }
 
     public function tracking(Request $request, OvanieShipmentConsolidationService $consolidation)
@@ -1226,140 +1051,8 @@ class LogisticsController extends Controller
         DeliveryScheduleService $schedule,
         LogisticsShipmentWorkflowService $shipmentWorkflow
     ) {
-        $data = $request->validate([
-            'driver_id' => ['required', 'integer', Rule::exists('delivery_drivers', 'id')->where('is_active', true)->where('onboarding_status', DeliveryDriver::ONBOARDING_ACTIVE)],
-            'pickup_scheduled_at' => ['required', 'date'],
-            'estimated_delivery_at' => ['required', 'date'],
-            'vehicle_plate' => ['nullable', 'string', 'max:120'],
-            'note' => ['nullable', 'string', 'max:500'],
-            'notify_driver' => ['sometimes', 'boolean'],
-        ], [
-            'driver_id.required' => 'Sélectionnez un livreur.',
-            'driver_id.exists' => 'Le livreur sélectionné est indisponible ou désactivé.',
-            'pickup_scheduled_at.required' => 'Indiquez la date prévue de collecte.',
-            'pickup_scheduled_at.date' => 'La date de collecte est invalide.',
-            'estimated_delivery_at.required' => 'Indiquez la date prévue de livraison au client.',
-            'estimated_delivery_at.date' => 'La date de livraison est invalide.',
-        ]);
-
-        $pickupAt = Carbon::parse($data['pickup_scheduled_at'])->startOfMinute();
-        $estimatedAt = Carbon::parse($data['estimated_delivery_at'])->startOfMinute();
-
-        // datetime-local ne contient pas les secondes. Une collecte choisie dans
-        // la minute courante doit donc rester valide même si le formulaire est
-        // soumis quelques secondes plus tard.
-        if ($pickupAt->lt(now()->startOfMinute())) {
-            throw ValidationException::withMessages([
-                'pickup_scheduled_at' => 'L’heure de collecte est déjà passée. Choisissez l’heure actuelle ou une heure future.',
-            ]);
-        }
-
-        if ($estimatedAt->lte($pickupAt)) {
-            throw ValidationException::withMessages([
-                'estimated_delivery_at' => 'La livraison doit être prévue après le début des collectes.',
-            ]);
-        }
-
-        $this->ensureOvanieShipment($item);
-        abort_unless(
-            $this->deliveryItems()->whereKey($item->getKey())->exists(),
-            404,
-            'Cette commande n’est pas encore éligible aux opérations logistiques.'
-        );
-        $group = $consolidation->groupForItem($item);
-
-        if (! in_array((string) $group['status'], [
-            OrderWorkflowService::DELIVERY_PENDING,
-            OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
-            OrderWorkflowService::DELIVERY_FAILED,
-        ], true)) {
-            throw ValidationException::withMessages([
-                'driver_id' => 'Cette mission a changé de statut et ne peut plus recevoir une nouvelle affectation.',
-            ]);
-        }
-
-        $driver = $this->realDriversQuery()->findOrFail((int) $data['driver_id']);
-        $groupItemIds = $group['items']->pluck('id')->map(fn ($id) => (int) $id)->all();
-        $busyElsewhere = $driver->activeAssignments()
-            ->whereNotIn('order_item_id', $groupItemIds)
-            ->exists();
-        $driverStatus = mb_strtolower(trim((string) $driver->status));
-        $busyByStatus = in_array($driverStatus, ['en livraison', 'en mission'], true);
-
-        if (! $shipmentWorkflow->isDriverAvailable($driver) || $busyElsewhere || $busyByStatus) {
-            throw ValidationException::withMessages([
-                'driver_id' => 'Ce livreur n’est plus disponible. Actualisez le modal et choisissez un autre livreur.',
-            ]);
-        }
-
-        if (! $this->isDeliveryCommuneOpen(trim((string) ($group['order']?->delivery_commune ?? '')))) {
-            throw ValidationException::withMessages([
-                'driver_id' => 'La commune de livraison de cette mission a été fermée par la Logistique (commune ou zone désactivée). Aucun livreur ne peut y être affecté tant qu’elle n’est pas rouverte.',
-            ]);
-        }
-
-        if (! $shipmentWorkflow->driverMatchesRequiredVehicle($driver, (string) $group['vehicle_code'])) {
-            throw ValidationException::withMessages([
-                'driver_id' => 'Véhicule incompatible : choisissez un livreur disposant exactement du type de véhicule requis pour cette mission.',
-            ]);
-        }
-
-        $vehicleReference = $this->driverAssignmentVehicleReference($driver);
-        if ($vehicleReference === '') {
-            throw ValidationException::withMessages([
-                'driver_id' => 'Aucun véhicule réel n’est renseigné pour ce livreur. Complétez sa fiche avant l’affectation.',
-            ]);
-        }
-
-        $schedule->synchronizeMission(
-            $group['items'],
-            $driver->id,
-            $driver->name,
-            $driver->phone,
-            $vehicleReference,
-            $pickupAt,
-            $estimatedAt,
-            [
-                'mission_number' => $group['mission_number'],
-                'consolidated' => true,
-                'pickup_count' => $group['pickup_count'],
-                'vehicle_code' => $group['vehicle_code'],
-                'vehicle_label' => $group['vehicle_label'],
-                'operational_note' => $data['note'] ?? null,
-            ]
-        );
-
-        if ((int) $group['preparation_percent'] >= 100) {
-            DB::transaction(function () use ($group, $driver, $pickupAt, $data, $shipmentWorkflow) {
-                $workflow = app(OrderWorkflowService::class);
-
-                foreach ($group['items'] as $index => $groupItem) {
-                    if ($groupItem->delivery_status === OrderWorkflowService::DELIVERY_ASSIGNED) {
-                        continue;
-                    }
-
-                    $suppressNotification = $index > 0 || ! (bool) ($data['notify_driver'] ?? true);
-
-                    $assignment = $workflow->assignDriver($groupItem->fresh(), [
-                        'driver_id' => $driver->id,
-                        'pickup_scheduled_at' => $pickupAt,
-                        'delivery_address' => $group['address'],
-                        'meta' => [
-                            'mission_number' => $group['mission_number'],
-                            'consolidated' => true,
-                            'suppress_notifications' => $suppressNotification,
-                        ],
-                        'suppress_notifications' => $suppressNotification,
-                    ], auth()->user());
-
-                    $shipmentWorkflow->attachPricingAndNotify($assignment, $groupItem, $suppressNotification);
-                }
-            });
-
-            return back()->with('success', 'Livreur affecté. La date prévue est synchronisée avec l’espace client.');
-        }
-
-        return back()->with('success', 'Livreur planifié. La mission démarrera dès que tous les vendeurs auront terminé la préparation.');
+        return redirect()->route('logistics.shipments.details', $item)
+            ->with('info', 'Affectation manuelle désactivée : le premier livreur éligible qui accepte l’offre réserve automatiquement la mission.');
     }
 
     public function updateShipmentStatus(
@@ -1970,6 +1663,7 @@ class LogisticsController extends Controller
             'shipment',
             'latestDeliveryAssignment.driver.currentLocation',
             'latestDeliveryAssignment.latestLocation',
+            'deliveryAssignments.driver',
         ]))
             ->whereHas('order', fn ($order) => $this->operationalOrderScope($order))
             ->where(function ($statusQuery) {

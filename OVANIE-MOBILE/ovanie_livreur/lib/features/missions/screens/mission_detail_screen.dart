@@ -81,7 +81,7 @@ class _MissionDetailScreenState extends State<MissionDetailScreen> {
     try {
       await MissionRepository.instance.reject(widget.missionNumber, reason: reason);
       if (!mounted) return;
-      showMissionSnack(context, 'Mission refusée et renvoyée à OVANIE Logistics.');
+      showMissionSnack(context, 'Mission refusée. Elle reste disponible pour les autres livreurs éligibles.');
       Navigator.of(context).pop();
     } catch (error) {
       if (mounted) showMissionSnack(context, ApiClient.friendlyError(error), error: true);
@@ -102,7 +102,7 @@ class _MissionDetailScreenState extends State<MissionDetailScreen> {
             subtitle: mission == null
                 ? 'Mission'
                 : mission.isToAccept
-                    ? 'Mission à accepter'
+                    ? 'Mission à réserver'
                     : mission.isDelivered
                         ? 'Mission livrée'
                         : mission.statusLabel,
@@ -141,6 +141,14 @@ class _MissionDetailScreenState extends State<MissionDetailScreen> {
                     )
                   else if (mission != null) ...[
                     MissionOverviewBlock(mission: mission),
+                    if (mission.isToAccept) ...[
+                      const SizedBox(height: 12),
+                      const MissionTintMessage(
+                        text: 'Réserver cette mission confirme votre engagement. Vous ne partez pas immédiatement : OVANIE vous donnera le signal lorsque tous les vendeurs seront prêts.',
+                        warning: true,
+                        icon: Icons.lock_clock_rounded,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     if (mission.isToAccept && mission.netAmount > 0) ...[
                       _EarningsCard(netAmount: mission.netAmount),
@@ -191,7 +199,7 @@ class _DeliveryPreview extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const MissionTintMessage(
-            text: 'La mission pourra démarrer dès que tous les points sont prêts.',
+            text: 'Après réservation, la collecte restera verrouillée jusqu’à ce que tous les points vendeurs soient prêts.',
             icon: Icons.info_rounded,
           ),
         ],
@@ -229,7 +237,7 @@ class _EarningsCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Vous gagnerez',
+                  'Gain prévu',
                   style: TextStyle(
                     color: MissionPalette.slate,
                     fontSize: 12.5,
@@ -288,7 +296,7 @@ class _BottomActions extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: MissionPrimaryButton(
-                label: 'Accepter la mission',
+                label: 'Réserver la mission',
                 loading: busy,
                 onPressed: onAccept,
               ),

@@ -6,15 +6,19 @@ import '../../../core/network/api_client.dart';
 import '../data/support_repository.dart';
 
 class NewSupportTicketScreen extends StatefulWidget {
-  const NewSupportTicketScreen({super.key});
+  const NewSupportTicketScreen({super.key, this.initialCategory, this.contextType, this.contextId, this.initialSubject});
+  final String? initialCategory;
+  final String? contextType;
+  final int? contextId;
+  final String? initialSubject;
   @override
   State<NewSupportTicketScreen> createState() => _NewSupportTicketScreenState();
 }
 
 class _NewSupportTicketScreenState extends State<NewSupportTicketScreen> {
-  final _subject = TextEditingController();
+  late final _subject = TextEditingController(text: widget.initialSubject ?? '');
   final _description = TextEditingController();
-  String _category = 'general';
+  late String _category = widget.initialCategory ?? 'general';
   List<String> _attachments = const [];
   bool _busy = false;
 
@@ -46,6 +50,9 @@ class _NewSupportTicketScreenState extends State<NewSupportTicketScreen> {
         category: _category,
         subject: _subject.text,
         description: _description.text,
+        contexts: widget.contextType != null && widget.contextId != null
+            ? [{'type': widget.contextType!, 'id': widget.contextId!}]
+            : const [],
         attachmentPaths: _attachments,
       );
       if (!mounted) return;

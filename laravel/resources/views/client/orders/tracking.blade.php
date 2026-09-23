@@ -720,8 +720,8 @@
 
     function updateTimeline(status) {
         const steps = {
-            pending:[1,0,0,0], preparing:[1,0,0,0], ready_for_pickup:[1,0,0,0],
-            assigned:[1,1,0,0], picked_up:[1,1,1,0], in_transit:[1,1,1,0], in_delivery:[1,1,1,0],
+            pending:[1,0,0,0], preparing:[1,0,0,0], waiting_driver:[1,0,0,0], driver_reserved:[1,1,0,0], ready_for_pickup:[1,1,0,0],
+            assigned:[1,1,0,0], collecting:[1,1,1,0], picked_up:[1,1,1,0], in_transit:[1,1,1,0], in_delivery:[1,1,1,0], arrived:[1,1,1,0],
             late:[1,1,1,0], problem:[1,1,1,0], failed:[1,1,1,0], delivery_failed:[1,1,1,0],
             delivered:[1,1,1,1], completed:[1,1,1,1], returned:[1,1,1,1], not_required:[1,1,1,1],
         };
@@ -741,9 +741,10 @@
 
     function statusMeta(status) {
         const statuses = {
-            pending:{label:'Commande confirmée',cls:'pending'}, preparing:{label:'En préparation',cls:'pending'},
-            ready_for_pickup:{label:'Prête pour collecte',cls:'pending'}, assigned:{label:'Livreur affecté',cls:'in-transit'},
-            picked_up:{label:'Chargement terminé',cls:'in-transit'}, in_transit:{label:'En route vers vous',cls:'in-transit'},
+            pending:{label:'Commande confirmée',cls:'pending'}, preparing:{label:'Préparation vendeur',cls:'pending'},
+            waiting_driver:{label:'Recherche d’un livreur',cls:'pending'}, driver_reserved:{label:'Livreur réservé',cls:'in-transit'},
+            ready_for_pickup:{label:'Prête pour collecte',cls:'in-transit'}, assigned:{label:'Livreur réservé',cls:'in-transit'},
+            collecting:{label:'Collecte en cours',cls:'in-transit'}, picked_up:{label:'Chargement terminé',cls:'in-transit'}, in_transit:{label:'En route vers vous',cls:'in-transit'}, arrived:{label:'Livreur arrivé',cls:'in-transit'},
             in_delivery:{label:'En cours de livraison',cls:'in-transit'}, late:{label:'Livraison retardée',cls:'problem'},
             delivered:{label:'Livrée',cls:'delivered'}, completed:{label:'Livrée',cls:'delivered'},
             problem:{label:'Incident en traitement',cls:'problem'}, failed:{label:'Échec de livraison',cls:'problem'},
@@ -754,26 +755,35 @@
     }
 
     function etaMessage(phase, status) {
-        if (phase === 'waiting_assignment') return 'L’heure d’arrivée sera calculée après l’affectation du livreur.';
-        if (phase === 'waiting_start' || phase === 'to_pickup') return 'La collecte est en cours. Le suivi client commencera après le chargement.';
+        if (phase === 'waiting_assignment') return 'OVANIE recherche un livreur partenaire compatible.';
+        if (phase === 'waiting_vendor') return 'Un livreur a réservé la mission et attend la fin de préparation des vendeurs.';
+        if (phase === 'waiting_pickup') return 'Tous les vendeurs sont prêts. La collecte va pouvoir commencer.';
+        if (phase === 'waiting_start' || phase === 'to_pickup') return 'La collecte est en cours. Le suivi GPS client commencera après le départ vers votre adresse.';
+        if (phase === 'arrived_customer') return 'Votre livreur est arrivé. Vérifiez tous vos articles avant de communiquer votre code.';
         if (['picked_up','in_transit','in_delivery'].includes(status)) return 'Calcul de l’heure d’arrivée en cours.';
         return 'L’heure d’arrivée sera affichée dès sa confirmation.';
     }
     function routeQualityMessage(data) {
-        if (data.tracking_phase === 'waiting_assignment') return 'En attente de l’affectation logistique.';
-        if (data.tracking_phase === 'waiting_start' || data.tracking_phase === 'to_pickup') return 'Collecte masquée dans l’espace client.';
+        if (data.tracking_phase === 'waiting_assignment') return 'Recherche automatique d’un livreur en cours.';
+        if (data.tracking_phase === 'waiting_vendor') return 'Mission réservée · préparation vendeur en cours.';
+        if (data.tracking_phase === 'waiting_pickup') return 'Vendeurs prêts · collecte à démarrer.';
+        if (data.tracking_phase === 'waiting_start' || data.tracking_phase === 'to_pickup') return 'Collecte en cours · trajet vers les boutiques masqué au client.';
+        if (data.tracking_phase === 'arrived_customer') return 'Livreur arrivé à votre adresse.';
         if (['picked_up','in_transit','in_delivery'].includes(data.delivery_status)) return 'En attente d’une position GPS récente.';
         return 'Aucun trajet actif.';
     }
     function clientSignalLabel(data) {
         if (data.map_visible && data.signal_status === 'active') return 'Position en direct';
         if (data.map_visible) return 'Position récente';
-        if (data.tracking_phase === 'waiting_assignment') return 'Livreur non affecté';
+        if (data.tracking_phase === 'waiting_assignment') return 'Recherche d’un livreur';
+        if (data.tracking_phase === 'waiting_vendor') return 'Livreur réservé';
+        if (data.tracking_phase === 'waiting_pickup') return 'Prête pour collecte';
         if (data.tracking_phase === 'waiting_start' || data.tracking_phase === 'to_pickup') return 'Collecte en cours';
+        if (data.tracking_phase === 'arrived_customer') return 'Livreur arrivé';
         if (data.tracking_mode === 'manual') return 'Suivi par étapes';
         return 'Mise à jour en attente';
     }
-    function statusProgress(status){return({pending:10,preparing:18,ready_for_pickup:28,assigned:36,picked_up:52,in_transit:74,in_delivery:86,late:72,problem:68,delivered:100,completed:100}[status]||16)}
+    function statusProgress(status){return({pending:10,preparing:18,waiting_driver:24,driver_reserved:32,ready_for_pickup:40,assigned:32,collecting:52,picked_up:60,in_transit:78,in_delivery:86,arrived:94,late:72,problem:68,delivered:100,completed:100}[status]||16)}
     function providerLabel(provider){return({mapbox:'Mapbox Directions',osrm:'OSRM',tomtom:'TomTom Routing'}[String(provider||'').toLowerCase()]||'routier')}
     function vehicleLabel(code){return({moto:'Moto',tricycle:'Tricycle',pickup:'Pickup',camion_3t:'Camion 3T',truck_3t:'Camion 3T',camion_10t:'Camion 10T',truck_10t:'Camion 10T',special:'Transport spécialisé'}[String(code||'').toLowerCase()]||'Véhicule de livraison')}
     function vehicleMarkerCode(item){return item?.vehicle?.driver_vehicle||item?.vehicle?.vehicle_type||item?.vehicle?.vehicle_code||item?.vehicle?.vehicle_label||'vehicle'}

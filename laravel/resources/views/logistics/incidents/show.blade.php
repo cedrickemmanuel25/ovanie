@@ -377,6 +377,17 @@
                 </dl>
                 <button class="ops-button ops-button-primary" style="margin-top:10px">Enregistrer le traitement</button>
             </form>
+            @if($deliveryInterrupted && !in_array($incident->status, ['resolved','closed'], true))
+                <div class="incident-communication-note" style="margin-top:12px">
+                    La mission est interrompue. Utilisez « Reprendre la mission » uniquement après avoir vérifié que le livreur et la livraison peuvent réellement continuer.
+                </div>
+                <form method="post" action="{{ route('logistics.incidents.update', $incident) }}" style="margin-top:10px">
+                    @csrf
+                    @method('PATCH')
+                    <input type="hidden" name="incident_action" value="resume_mission">
+                    <button class="ops-button" type="submit">Reprendre la mission</button>
+                </form>
+            @endif
         </x-operations.panel>
 
         <x-operations.panel title="Assistance liée" icon="help">

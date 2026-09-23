@@ -21,7 +21,10 @@ use Tests\TestCase;
  * 1920px. En dessous d'environ 1500px de large, la ligne défile
  * horizontalement plutôt que de tout faire tenir (déjà le cas avant, via
  * overflow-x: auto) - remplir un grand écran sans rien couper sur un plus
- * petit n'est pas possible avec un seul jeu de liens de taille fixe.
+ * petit n'est pas possible avec un seul jeu de liens de taille fixe. La
+ * navigation a ensuite été allégée : Centre d’aide, FAQ et Qui sommes-nous
+ * restent accessibles ailleurs sur le site mais ne doivent plus encombrer la
+ * navbar ni coincer le bouton "Vendre sur OVANIE".
  */
 class NavbarCategoryLinksTest extends TestCase
 {
@@ -45,9 +48,9 @@ class NavbarCategoryLinksTest extends TestCase
         $this->assertStringContainsString('Garantie acheteur', $navHtml);
         $this->assertStringContainsString('Cartes cadeaux', $navHtml);
         $this->assertStringContainsString('Suivi de commande', $navHtml);
-        $this->assertStringContainsString('Centre d’aide', $navHtml);
-        $this->assertStringContainsString('FAQ', $navHtml);
-        $this->assertStringContainsString('Qui sommes-nous', $navHtml);
+        $this->assertStringNotContainsString('Centre d’aide', $navHtml);
+        $this->assertStringNotContainsString('>FAQ<', $navHtml);
+        $this->assertStringNotContainsString('Qui sommes-nous', $navHtml);
         $this->assertStringNotContainsString('Catégorie qui ne doit plus apparaître ici', $navHtml);
     }
 

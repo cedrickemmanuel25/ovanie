@@ -432,7 +432,12 @@ class _PaymentFailedView extends StatelessWidget {
         const SizedBox(height: 12),
         _HelpCard(
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const SupportCenterScreen()),
+            MaterialPageRoute<void>(builder: (_) => SupportCenterScreen(
+              initialCategory: 'payments',
+              contextType: 'order',
+              contextId: orderId,
+              initialSubject: 'Assistance paiement commande ${order?.orderNumber.isNotEmpty == true ? order!.orderNumber : '#$orderId'}',
+            )),
           ),
         ),
       ],

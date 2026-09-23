@@ -57,17 +57,25 @@
 
                 <div class="category-field is-wide">
                     <label for="image">Photo de la catégorie</label>
-                    @if($category->image_url)
-                        <div class="category-field-current-image">
-                            <img src="{{ $category->image_url }}" alt="{{ $category->name }}">
-                            <label class="category-field-checkbox">
-                                <input type="checkbox" name="remove_image" value="1">
-                                Supprimer la photo actuelle
-                            </label>
+                    <div id="categoryImagePreview" class="category-field-current-image {{ $category->image_url ? '' : 'is-empty' }}">
+                        <img
+                            id="categoryImagePreviewImage"
+                            src="{{ $category->image_url ?: asset('images/home/product-placeholder.svg') }}"
+                            alt="Aperçu de la photo de catégorie"
+                        >
+                        <div class="category-image-preview-copy">
+                            <strong id="categoryImagePreviewLabel">{{ $category->image_url ? 'Photo actuellement publiée' : 'Aucune photo administrée' }}</strong>
+                            <small>La nouvelle photo remplacera immédiatement ce visuel sur l’accueil, les pages catégorie et les API mobiles après enregistrement.</small>
+                            @if($category->image_url)
+                                <label class="category-field-checkbox">
+                                    <input id="removeCategoryImage" type="checkbox" name="remove_image" value="1">
+                                    Supprimer la photo actuelle
+                                </label>
+                            @endif
                         </div>
-                    @endif
-                    <input id="image" name="image" type="file" accept="image/*">
-                    <small>Utilisée sur la page d’accueil et partout où la catégorie est affichée avec une vignette. Format image, 4 Mo max.</small>
+                    </div>
+                    <input id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+                    <small>JPEG, PNG ou WEBP, 4 Mo max. La photo importée est prioritaire : aucune photo de produit ne sera utilisée à sa place.</small>
                     @error('image')<p class="category-field-error">{{ $message }}</p>@enderror
                 </div>
 
@@ -133,6 +141,7 @@
                 <li><span>✓</span> Filtres du catalogue et recherche</li>
                 <li><span>✓</span> Menus alimentés depuis la base</li>
                 <li><span>✓</span> Catalogue de références techniques</li>
+                <li><span>✓</span> Photo synchronisée sur l’accueil, les URL catégorie et les applications</li>
             </ul>
         </section>
 
@@ -142,3 +151,26 @@
         </section>
     </aside>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const input = document.getElementById('image');
+    const preview = document.getElementById('categoryImagePreview');
+    const previewImage = document.getElementById('categoryImagePreviewImage');
+    const label = document.getElementById('categoryImagePreviewLabel');
+    const remove = document.getElementById('removeCategoryImage');
+    if (!input || !preview || !previewImage || !label) return;
+
+    let objectUrl = null;
+    input.addEventListener('change', function () {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        objectUrl = URL.createObjectURL(file);
+        previewImage.src = objectUrl;
+        preview.classList.remove('is-empty');
+        label.textContent = 'Nouvelle photo sélectionnée';
+        if (remove) remove.checked = false;
+    });
+});
+</script>

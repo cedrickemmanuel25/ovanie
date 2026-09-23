@@ -69,9 +69,12 @@ class DriverMissionService
         ])->values();
 
         $missionStatus = strtolower(trim((string) ($missionSummary['status'] ?? '')));
-        $pickupLegActive = in_array($missionStatus, ['accepted', 'collecting'], true);
+        // Une mission acceptée mais pas encore démarrée reste une réservation :
+        // le suivi GPS vers le vendeur commence uniquement quand le livreur
+        // appuie réellement sur « Démarrer les collectes ».
+        $pickupLegActive = $missionStatus === 'collecting';
         $deliveryLegActive = in_array($missionStatus, ['picked_up', 'in_transit', 'arrived', 'delivered'], true);
-        $waitingLeg = in_array($missionStatus, ['assigned', 'planned'], true);
+        $waitingLeg = in_array($missionStatus, ['offered', 'assigned', 'planned', 'accepted'], true);
         // Mission terminée : le trajet ne dépend plus d'une position GPS
         // récente puisque la livraison a déjà eu lieu, on rejoue simplement
         // le parcours collectes -> client pour l'écran d'historique.
@@ -203,12 +206,11 @@ class DriverMissionService
             ]);
         }
 
-        $latestIncident = $missionStatus === 'incident'
-            ? DeliveryIncident::query()
-                ->whereIn('order_item_id', $latest->pluck('order_item_id')->filter()->all())
-                ->latest('occurred_at')
-                ->first()
-            : null;
+        $latestIncident = DeliveryIncident::query()
+            ->whereIn('order_item_id', $latest->pluck('order_item_id')->filter()->all())
+            ->whereNotIn('status', ['resolved', 'closed'])
+            ->latest('occurred_at')
+            ->first();
 
         return array_merge($missionSummary, [
             'assignments' => $latest,
@@ -231,68 +233,127 @@ class DriverMissionService
         $assignments = $this->assignments($driver, $missionNumber);
         abort_if($assignments->isEmpty(), 404);
 
-        foreach ($this->latestPerItem($assignments) as $assignment) {
-            if ($assignment->status === 'offered') {
-                $this->acceptOffer($driver, $assignment);
-                continue;
-            }
+        $latest = $this->latestPerItem($assignments);
+        $representative = $latest->first()?->orderItem;
+        $group = $representative ? $this->consolidation->groupForItem($representative) : [];
+        $itemIds = collect($group['items'] ?? [])
+            ->pluck('id')
+            ->filter()
+            ->unique()
+            ->values();
 
-            $assignment->forceFill([
-                'status' => 'accepted',
-                'accepted_at' => $assignment->accepted_at ?: now(),
-                'rejected_at' => null,
-                'rejection_reason' => null,
-            ])->save();
+        if ($itemIds->isEmpty()) {
+            $itemIds = $latest->pluck('order_item_id')->filter()->unique()->values();
         }
-    }
 
-    /**
-     * Fait gagner la course au livreur qui accepte en premier : verrouille le
-     * colis, vérifie que personne ne l'a déjà remportée entretemps, fait
-     * expirer les offres des autres livreurs candidats, puis affecte
-     * réellement le colis (même transition que l'attribution manuelle par la
-     * Logistique). Voir LogisticsShipmentWorkflowService::broadcastToEligibleDrivers.
-     */
-    private function acceptOffer(DeliveryDriver $driver, DeliveryAssignment $assignment): void
-    {
-        DB::transaction(function () use ($driver, $assignment) {
-            $lockedItem = OrderItem::query()
-                ->whereKey($assignment->order_item_id)
+        if ($itemIds->isEmpty()) {
+            throw ValidationException::withMessages([
+                'mission' => 'Cette mission ne contient aucun article réservable.',
+            ]);
+        }
+
+        DB::transaction(function () use ($driver, $missionNumber, $itemIds) {
+            $items = OrderItem::query()
+                ->whereIn('id', $itemIds->all())
+                ->orderBy('id')
                 ->lockForUpdate()
-                ->firstOrFail();
+                ->get();
 
-            if ($lockedItem->delivery_status !== OrderWorkflowService::DELIVERY_READY_FOR_PICKUP) {
-                $assignment->forceFill(['status' => 'offer_expired'])->save();
-
+            if ($items->count() !== $itemIds->count()) {
                 throw ValidationException::withMessages([
-                    'mission' => 'Cette course a déjà été acceptée par un autre livreur.',
+                    'mission' => 'Cette mission n’est plus disponible.',
                 ]);
             }
 
+            $allowedDeliveryStatuses = [
+                OrderWorkflowService::DELIVERY_PENDING,
+                OrderWorkflowService::DELIVERY_PREPARING,
+                OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
+                OrderWorkflowService::DELIVERY_ASSIGNED,
+            ];
+
+            if ($items->contains(fn (OrderItem $item) => ! in_array($item->delivery_status, $allowedDeliveryStatuses, true))) {
+                throw ValidationException::withMessages([
+                    'mission' => 'Cette mission n’est plus disponible.',
+                ]);
+            }
+
+            // Réservation atomique de toute la mission consolidée : un autre
+            // livreur ne peut pas gagner une autre ligne de la même mission
+            // pendant que cette acceptation est en cours.
+            $winnerStatuses = [
+                'accepted', 'assigned', 'collecting', 'picked_up',
+                'in_transit', 'arrived', 'delivered',
+            ];
+
+            $reservedByAnotherDriver = DeliveryAssignment::query()
+                ->whereIn('order_item_id', $itemIds->all())
+                ->where('driver_id', '!=', $driver->id)
+                ->whereIn('status', $winnerStatuses)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->first() !== null;
+
+            if ($reservedByAnotherDriver) {
+                DeliveryAssignment::query()
+                    ->where('driver_id', $driver->id)
+                    ->whereIn('order_item_id', $itemIds->all())
+                    ->where('status', 'offered')
+                    ->update(['status' => 'offer_expired']);
+
+                throw ValidationException::withMessages([
+                    'mission' => 'Cette mission a déjà été réservée par un autre livreur.',
+                ]);
+            }
+
+            $driverOffers = DeliveryAssignment::query()
+                ->where('driver_id', $driver->id)
+                ->whereIn('order_item_id', $itemIds->all())
+                ->where(function ($query) use ($missionNumber) {
+                    $query->where('mission_number', $missionNumber)
+                        ->orWhere('meta->mission_number', $missionNumber)
+                        ->orWhereNull('mission_number');
+                })
+                ->whereIn('status', ['offered', 'assigned', 'planned', 'accepted'])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($driverOffers->isEmpty()
+                || $driverOffers->pluck('order_item_id')->filter()->unique()->count() !== $itemIds->count()) {
+                throw ValidationException::withMessages([
+                    'mission' => 'Cette offre n’est pas complète ou n’est plus disponible pour votre compte. Actualisez vos missions.',
+                ]);
+            }
+
+            // Toutes les offres concurrentes de toutes les lignes expirent en
+            // une seule transaction. Le premier livreur validé réserve donc la
+            // mission complète et pas seulement un produit.
             DeliveryAssignment::query()
-                ->where('order_item_id', $lockedItem->id)
+                ->whereIn('order_item_id', $itemIds->all())
+                ->where('driver_id', '!=', $driver->id)
                 ->where('status', 'offered')
-                ->where('id', '!=', $assignment->id)
                 ->update(['status' => 'offer_expired']);
 
-            $assignment->forceFill([
-                'status' => 'accepted',
-                'accepted_at' => now(),
-                'rejected_at' => null,
-                'rejection_reason' => null,
-            ])->save();
+            foreach ($driverOffers as $offer) {
+                $meta = is_array($offer->meta) ? $offer->meta : [];
+                $meta['mission_number'] = $missionNumber;
+                $meta['reservation_state'] = 'reserved_waiting_vendor';
+                $meta['reserved_at'] = now()->toIso8601String();
 
-            $this->workflow->setDeliveryStatus(
-                $lockedItem,
-                OrderWorkflowService::DELIVERY_ASSIGNED,
-                null,
-                'logistics',
-                'Course acceptée par ' . $driver->name . '.',
-                [
-                    'driver_name' => $driver->name,
-                    'driver_phone' => $driver->phone,
-                ]
-            );
+                $offer->forceFill([
+                    'mission_number' => $missionNumber,
+                    'status' => 'accepted',
+                    'accepted_at' => $offer->accepted_at ?: now(),
+                    'rejected_at' => null,
+                    'rejection_reason' => null,
+                    'meta' => $meta,
+                ])->save();
+            }
+
+            // Accepter = réserver. Aucun article n'est marqué "assigned" ici.
+            // Le statut physique de livraison avance uniquement quand le
+            // livreur démarre réellement les collectes après préparation 100 %.
         });
     }
 
@@ -316,7 +377,13 @@ class DriverMissionService
     {
         $detail = $this->detail($driver, $missionNumber);
 
-        if (($detail['preparation_percent'] ?? 0) < 100) {
+        if (($detail['status'] ?? null) !== 'accepted') {
+            throw ValidationException::withMessages([
+                'mission' => 'Cette mission doit d’abord être réservée avant de démarrer les collectes.',
+            ]);
+        }
+
+        if (! ($detail['can_start'] ?? false)) {
             throw ValidationException::withMessages([
                 'mission' => 'La mission ne peut pas démarrer tant que tous les points de collecte ne sont pas prêts.',
             ]);
@@ -356,13 +423,18 @@ class DriverMissionService
         });
     }
 
-    public function completePickup(DeliveryDriver $driver, string $missionNumber, string $stopId): void
-    {
+    public function completePickup(
+        DeliveryDriver $driver,
+        string $missionNumber,
+        string $stopId,
+        string $action,
+        array $payload = []
+    ): void {
         $detail = $this->detail($driver, $missionNumber);
 
         if (($detail['status'] ?? null) !== 'collecting') {
             throw ValidationException::withMessages([
-                'pickup' => 'Les collectes ne peuvent être confirmées que lorsqu’une mission est en cours de collecte.',
+                'pickup' => 'Les étapes de collecte ne sont disponibles que lorsqu’une mission est en cours de collecte.',
             ]);
         }
 
@@ -375,8 +447,7 @@ class DriverMissionService
 
         $assignmentsByItem = $detail['assignments']->keyBy('order_item_id');
 
-        // Le parcours mobile impose l'ordre affiché afin d'éviter qu'un point
-        // soit marqué terminé alors qu'une collecte précédente ne l'est pas.
+        // Le livreur suit les points dans l'ordre calculé par OVANIE Logistics.
         for ($index = 0; $index < $targetIndex; $index++) {
             $previous = $stops->get($index);
             if (is_array($previous) && ! $this->pickupStopCompleted($previous, $assignmentsByItem)) {
@@ -392,26 +463,139 @@ class DriverMissionService
             throw ValidationException::withMessages(['pickup' => 'Aucun article n’est rattaché à ce point de collecte.']);
         }
 
-        DB::transaction(function () use ($items, $assignmentsByItem, $stopId) {
-            foreach ($items as $item) {
-                $assignment = $assignmentsByItem->get($item->id);
-                if (! $assignment) {
-                    continue;
-                }
+        $assignmentRows = $items
+            ->map(fn ($item) => $assignmentsByItem->get($item->id))
+            ->filter()
+            ->values();
 
+        if ($assignmentRows->count() !== $items->count()) {
+            throw ValidationException::withMessages([
+                'pickup' => 'La mission n’est pas complètement rattachée à ce point de collecte. Actualisez la mission avant de continuer.',
+            ]);
+        }
+
+        $wasArrived = $assignmentRows->every(fn ($assignment) => filled(data_get($assignment->meta, 'pickup_arrived_at')));
+        $wasVerified = $assignmentRows->every(fn ($assignment) => filled(data_get($assignment->meta, 'pickup_verified_at')));
+        $wasCompleted = $assignmentRows->every(fn ($assignment) => filled(data_get($assignment->meta, 'pickup_completed_at')));
+
+        if ($wasCompleted) {
+            return;
+        }
+
+        if ($action === 'verified') {
+            if (! $wasArrived) {
+                throw ValidationException::withMessages([
+                    'pickup' => 'Confirmez d’abord votre arrivée chez le vendeur.',
+                ]);
+            }
+
+            foreach (['items_checked', 'quantities_checked', 'condition_checked'] as $field) {
+                if (! filter_var($payload[$field] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                    throw ValidationException::withMessages([
+                        $field => 'Toutes les vérifications doivent être confirmées avant le chargement.',
+                    ]);
+                }
+            }
+        }
+
+        if ($action === 'loaded') {
+            if (! $wasVerified) {
+                throw ValidationException::withMessages([
+                    'pickup' => 'Vérifiez d’abord les articles, les quantités et leur état avant de confirmer le chargement.',
+                ]);
+            }
+
+            if (! filter_var($payload['handover_confirmed'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                throw ValidationException::withMessages([
+                    'handover_confirmed' => 'Confirmez que le vendeur vous a effectivement remis les articles.',
+                ]);
+            }
+
+            $expectedCodes = $assignmentRows
+                ->map(fn ($assignment) => (string) data_get($assignment->meta, 'pickup_handover_code'))
+                ->filter()
+                ->unique()
+                ->values();
+            $enteredCode = trim((string) ($payload['pickup_code'] ?? ''));
+
+            if ($expectedCodes->count() !== 1 || $enteredCode === '' || ! hash_equals((string) $expectedCodes->first(), $enteredCode)) {
+                throw ValidationException::withMessages([
+                    'pickup_code' => 'Le code de remise est incorrect. Demandez au vendeur le code affiché dans son espace OVANIE.',
+                ]);
+            }
+        }
+
+        $handoverCode = $assignmentRows
+            ->map(fn ($assignment) => (string) data_get($assignment->meta, 'pickup_handover_code'))
+            ->filter()
+            ->first();
+        if ($action === 'arrived' && ! filled($handoverCode)) {
+            $handoverCode = (string) random_int(100000, 999999);
+        }
+
+        DB::transaction(function () use ($assignmentRows, $stopId, $action, $payload, $handoverCode) {
+            foreach ($assignmentRows as $assignment) {
                 $meta = is_array($assignment->meta) ? $assignment->meta : [];
-                if (filled(data_get($meta, 'pickup_completed_at'))) {
-                    continue;
+                $meta['pickup_stop_id'] = (string) $stopId;
+
+                if ($action === 'arrived') {
+                    $meta['pickup_arrived_at'] = $meta['pickup_arrived_at'] ?? now()->toIso8601String();
+                    $meta['pickup_handover_code'] = $meta['pickup_handover_code'] ?? $handoverCode;
                 }
 
-                $meta['pickup_stop_id'] = (string) $stopId;
-                $meta['pickup_completed_at'] = now()->toIso8601String();
+                if ($action === 'verified') {
+                    $meta['pickup_verified_at'] = $meta['pickup_verified_at'] ?? now()->toIso8601String();
+                    $meta['pickup_items_checked'] = true;
+                    $meta['pickup_quantities_checked'] = true;
+                    $meta['pickup_condition_checked'] = true;
+                    if (filled($payload['notes'] ?? null)) {
+                        $meta['pickup_verification_notes'] = trim((string) $payload['notes']);
+                    }
+                }
+
+                if ($action === 'loaded') {
+                    $meta['pickup_loaded_at'] = $meta['pickup_loaded_at'] ?? now()->toIso8601String();
+                    $meta['vendor_handover_confirmed_at'] = $meta['vendor_handover_confirmed_at'] ?? now()->toIso8601String();
+                    $meta['pickup_completed_at'] = $meta['pickup_completed_at'] ?? now()->toIso8601String();
+                    if (filled($payload['notes'] ?? null)) {
+                        $meta['pickup_handover_notes'] = trim((string) $payload['notes']);
+                    }
+                }
+
                 $assignment->forceFill([
                     'meta' => $meta,
                     'last_manual_status_at' => now(),
                 ])->save();
             }
         });
+
+        $shop = data_get($target, 'shop');
+        $vendor = $shop?->user;
+        $order = $items->first()?->order;
+        $orderNumber = $order?->order_number ?: ($order?->id ? 'Commande #' . $order->id : 'la commande');
+        $vendorUrl = $order?->id ? route('vendor.orders.show', $order->id) : null;
+
+        if ($action === 'arrived' && ! $wasArrived && $vendor) {
+            $this->notifications->send(
+                $vendor,
+                'deliveries',
+                'Livreur arrivé pour la collecte',
+                "Le livreur partenaire {$driver->name} est arrivé pour récupérer {$orderNumber}. Vérifiez le chargement puis communiquez le code de remise uniquement lorsque les articles lui ont été remis.",
+                ['order_id' => $order?->id, 'url' => $vendorUrl],
+                ['in_app', 'push']
+            );
+        }
+
+        if ($action === 'loaded' && ! $wasCompleted && $vendor) {
+            $this->notifications->send(
+                $vendor,
+                'deliveries',
+                'Remise à OVANIE Logistics confirmée',
+                "La remise de {$orderNumber} au livreur partenaire a été confirmée. OVANIE Logistics prend maintenant en charge la suite de la livraison.",
+                ['order_id' => $order?->id, 'url' => $vendorUrl],
+                ['in_app', 'push']
+            );
+        }
     }
 
     public function updateStage(DeliveryDriver $driver, string $missionNumber, string $stage): void
@@ -431,6 +615,22 @@ class DriverMissionService
                     ? "L’étape attendue est « {$this->statusLabel($next === 'loaded' ? 'picked_up' : $next)} »."
                     : 'Aucune transition n’est disponible pour l’état actuel de la mission.',
             ]);
+        }
+
+        // Sécurité serveur : l'application ne peut pas faire passer une mission
+        // de collecte à chargée tant que chaque vendeur n'a pas réellement
+        // terminé sa remise (arrivée + vérification + code de remise).
+        if ($stage === 'loaded') {
+            $assignmentsByItem = $detail['assignments']->keyBy('order_item_id');
+            $stops = collect($detail['pickup_stops'] ?? []);
+            $allStopsCompleted = $stops->isNotEmpty()
+                && $stops->every(fn (array $stop) => $this->pickupStopCompleted($stop, $assignmentsByItem));
+
+            if (! $allStopsCompleted) {
+                throw ValidationException::withMessages([
+                    'stage' => 'Tous les points vendeurs doivent être collectés et confirmés avant de partir vers le client.',
+                ]);
+            }
         }
 
         DB::transaction(function () use ($detail, $driver, $stage) {
@@ -485,15 +685,32 @@ class DriverMissionService
             };
 
             $detail['assignments']->each(function (DeliveryAssignment $assignment) use ($assignmentStatus, $stage) {
+                $meta = is_array($assignment->meta) ? $assignment->meta : [];
+
+                if ($stage === 'loaded') {
+                    $meta['all_pickups_completed_at'] = $meta['all_pickups_completed_at'] ?? now()->toIso8601String();
+                }
+                if ($stage === 'in_transit') {
+                    $meta['delivery_departed_at'] = $meta['delivery_departed_at'] ?? now()->toIso8601String();
+                }
+                if ($stage === 'arrived') {
+                    $meta['customer_arrived_at'] = $meta['customer_arrived_at'] ?? now()->toIso8601String();
+                }
+
                 $assignment->forceFill(array_filter([
                     'status' => $assignmentStatus,
                     'started_at' => $assignment->started_at ?: now(),
                     'picked_up_at' => $stage === 'loaded' ? ($assignment->picked_up_at ?: now()) : null,
                     'arrived_at' => $stage === 'arrived' ? ($assignment->arrived_at ?: now()) : null,
+                    'meta' => $meta,
                 ], fn ($value) => $value !== null))->save();
             });
 
-            $driver->forceFill(['status' => 'En livraison', 'is_online' => true])->save();
+            $driver->forceFill([
+                'status' => 'En livraison',
+                'is_online' => true,
+                'last_seen_at' => now(),
+            ])->save();
         });
 
         $first = $detail['items']->first();
@@ -510,8 +727,17 @@ class DriverMissionService
                 $first->refresh(),
                 'in_transit',
                 'Livreur en route',
-                'Votre livraison est en route. Consultez votre espace client pour suivre son avancement.',
+                'Votre livraison est en route. Votre code de confirmation a été généré : ne le communiquez qu’après réception complète de tous les articles.',
                 'Votre livraison OVANIE est en route.'
+            );
+        }
+        if ($first && $stage === 'arrived') {
+            $this->deliveryNotifications->notifyGroup(
+                $first->refresh(),
+                'arrived',
+                'Votre livreur est arrivé',
+                'Le livreur partenaire OVANIE est arrivé à votre adresse. Vérifiez la remise complète des articles puis communiquez votre code à 6 chiffres.',
+                'Votre livreur OVANIE est arrivé.'
             );
         }
     }
@@ -722,9 +948,33 @@ class DriverMissionService
                 ],
             ]);
 
-            $detail['assignments']->each(fn (DeliveryAssignment $assignment) =>
-                $assignment->forceFill(['status' => 'incident'])->save()
-            );
+            // Un retard simple ne doit pas immobiliser la mission. Seuls les
+            // incidents réellement bloquants/reprogrammés basculent les
+            // affectations en statut `incident`. On conserve le statut
+            // précédent dans les métadonnées pour permettre une reprise sûre.
+            $previousAssignmentStatuses = [];
+            foreach ($detail['assignments'] as $assignment) {
+                $previousAssignmentStatuses[(string) $assignment->id] = (string) $assignment->status;
+                $assignmentMeta = is_array($assignment->meta) ? $assignment->meta : [];
+                $assignmentMeta['active_incident_id'] = $incident->id;
+                $assignmentMeta['incident_impact_level'] = $impactLevel;
+                $assignmentMeta['status_before_incident'] = (string) $assignment->status;
+
+                $assignment->forceFill([
+                    'status' => $deliveryInterrupted ? 'incident' : $assignment->status,
+                    'meta' => $assignmentMeta,
+                ])->save();
+            }
+
+            $incidentMeta = is_array($incident->meta) ? $incident->meta : [];
+            $incidentMeta['assignment_statuses_before_incident'] = $previousAssignmentStatuses;
+            $incidentMeta['item_statuses_before_incident'] = collect($detail['items'] ?? [])->mapWithKeys(
+                fn ($missionItem) => [(string) $missionItem->id => (string) $missionItem->delivery_status]
+            )->all();
+            $incidentMeta['mission_item_ids'] = collect($detail['items'] ?? [])->pluck('id')->filter()->values()->all();
+            $incidentMeta['mission_status_before_incident'] = (string) ($detail['status'] ?? '');
+            $incidentMeta['mission_phase'] = (string) ($detail['tracking_phase'] ?? '');
+            $incident->forceFill(['meta' => $incidentMeta])->save();
 
             if ($deliveryInterrupted) {
                 foreach ($detail['items'] as $missionItem) {
@@ -763,13 +1013,40 @@ class DriverMissionService
         }
     }
 
-    public function verifyOtp(DeliveryDriver $driver, string $missionNumber, string $otp): void
-    {
+    public function verifyOtp(
+        DeliveryDriver $driver,
+        string $missionNumber,
+        string $otp,
+        bool $handoverConfirmed = false
+    ): void {
         $detail = $this->detail($driver, $missionNumber);
+
+        if (($detail['status'] ?? null) !== 'arrived') {
+            throw ValidationException::withMessages([
+                'delivery_otp_code' => 'Confirmez d’abord votre arrivée chez le client avant de valider la livraison.',
+            ]);
+        }
+
+        if (! $handoverConfirmed) {
+            throw ValidationException::withMessages([
+                'handover_confirmed' => 'Confirmez que tous les articles ont été remis au client avant de saisir son code.',
+            ]);
+        }
+
         $codes = $detail['items']->pluck('delivery_otp_code')->filter()->unique()->values();
 
         if ($codes->count() !== 1 || ! hash_equals((string) $codes->first(), $otp)) {
-            throw ValidationException::withMessages(['delivery_otp_code' => 'Code OTP invalide.']);
+            // Les tentatives sont conservées dans les métadonnées existantes :
+            // aucune migration n'est nécessaire et l'équipe Logistique peut
+            // diagnostiquer un blocage sans connaître le code du client.
+            $detail['assignments']->each(function (DeliveryAssignment $assignment) {
+                $meta = is_array($assignment->meta) ? $assignment->meta : [];
+                $meta['delivery_otp_failed_attempts'] = ((int) ($meta['delivery_otp_failed_attempts'] ?? 0)) + 1;
+                $meta['last_delivery_otp_failed_at'] = now()->toIso8601String();
+                $assignment->forceFill(['meta' => $meta])->save();
+            });
+
+            throw ValidationException::withMessages(['delivery_otp_code' => 'Code client incorrect. Vérifiez les 6 chiffres avec le client.']);
         }
 
         DB::transaction(function () use ($detail, $driver) {
@@ -780,7 +1057,7 @@ class DriverMissionService
                         OrderWorkflowService::DELIVERY_DELIVERED,
                         null,
                         'logistics',
-                        'Livraison confirmée par OTP client.',
+                        'Livraison remise au client et confirmée par OTP.',
                         [
                             'delivery_otp_verified_at' => now(),
                             'suppress_notifications' => true,
@@ -789,16 +1066,25 @@ class DriverMissionService
                 }
             }
 
-            $detail['assignments']->each(fn (DeliveryAssignment $assignment) =>
+            $detail['assignments']->each(function (DeliveryAssignment $assignment) {
+                $meta = is_array($assignment->meta) ? $assignment->meta : [];
+                $meta['customer_handover_confirmed_at'] = $meta['customer_handover_confirmed_at'] ?? now()->toIso8601String();
+                $meta['delivery_otp_verified_at'] = $meta['delivery_otp_verified_at'] ?? now()->toIso8601String();
+                $meta['delivery_completed_at'] = $meta['delivery_completed_at'] ?? now()->toIso8601String();
+
                 $assignment->forceFill([
                     'status' => 'delivered',
-                    'delivered_at' => now(),
-                ])->save()
-            );
+                    'delivered_at' => $assignment->delivered_at ?: now(),
+                    'meta' => $meta,
+                ])->save();
+            });
 
+            // Le partenaire redevient immédiatement disponible pour une autre
+            // mission, mais reste en ligne tant que l'application est ouverte.
             $driver->forceFill([
                 'status' => 'Disponible',
-                'is_online' => false,
+                'is_online' => true,
+                'last_seen_at' => now(),
             ])->save();
         });
 
@@ -806,15 +1092,15 @@ class DriverMissionService
             $this->deliveryNotifications->notifyGroup(
                 $first->refresh(),
                 'delivered',
-                'Livraison effectuée',
-                'Votre livraison a été remise. Vérifiez les articles puis confirmez la réception depuis votre espace client.'
+                'Livraison confirmée',
+                'Votre livraison a été remise et confirmée avec votre code de sécurité. La livraison est maintenant terminée.'
             );
         }
     }
 
     private function assignments(DeliveryDriver $driver, string $missionNumber): Collection
     {
-        return DeliveryAssignment::query()
+        $base = DeliveryAssignment::query()
             ->with(['order.client', 'orderItem.product.shop', 'orderItem.shipment', 'driver', 'latestLocation'])
             ->where('driver_id', $driver->id)
             ->where(function ($query) use ($missionNumber) {
@@ -823,6 +1109,24 @@ class DriverMissionService
             })
             ->latest('id')
             ->get();
+
+        if ($base->isNotEmpty()) {
+            return $base;
+        }
+
+        // Compatibilité avec les offres créées avant la correction n°3 :
+        // leur numéro de mission pouvait n'exister que via le fallback
+        // OVL-{order_id} du modèle, donc pas être recherchable en SQL.
+        if (preg_match('/^OVL-(\d+)(?:-\d+)?$/', $missionNumber, $matches)) {
+            return DeliveryAssignment::query()
+                ->with(['order.client', 'orderItem.product.shop', 'orderItem.shipment', 'driver', 'latestLocation'])
+                ->where('driver_id', $driver->id)
+                ->where('order_id', (int) $matches[1])
+                ->latest('id')
+                ->get();
+        }
+
+        return collect();
     }
 
     private function latestPerItem(Collection $assignments): Collection
@@ -837,6 +1141,24 @@ class DriverMissionService
         $group = $representative ? $this->consolidation->groupForItem($representative) : [];
         $order = $representative?->order;
         $status = $this->missionStatus($latest, collect($group['items'] ?? []));
+        $pickupCount = (int) ($group['pickup_count'] ?? 0);
+        $readyPickupCount = (int) ($group['ready_pickup_count'] ?? collect($group['pickup_stops'] ?? [])->where('ready', true)->count());
+        $preparationPercent = (int) ($group['preparation_percent'] ?? 0);
+        $canStart = $status === 'accepted'
+            && $pickupCount > 0
+            && $readyPickupCount >= $pickupCount
+            && $preparationPercent >= 100;
+        $reservationState = match (true) {
+            $status === 'accepted' && $canStart => 'ready_for_pickup',
+            $status === 'accepted' => 'waiting_vendor',
+            $status === 'offered' => 'offered',
+            default => null,
+        };
+        $statusLabel = match (true) {
+            $status === 'accepted' && $canStart => 'Réservée · prête pour collecte',
+            $status === 'accepted' => 'Réservée · attente vendeur',
+            default => $this->statusLabel($status),
+        };
         $estimated = $latest->pluck('manual_eta_at')->filter()->first()
             ?: $latest->pluck('estimated_delivery_at')->filter()->first()
             ?: collect($group['items'] ?? [])->pluck('shipment.estimated_delivery_at')->filter()->first();
@@ -854,14 +1176,17 @@ class DriverMissionService
             'destination_label' => $this->deliveryShortAddress($order),
             'commune' => $order?->delivery_commune ?: $order?->delivery_city ?: '—',
             'status' => $status,
-            'status_label' => $this->statusLabel($status),
+            'status_label' => $statusLabel,
+            'reservation_state' => $reservationState,
+            'can_start' => $canStart,
             'pickup_scheduled_at' => $pickup ? Carbon::parse($pickup) : null,
             'estimated_delivery_at' => $estimated ? Carbon::parse($estimated) : null,
             'accepted_at' => $acceptedAt ? Carbon::parse($acceptedAt) : null,
             'rejected_at' => $rejectedAt ? Carbon::parse($rejectedAt) : null,
             'rejection_reason' => $rejectionReason,
             'delivered_at' => $deliveredAt ? Carbon::parse($deliveredAt) : null,
-            'pickup_count' => (int) ($group['pickup_count'] ?? 0),
+            'pickup_count' => $pickupCount,
+            'ready_pickup_count' => $readyPickupCount,
             'item_count' => (int) collect($group['items'] ?? [])->sum(fn ($item) => max(1, (int) $item->quantity)),
             'line_count' => collect($group['items'] ?? [])->count(),
             'total_weight_kg' => (float) ($group['weight'] ?? 0),
@@ -878,7 +1203,7 @@ class DriverMissionService
                 ?: data_get($latest->first()?->meta, 'vehicle_label')
                 ?: $driver->vehicle
                 ?: 'Véhicule',
-            'preparation_percent' => (int) ($group['preparation_percent'] ?? 0),
+            'preparation_percent' => $preparationPercent,
             'ready_count' => (int) ($group['ready_count'] ?? 0),
             'gps_status' => (string) ($latest->pluck('gps_status')->filter()->first() ?: 'unknown'),
             'gps_disabled_reason' => $latest->pluck('gps_disabled_reason')->filter()->first(),
@@ -905,9 +1230,9 @@ class DriverMissionService
     private function statusLabel(string $status): string
     {
         return match ($status) {
-            'planned' => 'Planifiée',
-            'assigned' => 'À accepter',
-            'offered' => 'Nouvelle course à accepter',
+            'planned' => 'À réserver',
+            'assigned' => 'À réserver',
+            'offered' => 'Nouvelle mission à réserver',
             'offer_expired' => 'Prise par un autre livreur',
             'accepted' => 'Acceptée',
             'collecting' => 'Collectes en cours',

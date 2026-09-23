@@ -90,6 +90,7 @@ use App\Http\Controllers\WaveController;
 use App\Http\Controllers\BusinessController as BusinessCatalogController;
 use App\Http\Controllers\Api\BusinessController;
 use App\Http\Controllers\Support\SupportDashboardController;
+use App\Http\Controllers\Support\SupportSearchController;
 use App\Http\Controllers\Support\SupportTicketController;
 use App\Http\Controllers\Support\SupportRecordController;
 use App\Http\Controllers\Support\SupportAiAgentController;
@@ -516,12 +517,14 @@ Route::middleware('auth')->group(function () {
 */
 Route::middleware(['auth:admin', 'internal', 'staff:support'])->prefix('support')->name('support.')->group(function () {
     Route::get('/', SupportDashboardController::class)->name('dashboard');
+    Route::get('/recherche', SupportSearchController::class)->name('search');
     Route::get('/tickets', [SupportTicketController::class, 'index'])->name('tickets.index');
     Route::get('/tickets/create', [SupportTicketController::class, 'create'])->name('tickets.create');
     Route::post('/tickets', [SupportTicketController::class, 'store'])->name('tickets.store');
     Route::get('/tickets/{ticket}', [SupportTicketController::class, 'show'])->name('tickets.show');
     Route::put('/tickets/{ticket}', [SupportTicketController::class, 'update'])->name('tickets.update');
     Route::post('/tickets/{ticket}/messages', [SupportTicketController::class, 'reply'])->name('tickets.reply');
+    Route::post('/tickets/{ticket}/transferer', [SupportTicketController::class, 'handoff'])->name('tickets.handoff');
     Route::get('/clients', [SupportRecordController::class, 'clients'])->name('clients.index');
     Route::get('/vendeurs', [SupportRecordController::class, 'vendors'])->name('vendors.index');
     Route::get('/commandes', [SupportRecordController::class, 'orders'])->name('orders.index');
@@ -1018,6 +1021,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('documents/reception/{item}/{side}', [SensitiveDocumentController::class, 'adminReception'])->name('private-documents.reception');
         Route::get('dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('dashboard/data', [AdminDashboardController::class, 'dashboardData'])->name('dashboard.data');
+
+        // Demandes transmises par l’équipe Support nécessitant une action Administration.
+        Route::get('demandes-support', [DepartmentHandoffController::class, 'administration'])->name('support-handoffs.index');
+        Route::post('demandes-support/{handoff}/prendre', [DepartmentHandoffController::class, 'claim'])->name('support-handoffs.claim');
+        Route::post('demandes-support/{handoff}/repondre', [DepartmentHandoffController::class, 'resolve'])->name('support-handoffs.resolve');
 
         // Cartes cadeaux / cartes rechargeables
         Route::get('gift-cards', [AdminGiftCardController::class, 'index'])->name('gift-cards.index');

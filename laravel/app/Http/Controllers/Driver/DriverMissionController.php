@@ -125,8 +125,17 @@ class DriverMissionController extends Controller
 
     public function verifyOtp(Request $request, string $missionNumber, DriverMissionService $service)
     {
-        $validated = $request->validate(['delivery_otp_code' => ['required', 'digits:6']]);
-        $service->verifyOtp(Auth::guard('driver')->user(), $missionNumber, $validated['delivery_otp_code']);
+        $validated = $request->validate([
+            'delivery_otp_code' => ['required', 'digits:6'],
+            'handover_confirmed' => ['required', 'accepted'],
+        ]);
+
+        $service->verifyOtp(
+            Auth::guard('driver')->user(),
+            $missionNumber,
+            $validated['delivery_otp_code'],
+            (bool) $validated['handover_confirmed'],
+        );
 
         return response()->json(['success' => true, 'message' => 'Livraison confirmée.']);
     }

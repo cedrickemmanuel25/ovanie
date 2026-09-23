@@ -145,10 +145,30 @@ class ProductController extends Controller
         ];
 
         if (isset($legacySlugs[$category])) {
+            // Même les anciennes URL marketing restent reliées à la vraie
+            // catégorie en base. On couvre aussi les anciens slugs présents
+            // dans certaines bases afin que la photo administrée soit toujours
+            // retrouvée et affichée sur la même URL publique.
+            $legacyDbAliases = [
+                'materiaux-gros-oeuvre' => ['materiaux-gros-oeuvre', 'materiaux-gros-oeuvres'],
+                'materiaux-de-finition' => ['materiaux-de-finition'],
+                'outillage-equipement' => ['outillage-equipement'],
+                'electricite-plomberie' => ['electricite-plomberie'],
+                'energie-solaire' => ['energie-solaire'],
+                'materiaux-ecologiques' => ['materiaux-ecologiques', 'materiaux-ecologique'],
+                'reconditionnes' => ['reconditionnes', 'nos-reconditionnes', 'nos-reconditionnee'],
+            ];
+
+            $categoryRecord = Category::query()
+                ->active()
+                ->whereIn('slug', $legacyDbAliases[$category] ?? [$category, $legacySlugs[$category]])
+                ->with(['children' => fn ($query) => $query->active()->ordered()])
+                ->first();
+
             return view('catalog.index', [
                 'category' => $legacySlugs[$category],
                 'categoryPageSlug' => $category,
-                'categoryRecord' => null,
+                'categoryRecord' => $categoryRecord,
                 'categories' => $this->getCatalogFilterCategories(),
                 'offerStats' => $this->getCatalogOfferStats(),
             ]);

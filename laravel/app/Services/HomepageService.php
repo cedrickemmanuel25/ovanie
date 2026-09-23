@@ -463,9 +463,9 @@ class HomepageService
      * dans l'ordre configuré par l'admin, au lieu de faire correspondre les
      * produits à une liste de 8 catégories/mots-clés codés en dur.
      *
-     * Chaque visuel provient en priorité de la photo importée pour la
-     * catégorie (Category::image_url), puis d'un vrai produit public de
-     * cette catégorie pour éviter les illustrations génériques.
+     * Chaque visuel provient de la photo administrée pour la catégorie.
+     * Les éventuels visuels historiques sont gérés uniquement par la vue
+     * publique en secours ; aucune photo produit n'est utilisée.
      */
     private function homepageCategoryCards(): Collection
     {
@@ -473,47 +473,21 @@ class HomepageService
             return collect();
         }
 
-        $roots = Category::query()
+        // La catégorie elle-même est la source du visuel. On ne cherche plus
+        // de produit représentatif : cela évite qu'une photo produit remplace
+        // la photo choisie par l'administrateur et réduit aussi le nombre de
+        // requêtes nécessaires pour construire la page d'accueil.
+        return Category::query()
             ->active()
             ->roots()
             ->ordered()
             ->limit(8)
-            ->get();
-
-        if ($roots->isEmpty()) {
-            return collect();
-        }
-
-        $childIdsByParent = Category::query()
-            ->select(['id', 'parent_id'])
-            ->whereIn('parent_id', $roots->pluck('id'))
             ->get()
-            ->groupBy('parent_id');
-
-        $findRepresentativeProduct = function (Category $root) use ($childIdsByParent): ?Product {
-            $ids = collect([$root->id])
-                ->merge($childIdsByParent->get($root->id, collect())->pluck('id'))
-                ->all();
-
-            $query = $this->publicProductsQuery()->whereIn('products.category_id', $ids);
-
-            if (Schema::hasColumn('products', 'sales')) {
-                $query->orderByDesc('sales');
-            }
-
-            if (Schema::hasColumn('products', 'views')) {
-                $query->orderByDesc('views');
-            }
-
-            return $query->latest('products.id')->first();
-        };
-
-        return $roots
             ->map(fn (Category $root) => [
                 'name' => $root->name,
                 'slug' => (string) $root->slug,
                 'category' => $root,
-                'product' => $findRepresentativeProduct($root),
+                'product' => null,
                 'asset' => null,
             ])
             ->values();

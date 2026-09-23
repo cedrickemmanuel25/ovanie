@@ -21,6 +21,10 @@ class Category extends Model
         'sort_order',
     ];
 
+    protected $appends = [
+        'image_url',
+    ];
+
     protected $casts = [
         'parent_id' => 'integer',
         'level' => 'integer',
@@ -108,7 +112,13 @@ class Category extends Model
             return $path;
         }
 
-        return asset('storage/' . ltrim($path, '/'));
+        // La photo administrée est la source officielle de la catégorie.
+        // Le paramètre de version force les navigateurs/CDN à afficher la
+        // nouvelle image immédiatement après un remplacement dans l'admin.
+        $version = $this->updated_at?->getTimestamp() ?: null;
+        $url = asset('storage/' . ltrim($path, '/'));
+
+        return $version ? $url . '?v=' . $version : $url;
     }
 
     public function getStatusLabelAttribute(): string

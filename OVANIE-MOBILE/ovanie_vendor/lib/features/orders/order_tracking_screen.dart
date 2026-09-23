@@ -83,6 +83,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     final driver = orderMap(tracking['driver']);
     final items = orderList(_order['items']).map(orderMap).toList();
     final delivery = screenText(_order['delivery_status'], '');
+    final missionStatus = screenText(tracking['status'], '');
+    final driverReserved = tracking['driver_reserved'] == true;
+    final vendorPickupReady = tracking['vendor_pickup_ready'] == true;
     final delivered = delivery == 'delivered';
     final moving = ['picked_up', 'in_transit', 'late'].contains(delivery);
     final cancelled =
@@ -95,6 +98,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
         ? 'La livraison a rencontré un problème'
         : moving
         ? 'Votre commande est en cours de livraison'
+        : _isOvanieLogistics && driverReserved && vendorPickupReady
+        ? 'Votre commande est prête pour enlèvement'
+        : _isOvanieLogistics && driverReserved
+        ? 'Un livreur partenaire a réservé la mission'
+        : _isOvanieLogistics && missionStatus == 'offered'
+        ? 'Mission proposée aux livreurs partenaires'
         : delivery == 'assigned'
         ? 'Un livreur a été affecté à votre commande'
         : 'Votre commande attend sa prise en charge';
@@ -145,6 +154,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
                                     ? 'La livraison est terminée.'
                                     : moving
                                     ? 'Le livreur poursuit sa tournée de livraison.'
+                                    : _isOvanieLogistics
+                                    ? screenText(
+                                        tracking['assignment_message'],
+                                        'OVANIE Logistics organise automatiquement la prise en charge.',
+                                      )
                                     : screenText(
                                         _order['delivery_status_label'],
                                         'La prise en charge sera confirmée par le livreur.',
@@ -192,6 +206,99 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
                     ),
                   ),
                 ),
+                if (_isOvanieLogistics)
+                  DataCard(
+                    title: 'Prise en charge OVANIE Logistics',
+                    icon: Icons.local_shipping_outlined,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          screenText(
+                            tracking['assignment_message'],
+                            'OVANIE Logistics organise automatiquement la collecte.',
+                          ),
+                          style: const TextStyle(
+                            color: orderText,
+                            fontSize: 12.5,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        if (screenText(tracking['mission_number'], '').isNotEmpty)
+                          dataLine(
+                            'Mission',
+                            tracking['mission_number'],
+                          ),
+                        dataLine(
+                          'État',
+                          screenText(tracking['pickup_completed_at'], '').isNotEmpty
+                              ? 'Remise au livreur confirmée'
+                              : screenText(tracking['pickup_verified_at'], '').isNotEmpty
+                                  ? 'Articles vérifiés · chargement en cours'
+                                  : screenText(tracking['pickup_arrived_at'], '').isNotEmpty
+                                      ? 'Livreur arrivé au point de collecte'
+                                      : driverReserved
+                                          ? (vendorPickupReady
+                                              ? 'Livreur réservé · vendeur prêt'
+                                              : 'Livreur réservé · préparation en cours')
+                                          : missionStatus == 'offered'
+                                              ? 'En attente de réservation'
+                                              : 'Organisation en cours',
+                        ),
+                        if (screenText(tracking['pickup_handover_code'], '').isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF7E8),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFF2C06B)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Code de remise vendeur → livreur',
+                                  style: TextStyle(
+                                    color: orderText,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  screenText(tracking['pickup_handover_code']),
+                                  style: const TextStyle(
+                                    color: orderOrange,
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 7,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Communiquez ce code uniquement lorsque tous les articles ont été vérifiés et chargés dans le véhicule du livreur.',
+                                  style: TextStyle(color: orderMuted, fontSize: 11.5, height: 1.35),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Le vendeur ne choisit pas le livreur et ne démarre pas la livraison. '
+                          'Lorsque la préparation est terminée, OVANIE informe automatiquement le livreur réservé.',
+                          style: TextStyle(
+                            color: orderMuted,
+                            fontSize: 11.5,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 // Une fois remise à OVANIE Logistics, le suivi GPS et le
                 // livreur ne concernent plus le vendeur (il n'a plus la
                 // marchandise) : afficher une carte et un contact livreur

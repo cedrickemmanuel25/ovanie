@@ -86,7 +86,13 @@
             @forelse($categories as $category)
                 <article class="category-parent-card">
                     <div class="category-parent-main">
-                        <div class="category-parent-icon">{{ $category->icon ? mb_strtoupper(mb_substr($category->icon, 0, 1)) : mb_strtoupper(mb_substr($category->name, 0, 1)) }}</div>
+                        <div class="category-parent-icon">
+                            @if($category->image_url)
+                                <img src="{{ $category->image_url }}" alt="{{ $category->name }}">
+                            @else
+                                {{ $category->icon ? mb_strtoupper(mb_substr($category->icon, 0, 1)) : mb_strtoupper(mb_substr($category->name, 0, 1)) }}
+                            @endif
+                        </div>
                         <div class="category-parent-copy">
                             <div class="category-title-row">
                                 <h4>{{ $category->name }}</h4>

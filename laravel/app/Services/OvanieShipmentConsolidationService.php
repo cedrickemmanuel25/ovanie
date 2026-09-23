@@ -39,6 +39,7 @@ class OvanieShipmentConsolidationService
             'product.shop',
             'latestDeliveryAssignment.driver',
             'latestDeliveryAssignment.latestLocation',
+            'deliveryAssignments.driver',
             'shipment',
         ])->where('order_id', $item->order_id);
 
@@ -56,13 +57,38 @@ class OvanieShipmentConsolidationService
 
     public function counts(Collection $groups): array
     {
+        $count = fn (string ...$phases) => $groups->filter(
+            fn (array $group) => in_array((string) ($group['operational_phase'] ?? 'to_offer'), $phases, true)
+        )->count();
+
+        $toOffer = $count('to_offer');
+        $waitingAcceptance = $count('waiting_acceptance');
+        $acceptedWaitingVendor = $count('accepted_waiting_vendor');
+        $readyForPickup = $count('ready_for_pickup');
+        $collecting = $count('collecting');
+        $inDelivery = $count('in_delivery');
+        $delivered = $count('delivered');
+        $incident = $count('incident');
+
         return [
             'all' => $groups->count(),
-            'prepare' => $groups->whereIn('status', ['pending', 'ready_for_pickup'])->count(),
-            'to_assign' => $groups->where('status', 'ready_for_pickup')->count(),
-            'ship' => $groups->where('status', 'assigned')->count(),
-            'route' => $groups->whereIn('status', ['picked_up', 'in_transit'])->count(),
-            'done' => $groups->where('status', 'delivered')->count(),
+            'to_offer' => $toOffer,
+            'waiting_acceptance' => $waitingAcceptance,
+            'accepted_waiting_vendor' => $acceptedWaitingVendor,
+            'ready_for_pickup' => $readyForPickup,
+            'collecting' => $collecting,
+            'in_delivery' => $inDelivery,
+            'delivered' => $delivered,
+            'incident' => $incident,
+
+            // Compatibilité avec les anciens widgets encore présents dans
+            // d'autres écrans logistiques. L'espace Missions utilise désormais
+            // les clés métier ci-dessus et ne parle plus d'affectation manuelle.
+            'prepare' => $toOffer + $waitingAcceptance + $acceptedWaitingVendor,
+            'to_assign' => $toOffer + $waitingAcceptance,
+            'ship' => $acceptedWaitingVendor + $readyForPickup + $collecting,
+            'route' => $collecting + $inDelivery,
+            'done' => $delivered,
         ];
     }
 
@@ -123,12 +149,22 @@ class OvanieShipmentConsolidationService
                 return true;
             }
 
+            $phase = (string) ($group['operational_phase'] ?? 'to_offer');
+
             return match ($status) {
-                'to_assign' => $group['status'] === 'ready_for_pickup',
-                'prepare' => in_array($group['status'], ['pending', 'ready_for_pickup'], true),
-                'assigned' => $group['status'] === 'assigned',
-                'in_delivery' => in_array($group['status'], ['picked_up', 'in_transit'], true),
-                'delivered' => $group['status'] === 'delivered',
+                'to_offer' => $phase === 'to_offer',
+                'waiting_acceptance' => $phase === 'waiting_acceptance',
+                'accepted_waiting_vendor' => $phase === 'accepted_waiting_vendor',
+                'ready_for_pickup' => $phase === 'ready_for_pickup',
+                'collecting' => $phase === 'collecting',
+                'in_delivery' => $phase === 'in_delivery',
+                'delivered' => $phase === 'delivered',
+                'incident' => $phase === 'incident',
+
+                // Anciennes URL conservées pour ne pas casser les favoris.
+                'to_assign' => in_array($phase, ['to_offer', 'waiting_acceptance'], true),
+                'prepare' => in_array($phase, ['to_offer', 'waiting_acceptance', 'accepted_waiting_vendor'], true),
+                'assigned' => in_array($phase, ['accepted_waiting_vendor', 'ready_for_pickup'], true),
                 default => true,
             };
         })->values();
@@ -231,8 +267,64 @@ class OvanieShipmentConsolidationService
             })
             ->values();
 
+        $allAssignments = $items
+            ->flatMap(function (OrderItem $item) {
+                if ($item->relationLoaded('deliveryAssignments')) {
+                    return $item->deliveryAssignments;
+                }
+
+                return $item->deliveryAssignments()->with('driver')->get();
+            })
+            ->filter()
+            ->values();
+
+        $winnerStatuses = ['accepted', 'assigned', 'collecting', 'picked_up', 'in_transit', 'arrived', 'delivered'];
+        $winnerAssignments = $allAssignments
+            ->filter(fn ($assignment) => in_array((string) $assignment->status, $winnerStatuses, true))
+            ->sortByDesc(fn ($assignment) => optional($assignment->accepted_at ?: $assignment->updated_at)->timestamp ?? 0)
+            ->values();
+        $winnerAssignment = $winnerAssignments->first();
+        $liveOfferCount = $allAssignments->where('status', 'offered')->count();
+        $offeredDriverCount = $allAssignments->where('status', 'offered')->pluck('driver_id')->filter()->unique()->count();
+
+        $deliveryStatus = $this->aggregateStatus($statuses);
+        $preparationPercent = $items->count() > 0 ? (int) round(($readyCount / $items->count()) * 100) : 0;
+        $readyPickupCount = $pickupStops->filter(fn (array $stop) => (bool) ($stop['ready'] ?? false))->count();
+        $assignmentStatuses = $allAssignments->pluck('status')->map(fn ($status) => (string) $status);
+
+        $operationalPhase = match (true) {
+            $deliveryStatus === 'delivery_failed' || $assignmentStatuses->contains('incident') => 'incident',
+            $deliveryStatus === 'delivered' || $assignmentStatuses->contains('delivered') => 'delivered',
+            $deliveryStatus === 'in_transit' || $assignmentStatuses->contains('in_transit') || $assignmentStatuses->contains('arrived') => 'in_delivery',
+            $deliveryStatus === 'picked_up' || $assignmentStatuses->contains('picked_up') || $assignmentStatuses->contains('collecting') => 'collecting',
+            $winnerAssignment !== null && $preparationPercent >= 100 => 'ready_for_pickup',
+            $winnerAssignment !== null => 'accepted_waiting_vendor',
+            $liveOfferCount > 0 => 'waiting_acceptance',
+            default => 'to_offer',
+        };
+
+        $operationalLabel = match ($operationalPhase) {
+            'to_offer' => 'À proposer aux livreurs',
+            'waiting_acceptance' => 'En attente d’acceptation',
+            'accepted_waiting_vendor' => 'Acceptée · préparation vendeur',
+            'ready_for_pickup' => 'Prête pour collecte',
+            'collecting' => 'Collecte en cours',
+            'in_delivery' => 'En livraison',
+            'delivered' => 'Livrée',
+            'incident' => 'Incident',
+            default => 'En attente',
+        };
+
         $driverItem = $items->first(fn (OrderItem $item) => filled($item->driver_name)
             || filled($item->latestDeliveryAssignment?->driver?->name));
+        $winningDriver = $winnerAssignment?->driver;
+        $deliveryPriceAmount = round((float) $items->sum(fn (OrderItem $line) => (float) ($line->delivery_price ?? 0)), 0);
+        $pricedAssignments = $winnerAssignments->isNotEmpty()
+            ? $winnerAssignments
+            : $allAssignments->where('status', 'offered')->unique('order_item_id')->values();
+        $driverNetAmount = $pricedAssignments->isNotEmpty()
+            ? round((float) $pricedAssignments->unique('order_item_id')->sum(fn ($assignment) => (float) ($assignment->driver_net_amount ?? 0)), 0)
+            : null;
 
         $address = collect([
             $order?->delivery_address,
@@ -259,13 +351,22 @@ class OvanieShipmentConsolidationService
             'volume' => $volume,
             'vehicle_code' => $vehicle['code'],
             'vehicle_label' => $vehicle['label'],
-            'status' => $this->aggregateStatus($statuses),
+            'status' => $deliveryStatus,
+            'operational_phase' => $operationalPhase,
+            'operational_label' => $operationalLabel,
             'ready_count' => $readyCount,
             'total_count' => $items->count(),
-            'preparation_percent' => $items->count() > 0 ? (int) round(($readyCount / $items->count()) * 100) : 0,
-            'driver_id' => $driverItem?->latestDeliveryAssignment?->driver?->id,
-            'driver_name' => $driverItem?->latestDeliveryAssignment?->driver?->name ?: $driverItem?->driver_name,
-            'driver_phone' => $driverItem?->latestDeliveryAssignment?->driver?->phone ?: $driverItem?->driver_phone,
+            'ready_pickup_count' => $readyPickupCount,
+            'preparation_percent' => $preparationPercent,
+            'live_offer_count' => $liveOfferCount,
+            'offered_driver_count' => $offeredDriverCount,
+            'assignment_statuses' => $assignmentStatuses->unique()->values()->all(),
+            'accepted_at' => $winnerAssignment?->accepted_at,
+            'driver_net_amount' => $driverNetAmount,
+            'delivery_price_amount' => $deliveryPriceAmount > 0 ? $deliveryPriceAmount : null,
+            'driver_id' => $winningDriver?->id ?: $driverItem?->latestDeliveryAssignment?->driver?->id,
+            'driver_name' => $winningDriver?->name ?: ($driverItem?->latestDeliveryAssignment?->driver?->name ?: $driverItem?->driver_name),
+            'driver_phone' => $winningDriver?->phone ?: ($driverItem?->latestDeliveryAssignment?->driver?->phone ?: $driverItem?->driver_phone),
             'driver_latitude' => $driverItem?->latestDeliveryAssignment?->latestLocation?->latitude,
             'driver_longitude' => $driverItem?->latestDeliveryAssignment?->latestLocation?->longitude,
             'driver_location_at' => optional(

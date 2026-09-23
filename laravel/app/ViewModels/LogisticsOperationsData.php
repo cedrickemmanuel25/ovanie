@@ -3,6 +3,7 @@
 namespace App\ViewModels;
 
 use App\Models\DeliveryTour;
+use App\Models\DeliveryIncident;
 use App\Services\OrderWorkflowService;
 use App\Services\OvanieShipmentConsolidationService;
 
@@ -45,13 +46,29 @@ final class LogisticsOperationsData
         $order = $group['order'];
         $item = $group['representative'];
         $shop = $group['shops']->first();
-        $assignedDriver = $item->latestDeliveryAssignment?->driver;
+        $items = $group['items'];
+        $allAssignments = $items
+            ->flatMap(fn ($line) => $line->relationLoaded('deliveryAssignments')
+                ? $line->deliveryAssignments
+                : $line->deliveryAssignments()->with('driver')->get())
+            ->filter()
+            ->values();
+        $winnerAssignments = $allAssignments
+            ->filter(fn ($assignment) => in_array((string) $assignment->status, [
+                'accepted', 'assigned', 'collecting', 'picked_up', 'in_transit', 'arrived', 'delivered',
+            ], true))
+            ->values();
+        $winnerAssignment = $winnerAssignments->sortByDesc(
+            fn ($assignment) => optional($assignment->accepted_at ?: $assignment->updated_at)->timestamp ?? 0
+        )->first();
+        $assignedDriver = $winnerAssignment?->driver ?: $item->latestDeliveryAssignment?->driver;
         $freshPosition = $assignedDriver && $assignedDriver->last_seen_at?->gt(now()->subSeconds((int) config('delivery.gps_weak_seconds', 180)))
             && is_numeric($assignedDriver->latitude) && is_numeric($assignedDriver->longitude);
 
         $effectiveStatus = (string) ($group['display_status'] ?? $group['status'] ?? OrderWorkflowService::DELIVERY_PENDING);
-        $items = $group['items'];
-        $assignments = $items->map(fn ($line) => $line->latestDeliveryAssignment)->filter()->values();
+        $assignments = $winnerAssignments->isNotEmpty()
+            ? $winnerAssignments
+            : $items->map(fn ($line) => $line->latestDeliveryAssignment)->filter()->values();
 
         // Le workflow métier (display_status) reste à 'assigned' tant que le
         // livreur n'a pas récupéré la commande — c'est correct pour les
@@ -147,6 +164,19 @@ final class LogisticsOperationsData
         ];
 
         $progress = $deliveredDone ? 100 : ($departureDone ? 75 : ($pickupDone ? 25 : 0));
+        $operationalStatus = (string) ($group['operational_phase'] ?? $effectiveStatus);
+        $operationalLabel = (string) ($group['operational_label'] ?? app(OrderWorkflowService::class)->deliveryStatusLabel($effectiveStatus));
+        $preparationPercent = (int) ($group['preparation_percent'] ?? 0);
+        $pickupStops = collect($group['pickup_stops'] ?? []);
+        $readyStops = $pickupStops->where('ready', true)->count();
+        $totalStops = $pickupStops->count();
+        $openIncident = DeliveryIncident::query()
+            ->operationalReal()
+            ->whereIn('order_item_id', $items->pluck('id')->filter()->all())
+            ->whereNotIn('status', ['resolved', 'closed'])
+            ->latest('occurred_at')
+            ->first();
+        $incidentImpact = (string) data_get($openIncident?->meta, 'impact_level', '');
 
         return [
             'id' => $item->id,
@@ -161,7 +191,18 @@ final class LogisticsOperationsData
             'vehicle' => $group['vehicle_label'],
             'vehicleCode' => $group['vehicle_code'],
             'status' => $effectiveStatus,
-            'driver' => $group['driver_name'] ?: 'Non affecté',
+            'operationalStatus' => $operationalStatus,
+            'operationalLabel' => $operationalLabel,
+            'preparationPercent' => $preparationPercent,
+            'readyStops' => $readyStops,
+            'totalStops' => $totalStops,
+            'offerCount' => (int) ($group['live_offer_count'] ?? 0),
+            'offeredDriverCount' => (int) ($group['offered_driver_count'] ?? 0),
+            'reserved' => $winnerAssignment !== null,
+            'acceptedAt' => optional($winnerAssignment?->accepted_at)->format('d/m/Y H:i'),
+            'driverNetAmount' => $group['driver_net_amount'] ?? null,
+            'deliveryPriceAmount' => $group['delivery_price_amount'] ?? null,
+            'driver' => $group['driver_name'] ?: 'En attente d’acceptation',
             'driverId' => $group['driver_id'],
             // Le tracé n'a de sens qu'une fois que le livreur a réellement
             // démarré ses collectes (bouton "Démarrer les collectes" dans
@@ -183,7 +224,13 @@ final class LogisticsOperationsData
             'assignmentUrl' => route('logistics.shipments.assign-page', $item),
             'detailsUrl' => route('logistics.shipments.details', $item),
             'trackingUrl' => route('logistics.tracking.mission', ['item' => $item->id]),
-            'delayed' => (bool) ($group['is_delayed'] ?? false),
+            'hasOpenIncident' => (bool) $openIncident,
+            'incidentId' => $openIncident?->id,
+            'incidentImpact' => $incidentImpact,
+            'incidentDescription' => $openIncident?->description,
+            'incidentUrl' => $openIncident ? route('logistics.incidents.show', $openIncident) : null,
+            'automaticDelay' => $openIncident && (data_get($openIncident->meta, 'signal_source') === 'system_alert'),
+            'delayed' => (bool) ($group['is_delayed'] ?? false) || in_array($incidentImpact, ['delay', 'blocked', 'rescheduled'], true),
             'delayMinutes' => isset($group['eta_at']) && $group['eta_at']->isPast() ? (int) $group['eta_at']->diffInMinutes(now()) : null,
             'eta' => $group['eta_label'] ?? 'À confirmer',
             'timeline' => $timeline,

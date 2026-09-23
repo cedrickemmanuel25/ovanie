@@ -61,7 +61,10 @@ class DriverMissionSummaryModel {
     this.vehicleLabel,
     this.preparationPercent = 0,
     this.readyCount = 0,
+    this.readyPickupCount = 0,
     this.netAmount = 0,
+    this.canStart = false,
+    this.reservationState,
   });
 
   final String missionNumber;
@@ -87,7 +90,10 @@ class DriverMissionSummaryModel {
   final String? vehicleLabel;
   final int preparationPercent;
   final int readyCount;
+  final int readyPickupCount;
   final double netAmount;
+  final bool canStart;
+  final String? reservationState;
 
   factory DriverMissionSummaryModel.fromJson(Map<String, dynamic> json) {
     return DriverMissionSummaryModel(
@@ -114,7 +120,10 @@ class DriverMissionSummaryModel {
       vehicleLabel: json['vehicle_label']?.toString(),
       preparationPercent: _asInt(json['preparation_percent']),
       readyCount: _asInt(json['ready_count']),
+      readyPickupCount: _asInt(json['ready_pickup_count']),
       netAmount: _asDouble(json['net_amount']),
+      canStart: json['can_start'] == true,
+      reservationState: json['reservation_state']?.toString(),
     );
   }
 
@@ -132,6 +141,15 @@ class DriverMissionSummaryModel {
   bool get isInProgress =>
       isCollecting || isLoaded || isInTransit || isArrived || hasIncident;
   bool get isHistory => isDelivered || isRejected || hasIncident || isOfferExpired;
+  bool get isWaitingVendor => isAccepted && !canStart;
+  bool get isReadyForPickup => isAccepted && canStart;
+
+  String get preparationLabel {
+    if (pickupCount > 0) {
+      return '$readyPickupCount/$pickupCount point${pickupCount > 1 ? 's' : ''} prêt${readyPickupCount > 1 ? 's' : ''}';
+    }
+    return '$preparationPercent % prêt';
+  }
 
   String get displayDestination {
     final preferred = (destinationLabel ?? '').trim();
@@ -167,7 +185,10 @@ class DriverMissionDetail extends DriverMissionSummaryModel {
     super.vehicleLabel,
     super.preparationPercent,
     super.readyCount,
+    super.readyPickupCount,
     super.netAmount,
+    super.canStart,
+    super.reservationState,
     this.destinationAddress,
     this.pickupStops = const [],
     this.routePlan,
@@ -225,7 +246,10 @@ class DriverMissionDetail extends DriverMissionSummaryModel {
       vehicleLabel: summary.vehicleLabel,
       preparationPercent: summary.preparationPercent,
       readyCount: summary.readyCount,
+      readyPickupCount: summary.readyPickupCount,
       netAmount: summary.netAmount,
+      canStart: summary.canStart,
+      reservationState: summary.reservationState,
       destinationAddress: json['destination_address']?.toString(),
       incidentType: json['incident_type']?.toString(),
       incidentDescription: json['incident_description']?.toString(),
@@ -288,10 +312,17 @@ class DriverMissionPickupStop {
     required this.address,
     required this.locationLabel,
     required this.ready,
+    required this.arrived,
+    required this.verified,
+    required this.loaded,
+    required this.handoverConfirmed,
     required this.completed,
     required this.current,
     required this.itemCount,
     required this.weightKg,
+    this.arrivedAt,
+    this.verifiedAt,
+    this.loadedAt,
     this.completedAt,
     this.latitude,
     this.longitude,
@@ -304,10 +335,17 @@ class DriverMissionPickupStop {
   final String address;
   final String locationLabel;
   final bool ready;
+  final bool arrived;
+  final bool verified;
+  final bool loaded;
+  final bool handoverConfirmed;
   final bool completed;
   final bool current;
   final int itemCount;
   final double weightKg;
+  final DateTime? arrivedAt;
+  final DateTime? verifiedAt;
+  final DateTime? loadedAt;
   final DateTime? completedAt;
   final double? latitude;
   final double? longitude;
@@ -322,10 +360,17 @@ class DriverMissionPickupStop {
       address: '${json['address'] ?? 'Adresse à confirmer'}',
       locationLabel: '${json['location_label'] ?? json['address'] ?? 'Adresse à confirmer'}',
       ready: json['ready'] == true,
+      arrived: json['arrived'] == true,
+      verified: json['verified'] == true,
+      loaded: json['loaded'] == true,
+      handoverConfirmed: json['handover_confirmed'] == true,
       completed: json['completed'] == true,
       current: json['current'] == true,
       itemCount: _asInt(json['item_count']),
       weightKg: _asDouble(json['weight_kg']),
+      arrivedAt: _asDate(json['arrived_at']),
+      verifiedAt: _asDate(json['verified_at']),
+      loadedAt: _asDate(json['loaded_at']),
       completedAt: _asDate(json['completed_at']),
       latitude: _asNullableDouble(json['latitude']),
       longitude: _asNullableDouble(json['longitude']),
@@ -338,6 +383,14 @@ class DriverMissionPickupStop {
               .toList(growable: false)
           : const [],
     );
+  }
+
+  String get workflowLabel {
+    if (completed) return 'Remise confirmée';
+    if (verified) return 'Vérifié · chargement à confirmer';
+    if (arrived) return 'Arrivé · vérification à faire';
+    if (current) return 'Prochain point';
+    return ready ? 'Prêt pour collecte' : 'En attente';
   }
 
   String get itemsInline => items

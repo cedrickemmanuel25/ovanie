@@ -26,7 +26,7 @@ class DatabaseSeeder extends Seeder
             DeliveryDistanceMatrixSeeder::class,
             StaffWorkspaceSeeder::class,
             GiftCardProductSeeder::class,
-            SupportPagesSeeder::class,
+            SupportAiCenterSeeder::class,
         ]);
     }
 

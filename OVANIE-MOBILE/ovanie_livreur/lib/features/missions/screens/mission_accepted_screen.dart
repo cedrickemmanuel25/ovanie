@@ -70,7 +70,7 @@ class _MissionAcceptedScreenState extends State<MissionAcceptedScreen> {
 
   Future<void> _start() async {
     final mission = _mission;
-    if (mission == null || mission.preparationPercent < 100 || _actionBusy) return;
+    if (mission == null || !mission.canStart || _actionBusy) return;
     setState(() => _actionBusy = true);
     try {
       final started = await MissionRepository.instance.start(widget.missionNumber);
@@ -113,23 +113,21 @@ class _MissionAcceptedScreenState extends State<MissionAcceptedScreen> {
   @override
   Widget build(BuildContext context) {
     final mission = _mission;
-    final canStart = mission != null && mission.preparationPercent >= 100 && mission.isAccepted;
+    final canStart = mission != null && mission.canStart && mission.isAccepted;
     return Scaffold(
       backgroundColor: MissionPalette.mint,
       body: Column(
         children: [
           MissionPageHeader(
-            title: 'Mission acceptée',
-            subtitle: 'Mission réservée au livreur',
+            title: 'Mission réservée',
+            subtitle: mission?.canStart == true
+                ? 'Tous les vendeurs sont prêts'
+                : 'Attente de préparation vendeur',
             showBack: true,
             onBack: () => Navigator.of(context).pop(),
             trailing: mission == null
                 ? null
-                : const MissionStatusPill(
-                    label: 'Acceptée',
-                    icon: Icons.check_circle_rounded,
-                    kind: MissionStatusKind.success,
-                  ),
+                : MissionStatusPill.forMission(mission),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -161,14 +159,29 @@ class _MissionAcceptedScreenState extends State<MissionAcceptedScreen> {
                   else if (mission != null) ...[
                     MissionOverviewBlock(
                       mission: mission,
-                      message: mission.preparationPercent < 100
-                          ? 'La préparation des articles est en cours. Cette mission vous est réservée. '
-                              'Vous pourrez démarrer les collectes dès que la préparation atteindra 100 %.'
-                          : 'Tous les points sont prêts. Vous pouvez démarrer les collectes.',
-                      messageWarning: mission.preparationPercent < 100,
+                      message: !mission.canStart
+                          ? 'Cette mission est réservée pour vous. ${mission.preparationLabel}. '
+                              'Restez disponible : le bouton de collecte se débloquera automatiquement lorsque tous les vendeurs seront prêts.'
+                          : 'Tous les vendeurs sont prêts. Vous pouvez maintenant démarrer les collectes.',
+                      messageWarning: !mission.canStart,
                     ),
+                    if (mission.incidentType != null) ...[
+                      const SizedBox(height: 12),
+                      MissionTintMessage(
+                        text: 'Incident en cours : ${incidentTypeLabel(mission.incidentType)}${(mission.incidentDescription ?? '').trim().isNotEmpty ? ' — ${mission.incidentDescription}' : ''}. OVANIE Logistics suit le dossier.',
+                        warning: true,
+                        icon: Icons.warning_amber_rounded,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     MissionPreparationStops(stops: mission.pickupStops),
+                    if (!mission.canStart) ...[
+                      const SizedBox(height: 10),
+                      const MissionTintMessage(
+                        text: 'Mise à jour automatique toutes les 15 secondes. Vous n’avez pas besoin d’actualiser manuellement.',
+                        icon: Icons.sync_rounded,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     MissionSurfaceCard(
                       child: Column(
@@ -198,7 +211,7 @@ class _MissionAcceptedScreenState extends State<MissionAcceptedScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     MissionPrimaryButton(
-                      label: 'Démarrer les collectes',
+                      label: canStart ? 'Démarrer les collectes' : 'Collecte verrouillée',
                       icon: Icons.play_arrow_rounded,
                       enabled: canStart,
                       loading: _actionBusy,
@@ -207,7 +220,7 @@ class _MissionAcceptedScreenState extends State<MissionAcceptedScreen> {
                     if (!canStart && mission.isAccepted) ...[
                       const SizedBox(height: 3),
                       Text(
-                        'Disponible lorsque la préparation atteint 100 %',
+                        'Disponible lorsque tous les vendeurs sont prêts',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: MissionPalette.slate.withValues(alpha: .9),

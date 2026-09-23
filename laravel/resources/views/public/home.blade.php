@@ -117,13 +117,14 @@
 
     /*
      |--------------------------------------------------------------------------
-     | Visuels des catégories : EXCLUSIVEMENT public/storage/logos
+     | Visuels des catégories
      |--------------------------------------------------------------------------
      |
-     | On ne prend plus les photos des produits ni images/home.
-     | Le résolveur teste d'abord les noms connus du projet puis cherche, toujours
-     | uniquement dans public/storage/logos, le fichier dont le nom correspond le
-     | mieux à la catégorie.
+     | La photo importée depuis l'administration est toujours prioritaire et
+     | constitue la source officielle de la catégorie. Les anciens visuels de
+     | public/storage/logos ne servent que de secours pour les catégories qui
+     | n'ont encore aucune photo administrée. Une photo produit n'est jamais
+     | utilisée comme visuel de catégorie.
      */
     $logosDirectory = public_path('storage/logos');
 
@@ -193,9 +194,9 @@
      | HomepageService::homepageCategoryCards(), qui prend simplement les
      | catégories principales actives dans l'ordre configuré par l'admin.
      |
-     | Priorité de l'image : 1) photo importée pour la catégorie dans l'admin,
-     | 2) visuel officiel historique (storage/logos) reconnu via le nom, 3) une
-     | vraie photo produit de la catégorie.
+     | Priorité de l'image : 1) photo importée dans l'administration,
+     | 2) visuel officiel historique (storage/logos), 3) placeholder OVANIE.
+     | Les photos de produits ne servent jamais de visuel de catégorie.
      */
     $categoryCards = collect($homepageCategoryCards ?? [])
         ->map(function (array $card) use ($storageLogoImage, $normalizeLogoName): array {
@@ -211,7 +212,6 @@
 
             $image = $category?->image_url
                 ?: $storageLogoImage([], $keywords)
-                ?: (string) ($card['product']?->card_image_url ?? '')
                 ?: asset('images/home/product-placeholder.svg');
 
             return [

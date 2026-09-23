@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Support;
 
 use App\Http\Controllers\Controller;
 use App\Models\SupportCallbackRequest;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -12,17 +11,10 @@ class SupportCallbackController extends Controller
 {
     public function index(Request $request)
     {
-        $query = SupportCallbackRequest::with(['requester', 'assignee', 'call', 'ticket'])
-            ->latest();
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->query('status'));
-        }
-
-        return view('support.callbacks.index', [
-            'callbacks' => $query->paginate(25)->withQueryString(),
-            'agents' => User::where('role', 'support')->where('status', 'active')->orderBy('name')->get(['id', 'name']),
-        ]);
+        return redirect()->route('support.calls.index', array_filter([
+            'tab' => 'callbacks',
+            'callback_status' => $request->query('status'),
+        ]));
     }
 
     public function update(Request $request, SupportCallbackRequest $callback)

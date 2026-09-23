@@ -136,7 +136,17 @@ class ClientShipmentTracking {
   final String trackingPhase;
   final String trackingMode;
   final String provider;
+  final String missionNumber;
+  final String missionPhase;
+  final String missionLabel;
+  final int preparationPercent;
+  final int pickupCount;
+  final int readyPickupCount;
+  final bool driverReserved;
+  final DateTime? acceptedAt;
   final DateTime? eta;
+  final DateTime? etaWindowStart;
+  final DateTime? etaWindowEnd;
   final String etaSource;
   final DateTime? lastUpdate;
   final bool liveGpsAvailable;
@@ -158,6 +168,11 @@ class ClientShipmentTracking {
   final double? destinationLatitude;
   final double? destinationLongitude;
   final String destinationLabel;
+  final bool otpRequired;
+  final bool otpVisible;
+  final String otpCode;
+  final String securityMessage;
+  final bool driverContactAllowed;
 
   const ClientShipmentTracking({
     required this.trackingKey,
@@ -171,7 +186,17 @@ class ClientShipmentTracking {
     required this.trackingPhase,
     required this.trackingMode,
     required this.provider,
+    required this.missionNumber,
+    required this.missionPhase,
+    required this.missionLabel,
+    required this.preparationPercent,
+    required this.pickupCount,
+    required this.readyPickupCount,
+    required this.driverReserved,
+    required this.acceptedAt,
     required this.eta,
+    required this.etaWindowStart,
+    required this.etaWindowEnd,
     required this.etaSource,
     required this.lastUpdate,
     required this.liveGpsAvailable,
@@ -193,6 +218,11 @@ class ClientShipmentTracking {
     required this.destinationLatitude,
     required this.destinationLongitude,
     required this.destinationLabel,
+    required this.otpRequired,
+    required this.otpVisible,
+    required this.otpCode,
+    required this.securityMessage,
+    required this.driverContactAllowed,
   });
 
   bool get isFinished => const {
@@ -205,6 +235,14 @@ class ClientShipmentTracking {
 
   bool get isInTransit => const {'in_transit', 'in_delivery', 'late', 'problem'}.contains(deliveryStatus);
 
+  bool get isArrived => deliveryStatus == 'arrived' || trackingPhase == 'arrived_customer';
+
+  bool get isWaitingVendor => missionPhase == 'accepted_waiting_vendor' || deliveryStatus == 'driver_reserved';
+
+  bool get isReadyForPickup => missionPhase == 'ready_for_pickup' || deliveryStatus == 'ready_for_pickup';
+
+  bool get isCollecting => missionPhase == 'collecting' || deliveryStatus == 'collecting';
+
   bool get hasDriverPosition => driverLatitude != null && driverLongitude != null;
 
   bool get hasActualAssignment => driverName.isNotEmpty || vehicleAssigned;
@@ -213,11 +251,11 @@ class ClientShipmentTracking {
 
   int get progressIndex => switch (deliveryStatus) {
         'delivered' || 'completed' => 5,
-        'in_transit' || 'in_delivery' || 'late' || 'problem' => 4,
-        'picked_up' => 3,
-        'assigned' => 2,
-        'preparing' || 'ready_for_pickup' => 1,
-        _ => trackingPhase == 'to_customer' ? 4 : 0,
+        'arrived' || 'in_transit' || 'in_delivery' || 'late' || 'problem' => 4,
+        'picked_up' || 'collecting' => 3,
+        'driver_reserved' || 'assigned' || 'ready_for_pickup' => 2,
+        'waiting_driver' || 'preparing' => 1,
+        _ => trackingPhase == 'to_customer' || trackingPhase == 'arrived_customer' ? 4 : 0,
       };
 
   factory ClientShipmentTracking.fromJson(Map<String, dynamic> json) {
@@ -237,6 +275,9 @@ class ClientShipmentTracking {
     final vehicle = map(json['vehicle']);
     final destination = map(json['destination']);
     final route = map(json['route']);
+    final mission = map(json['mission']);
+    final security = map(json['delivery_security']);
+    final etaWindow = map(json['eta_window']);
     final rawItems = delivery['items'] is List ? delivery['items'] as List : const [];
 
     return ClientShipmentTracking(
@@ -254,7 +295,17 @@ class ClientShipmentTracking {
       trackingPhase: (json['tracking_phase'] ?? '').toString().trim().toLowerCase(),
       trackingMode: (json['tracking_mode'] ?? '').toString().trim().toLowerCase(),
       provider: cleanOvanieText((json['provider'] ?? 'Livraison OVANIE').toString()),
+      missionNumber: cleanOvanieText((mission['number'] ?? '').toString()),
+      missionPhase: (mission['phase'] ?? '').toString().trim().toLowerCase(),
+      missionLabel: cleanOvanieText((mission['label'] ?? '').toString()),
+      preparationPercent: asInt(mission['preparation_percent']).clamp(0, 100).toInt(),
+      pickupCount: asInt(mission['pickup_count']),
+      readyPickupCount: asInt(mission['ready_pickup_count']),
+      driverReserved: mission['driver_reserved'] == true,
+      acceptedAt: asDate(mission['accepted_at']),
       eta: asDate(json['eta']),
+      etaWindowStart: asDate(etaWindow['start']),
+      etaWindowEnd: asDate(etaWindow['end']),
       etaSource: (json['eta_source'] ?? '').toString().trim().toLowerCase(),
       lastUpdate: asDate(json['last_update']),
       liveGpsAvailable: json['map_visible'] == true && json['gps_available'] == true,
@@ -276,6 +327,11 @@ class ClientShipmentTracking {
       destinationLatitude: asDouble(destination['latitude']),
       destinationLongitude: asDouble(destination['longitude']),
       destinationLabel: cleanOvanieText((destination['label'] ?? '').toString()),
+      otpRequired: security['otp_required'] == true,
+      otpVisible: security['otp_visible'] == true,
+      otpCode: cleanOvanieText((security['otp_code'] ?? '').toString()),
+      securityMessage: cleanOvanieText((security['message'] ?? '').toString()),
+      driverContactAllowed: driver['contact_allowed'] == true,
     );
   }
 

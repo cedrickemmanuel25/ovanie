@@ -87,6 +87,7 @@ return [
         'support.tickets.store' => 'tickets.write',
         'support.tickets.update' => 'tickets.write',
         'support.tickets.reply' => 'tickets.write',
+        'support.tickets.handoff' => 'tickets.write',
         'support.tickets.*' => 'tickets.read',
         'support.messages.*' => 'messages.read',
         'support.clients.*' => 'customers.read',

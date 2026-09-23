@@ -204,17 +204,25 @@
     margin-top: 14px;
     padding: 18px;
 }
-.ov-category-grid {
+
+/* Desktop : les 8 catégories restent parfaitement alignées sur une seule
+   ligne, comme dans la version d'origine de la page d'accueil. Les wrappers
+   de groupe restent dans le HTML pour le responsive, mais deviennent
+   transparents visuellement sur grand écran. */
+.ov-category-groups {
     display: grid;
     grid-template-columns: repeat(8, minmax(0, 1fr));
-    gap: 11px;
+    gap: 12px;
+}
+.ov-category-group {
+    display: contents;
 }
 .ov-category-card {
     min-width: 0;
-    min-height: 176px;
-    padding: 8px 8px 11px;
+    min-height: 220px;
+    padding: 10px 9px 12px;
     border: 1px solid var(--ov-border);
-    border-radius: 10px;
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -228,40 +236,41 @@
 }
 .ov-category-visual {
     width: 100%;
-    height: 106px;
-    overflow: hidden;
-    display: grid;
-    place-items: center;
-    padding: 5px;
-    border-radius: 8px;
-    background: #fbfcfe;
+    height: 132px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border-radius: 9px;
+    background: #fff;
     border: 1px solid #eef2f6;
+    overflow: hidden;
 }
 .ov-category-visual img {
     display: block;
-    width: 100%;
-    height: 100%;
-    max-width: 148px;
-    max-height: 96px;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
     object-fit: contain;
     object-position: center;
 }
 .ov-category-card strong {
-    min-height: 38px;
-    margin-top: 8px;
+    min-height: 44px;
+    margin-top: 10px;
     display: grid;
     place-items: center;
     padding: 0 3px;
     color: #0d274d;
-    font-size: 10.8px;
+    font-size: 11px;
     line-height: 1.28;
     text-align: center;
 }
 .ov-category-arrow {
     margin-top: auto;
-    padding-top: 5px;
+    padding-top: 7px;
     color: var(--ov-navy-800);
-    font-size: 13px;
+    font-size: 14px;
     text-align: center;
 }
 
@@ -603,11 +612,19 @@
 .ov-help-card--whatsapp .ov-whatsapp-icon svg { fill: currentColor; stroke: none; width: 22px; height: 22px; }
 
 @media (max-width: 1280px) {
-    .ov-category-grid { grid-template-columns: repeat(4, minmax(0,1fr)); }
     .ov-commerce-row { grid-template-columns: 210px minmax(0,1fr) 290px; }
     .ov-benefit-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
     .ov-gift-grid { grid-template-columns: 1fr; }
     .ov-gift-card { grid-template-columns: minmax(0,1fr) 260px; }
+}
+
+@media (max-width: 1180px) and (min-width: 681px) {
+    .ov-category-groups {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .ov-category-card { min-height: 190px; }
+    .ov-category-visual { height: 112px; }
 }
 
 @media (max-width: 1000px) {
@@ -631,7 +648,7 @@
     .ov-shell { width: min(100% - 22px, 1500px); }
     .ov-home { padding: 8px 0 14px; }
     .ov-hero { min-height: auto; padding: 22px 18px; }
-    .ov-hero__copy h1 { font-size: 39px; }
+    .ov-hero__copy h1 { font-size: clamp(31px, 10vw, 39px); line-height: 1.03; }
     /* Boutons "Acheter maintenant" / "Vendre sur OVANIE" sur une seule ligne. */
     .ov-hero__actions { flex-wrap: nowrap; gap: 8px; }
     .ov-hero__actions .ov-btn {
@@ -663,19 +680,61 @@
     .ov-section-head { margin-bottom: 10px; gap: 10px; }
     .ov-section-head h2 { font-size: 15px; }
 
-    /* Categories: 2 blocs de 4 (colonne gauche = 4 premières catégories,
-       colonne droite = 4 suivantes) au lieu d'une grille remplie ligne par
-       ligne. */
-    .ov-category-grid {
-        grid-template-columns: repeat(2, minmax(0,1fr));
-        grid-template-rows: repeat(4, auto);
-        grid-auto-flow: column;
-        gap: 8px;
+    /* Responsive mobile : exactement 2 grands blocs côte à côte.
+       - bloc gauche : catégories 1 à 4 en grille 2x2
+       - bloc droit  : catégories 5 à 8 en grille 2x2
+       Chaque grand bloc garde sa bordure et son fond afin que la structure
+       soit visuellement évidente. */
+    .ov-category-groups {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        align-items: stretch;
     }
-    .ov-category-card { min-height: 128px; padding: 6px 6px 8px; }
-    .ov-category-visual { height: 78px; padding: 0; border: 0; background: transparent; }
-    .ov-category-visual img { max-width: 100%; max-height: 100%; height: 100%; width: 100%; object-fit: cover; border-radius: 6px; }
-    .ov-category-card strong { min-height: 30px; margin-top: 6px; font-size: 10px; }
+    .ov-category-group {
+        min-width: 0;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-rows: repeat(2, minmax(0, 1fr));
+        gap: 5px;
+        padding: 6px;
+        border: 1px solid #dbe4ef;
+        border-radius: 10px;
+        background: #f8fafd;
+    }
+    .ov-category-card {
+        min-width: 0;
+        min-height: 118px;
+        padding: 5px 4px 6px;
+        border-radius: 8px;
+        justify-content: flex-start;
+    }
+    .ov-category-visual {
+        height: 66px;
+        padding: 4px;
+        overflow: hidden;
+    }
+    .ov-category-visual img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        object-position: center;
+    }
+    .ov-category-card strong {
+        min-height: 29px;
+        margin-top: 5px;
+        padding: 0 1px;
+        font-size: 8px;
+        line-height: 1.16;
+        overflow-wrap: anywhere;
+    }
+    .ov-category-arrow {
+        padding-top: 3px;
+        font-size: 10px;
+    }
 
     /* Product grids: 2-column instead of collapsing to a single full-width column */
     .ov-product-grid--3,
@@ -765,4 +824,18 @@
         flex: 0 0 74%;
         scroll-snap-align: start;
     }
+}
+
+@media (max-width: 420px) {
+    .ov-shell { width: min(100% - 12px, 1500px); }
+    .ov-panel { border-radius: 10px; }
+    .ov-category-section { padding: 7px; }
+    .ov-category-groups { gap: 5px; }
+    .ov-category-group { padding: 4px; gap: 4px; border-radius: 8px; }
+    .ov-category-card { min-height: 106px; padding: 4px 3px 5px; border-radius: 7px; }
+    .ov-category-visual { height: 58px; padding: 3px; }
+    .ov-category-card strong { min-height: 27px; margin-top: 4px; font-size: 7.2px; line-height: 1.12; }
+    .ov-category-arrow { padding-top: 2px; font-size: 9px; }
+    .ov-hero { padding: 18px 14px; border-radius: 10px; }
+    .ov-hero__actions .ov-btn { font-size: 9.5px; }
 }

@@ -250,6 +250,14 @@ class _ClientDeliveryTrackingScreenState extends State<ClientDeliveryTrackingScr
             ],
           ),
         ),
+        if (shipment != null) ...[
+          const SizedBox(height: 7),
+          _MissionProgressCard(shipment: shipment),
+          if (shipment.otpRequired || shipment.otpVisible || shipment.isFinished) ...[
+            const SizedBox(height: 7),
+            _DeliverySecurityCard(shipment: shipment),
+          ],
+        ],
         if (tracking.shipments.length > 1) ...[
           const SizedBox(height: 7),
           Row(
@@ -299,7 +307,7 @@ class _ClientDeliveryTrackingScreenState extends State<ClientDeliveryTrackingScr
               const Divider(height: 12),
               _DataRow(icon: Icons.phone_outlined, label: 'Téléphone', value: tracking.order?.phone.trim().isNotEmpty == true ? tracking.order!.phone : '—'),
               const Divider(height: 12),
-              _DataRow(icon: Icons.schedule_outlined, label: 'Fenêtre estimée', value: _windowLabel(shipment?.eta)),
+              _DataRow(icon: Icons.schedule_outlined, label: 'Créneau estimé', value: _windowLabelForShipment(shipment)),
             ],
           ),
         ),
@@ -326,7 +334,7 @@ class _ClientDeliveryTrackingScreenState extends State<ClientDeliveryTrackingScr
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _currentMessage(shipment?.deliveryStatus ?? tracking.deliveryStatus),
+                                _currentMessageForShipment(shipment, tracking.deliveryStatus),
                                 style: TextStyle(color: OvanieColors.navy, fontSize: constraints.maxWidth < 600 ? 10.5 : 13.2, fontWeight: FontWeight.w900, height: 1.25),
                               ),
                               const SizedBox(height: 8),
@@ -484,38 +492,22 @@ class _TrackingProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final created = tracking.order?.createdAt;
+    final current = shipment?.isFinished == true
+        ? 5
+        : shipment?.isArrived == true || shipment?.isInTransit == true
+            ? 4
+            : shipment?.isCollecting == true || shipment?.deliveryStatus == 'picked_up'
+                ? 3
+                : 2;
     final update = shipment?.lastUpdate ?? tracking.lastUpdate;
-    final paymentMethod = tracking.order?.paymentMethod.toLowerCase() ?? '';
-    final paymentStatus = tracking.order?.paymentStatus.toLowerCase() ?? '';
-    final cashOnDelivery = paymentMethod == 'cash_on_delivery' || paymentMethod.contains('cash');
-    final paymentConfirmed = const {'paid', 'success', 'successful', 'completed', 'commission_paid', 'escrow_held'}.contains(paymentStatus);
-    final paymentLabel = paymentConfirmed
-        ? 'Paiement\nconfirmé'
-        : cashOnDelivery
-            ? 'Paiement à\nla livraison'
-            : 'Paiement\nen attente';
-    final labels = cashOnDelivery
-        ? [
-            ('Commande\nreçue', created),
-            ('Préparation', step >= 3 ? tracking.order?.updatedAt : null),
-            ('Expédiée', step >= 4 ? update : null),
-            ('Livrée', shipment?.isFinished == true ? update : null),
-            (paymentLabel, null),
-          ]
-        : [
-            ('Commande\nreçue', created),
-            (paymentLabel, null),
-            ('Préparation', step >= 3 ? tracking.order?.updatedAt : null),
-            ('Expédiée', step >= 4 ? update : null),
-            ('Livrée', shipment?.isFinished == true ? update : null),
-          ];
-    final completed = cashOnDelivery
-        ? <bool>[true, step >= 3, step >= 4, shipment?.isFinished == true, paymentConfirmed]
-        : <bool>[true, paymentConfirmed, step >= 3, step >= 4, shipment?.isFinished == true];
-    final visualStep = cashOnDelivery
-        ? (paymentConfirmed ? 5 : shipment?.isFinished == true ? 4 : step >= 4 ? 3 : step >= 3 ? 2 : 1)
-        : step;
+    final labels = <(String, DateTime?)>[
+      ('Commande\nvalidée', tracking.order?.createdAt),
+      ('Préparation', shipment?.acceptedAt ?? tracking.order?.updatedAt),
+      ('Collecte', current >= 3 ? update : null),
+      ('En route', current >= 4 ? update : null),
+      ('Livrée', current >= 5 ? update : null),
+    ];
+
     return SizedBox(
       height: 82,
       child: LayoutBuilder(
@@ -532,13 +524,16 @@ class _TrackingProgress extends StatelessWidget {
               Positioned(
                 left: segment / 2,
                 top: 17,
-                width: segment * (visualStep - 1).clamp(0, 4).toDouble(),
+                width: segment * (current - 1).clamp(0, 4).toDouble(),
                 child: Container(height: 2, color: const Color(0xFF1266F1)),
               ),
               Row(
                 children: List.generate(5, (index) {
-                  final done = completed[index];
-                  final waitingPayment = index == (cashOnDelivery ? 4 : 1) && !paymentConfirmed;
+                  final position = index + 1;
+                  final done = position < current;
+                  final active = position == current && current < 5;
+                  final delivered = current == 5 && position == 5;
+                  final highlighted = done || active || delivered;
                   return Expanded(
                     child: Column(
                       children: [
@@ -548,22 +543,20 @@ class _TrackingProgress extends StatelessWidget {
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: done ? const Color(0xFF1266F1) : waitingPayment ? const Color(0xFFFFF0D9) : const Color(0xFFF0F2F6),
+                            color: highlighted ? const Color(0xFF1266F1) : const Color(0xFFF0F2F6),
                           ),
-                          child: done
+                          child: done || delivered
                               ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
-                              : waitingPayment
-                                  ? const Icon(Icons.schedule_rounded, color: OvanieColors.orange, size: 19)
-                                  : Text('${index + 1}', style: const TextStyle(color: OvanieColors.navy, fontWeight: FontWeight.w800)),
+                              : Text('$position', style: TextStyle(color: highlighted ? Colors.white : OvanieColors.navy, fontWeight: FontWeight.w800)),
                         ),
                         const SizedBox(height: 5),
                         Text(
                           labels[index].$1,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: waitingPayment ? OvanieColors.orange : OvanieColors.navy, fontSize: 8.8, height: 1.15, fontWeight: waitingPayment ? FontWeight.w700 : FontWeight.normal),
+                          style: TextStyle(color: highlighted ? OvanieColors.navy : OvanieColors.muted, fontSize: 8.8, height: 1.15, fontWeight: highlighted ? FontWeight.w800 : FontWeight.normal),
                         ),
                         const SizedBox(height: 2),
-                        if (labels[index].$2 != null)
+                        if (labels[index].$2 != null && (done || active || delivered))
                           Text(_shortDate(labels[index].$2), textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF5C6880), fontSize: 7.6)),
                       ],
                     ),
@@ -671,7 +664,7 @@ class _DriverCard extends StatelessWidget {
                   width: double.infinity,
                   height: 39,
                   child: OutlinedButton.icon(
-                    onPressed: shipment.driverPhone.trim().isEmpty
+                    onPressed: !shipment.driverContactAllowed || shipment.driverPhone.trim().isEmpty
                         ? null
                         : () { unawaited(ExternalUrlLauncher.open('tel:${shipment.driverPhone.trim()}')); },
                     style: OutlinedButton.styleFrom(
@@ -688,7 +681,7 @@ class _DriverCard extends StatelessWidget {
                   width: double.infinity,
                   height: 39,
                   child: OutlinedButton.icon(
-                    onPressed: shipment.driverPhone.trim().isEmpty
+                    onPressed: !shipment.driverContactAllowed || shipment.driverPhone.trim().isEmpty
                         ? null
                         : () { unawaited(ExternalUrlLauncher.open('sms:${shipment.driverPhone.trim()}')); },
                     style: OutlinedButton.styleFrom(
@@ -699,6 +692,131 @@ class _DriverCard extends StatelessWidget {
                     icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17),
                     label: const Text('Message', style: TextStyle(fontSize: 10.2)),
                   ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MissionProgressCard extends StatelessWidget {
+  final ClientShipmentTracking shipment;
+  const _MissionProgressCard({required this.shipment});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = shipment.pickupCount;
+    final ready = shipment.readyPickupCount.clamp(0, total == 0 ? 0 : total);
+    final percent = shipment.preparationPercent.clamp(0, 100);
+    final mission = shipment.missionNumber.trim();
+
+    return _TrackingCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.route_outlined, color: Color(0xFF1266F1), size: 21),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Organisation de la livraison', style: _TrackingText.sectionTitle),
+                    if (mission.isNotEmpty)
+                      Text('Mission $mission', style: const TextStyle(color: OvanieColors.muted, fontSize: 9.5)),
+                  ],
+                ),
+              ),
+              if (shipment.driverReserved)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(color: const Color(0xFFEAF8F2), borderRadius: BorderRadius.circular(20)),
+                  child: const Text('Livreur réservé', style: TextStyle(color: Color(0xFF087A55), fontSize: 9, fontWeight: FontWeight.w900)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            shipment.missionLabel.trim().isNotEmpty ? shipment.missionLabel : _statusLabel(shipment.deliveryStatus),
+            style: const TextStyle(color: OvanieColors.navy, fontWeight: FontWeight.w900, fontSize: 12),
+          ),
+          if (!shipment.isInTransit && !shipment.isArrived && !shipment.isFinished) ...[
+            const SizedBox(height: 9),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                minHeight: 7,
+                value: percent / 100,
+                backgroundColor: const Color(0xFFE7ECF3),
+                color: const Color(0xFF1266F1),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    total > 0 ? '$ready / $total point${total > 1 ? 's' : ''} vendeur prêt${ready > 1 ? 's' : ''}' : 'Préparation en cours',
+                    style: const TextStyle(color: OvanieColors.muted, fontSize: 9.5),
+                  ),
+                ),
+                Text('$percent %', style: const TextStyle(color: OvanieColors.navy, fontSize: 10, fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DeliverySecurityCard extends StatelessWidget {
+  final ClientShipmentTracking shipment;
+  const _DeliverySecurityCard({required this.shipment});
+
+  @override
+  Widget build(BuildContext context) {
+    final delivered = shipment.isFinished;
+    final codeVisible = shipment.otpVisible && shipment.otpCode.length == 6;
+    return _TrackingCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: delivered ? const Color(0xFFEAF8F2) : const Color(0xFFFFF6E8),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(delivered ? Icons.verified_rounded : Icons.shield_outlined, color: delivered ? const Color(0xFF087A55) : OvanieColors.orange),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  delivered ? 'Livraison confirmée' : codeVisible ? 'Code de confirmation client' : 'Code de sécurité',
+                  style: const TextStyle(color: OvanieColors.navy, fontSize: 11.5, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                if (codeVisible) ...[
+                  Text(
+                    shipment.otpCode,
+                    style: const TextStyle(color: Color(0xFF1266F1), fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 5),
+                  ),
+                  const SizedBox(height: 3),
+                ],
+                Text(
+                  shipment.securityMessage.trim().isNotEmpty
+                      ? shipment.securityMessage
+                      : 'Ne communiquez jamais votre code avant d’avoir reçu et vérifié tous les articles.',
+                  style: const TextStyle(color: OvanieColors.muted, fontSize: 9.5, height: 1.4),
                 ),
               ],
             ),
@@ -817,20 +935,40 @@ String _statusLabel(String status) {
     case 'delivered':
     case 'completed':
       return 'Livrée';
+    case 'arrived':
+      return 'Livreur arrivé';
     case 'in_transit':
     case 'in_delivery':
-      return 'En livraison';
+      return 'En route vers vous';
+    case 'collecting':
     case 'picked_up':
-    case 'shipped':
-      return 'Expédiée';
-    case 'assigned':
-      return 'Livreur assigné';
-    case 'preparing':
+      return 'Collecte en cours';
     case 'ready_for_pickup':
-      return 'Préparation';
+      return 'Prête pour collecte';
+    case 'driver_reserved':
+    case 'assigned':
+      return 'Livreur réservé';
+    case 'waiting_driver':
+      return 'Recherche d’un livreur';
+    case 'preparing':
+      return 'Préparation vendeur';
+    case 'problem':
+      return 'Incident en traitement';
     default:
-      return 'En cours';
+      return 'En préparation';
   }
+}
+
+String _currentMessageForShipment(ClientShipmentTracking? shipment, String fallbackStatus) {
+  if (shipment == null) return _currentMessage(fallbackStatus);
+  if (shipment.isFinished) return 'Votre commande a été livrée et confirmée';
+  if (shipment.isArrived) return 'Votre livreur est arrivé. Vérifiez tous vos articles avant de donner votre code.';
+  if (shipment.isInTransit) return 'Le livreur est en route vers votre adresse';
+  if (shipment.isCollecting) return 'Le livreur récupère actuellement les articles chez le ou les vendeurs';
+  if (shipment.isReadyForPickup) return 'Tous les vendeurs sont prêts. Le livreur peut commencer les collectes';
+  if (shipment.isWaitingVendor) return 'Votre mission est réservée. Le livreur attend la fin de préparation des vendeurs';
+  if (shipment.deliveryStatus == 'waiting_driver') return 'OVANIE recherche un livreur partenaire compatible';
+  return 'Votre commande est en cours de préparation chez le vendeur';
 }
 
 String _currentMessage(String status) {
@@ -838,14 +976,19 @@ String _currentMessage(String status) {
     case 'delivered':
     case 'completed':
       return 'Votre commande a été livrée';
+    case 'arrived':
+      return 'Votre livreur est arrivé à votre adresse';
     case 'in_transit':
     case 'in_delivery':
       return 'Le livreur est en route vers votre adresse';
+    case 'collecting':
     case 'picked_up':
-    case 'shipped':
-      return 'Votre commande a été expédiée';
+      return 'Le livreur collecte les articles de votre commande';
+    case 'driver_reserved':
     case 'assigned':
-      return 'Un livreur a été assigné à votre commande';
+      return 'Un livreur partenaire a réservé votre mission';
+    case 'waiting_driver':
+      return 'OVANIE recherche un livreur partenaire';
     default:
       return 'Votre commande est en cours de préparation';
   }
@@ -855,16 +998,30 @@ String _etaLabel(DateTime? eta) {
   if (eta == null) return 'À confirmer';
   final now = DateTime.now();
   if (eta.year == now.year && eta.month == now.month && eta.day == now.day) {
-    return 'aujourd’hui avant ${eta.hour.toString().padLeft(2, '0')}h';
+    return 'aujourd’hui vers ${eta.hour.toString().padLeft(2, '0')}h${eta.minute.toString().padLeft(2, '0')}';
   }
-  return '${eta.day.toString().padLeft(2, '0')}/${eta.month.toString().padLeft(2, '0')} à ${eta.hour.toString().padLeft(2, '0')}h';
+  return '${eta.day.toString().padLeft(2, '0')}/${eta.month.toString().padLeft(2, '0')} à ${eta.hour.toString().padLeft(2, '0')}h${eta.minute.toString().padLeft(2, '0')}';
+}
+
+String _windowLabelForShipment(ClientShipmentTracking? shipment) {
+  if (shipment == null) return 'À confirmer';
+  final start = shipment.etaWindowStart;
+  final end = shipment.etaWindowEnd;
+  if (start != null && end != null) {
+    String hm(DateTime value) => '${value.hour.toString().padLeft(2, '0')}h${value.minute.toString().padLeft(2, '0')}';
+    final sameDay = start.year == end.year && start.month == end.month && start.day == end.day;
+    if (sameDay) return '${hm(start)} – ${hm(end)}';
+    return '${start.day}/${start.month} ${hm(start)} – ${end.day}/${end.month} ${hm(end)}';
+  }
+  return _windowLabel(shipment.eta);
 }
 
 String _windowLabel(DateTime? eta) {
   if (eta == null) return 'À confirmer';
-  final start = (eta.hour - 1).clamp(0, 23).toString().padLeft(2, '0');
-  final end = eta.hour.toString().padLeft(2, '0');
-  return '${start}h00 - ${end}h00';
+  final start = eta.subtract(const Duration(minutes: 30));
+  final end = eta.add(const Duration(minutes: 30));
+  String hm(DateTime value) => '${value.hour.toString().padLeft(2, '0')}h${value.minute.toString().padLeft(2, '0')}';
+  return '${hm(start)} – ${hm(end)}';
 }
 
 String _relativeTime(DateTime? date) {

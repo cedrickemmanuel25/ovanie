@@ -9,6 +9,7 @@ import '../menu/reviews_screen.dart';
 import '../menu/profile_screens.dart';
 import '../after_sales/after_sales_screen.dart';
 import '../notifications/vendor_notifications_screen.dart';
+import '../support/vendor_support_screen.dart';
 import 'vendor_tabs.dart';
 
 class VendorMenuScreen extends StatefulWidget {
@@ -235,7 +236,7 @@ class _MenuState extends State<VendorMenuScreen> {
           'Centre d’aide',
           'FAQ et support',
           Icons.help_outline,
-          () => web('/contact'),
+          () => openMenuPage(c, const VendorSupportScreen()),
           color: menuOrange,
         ),
         tile(

@@ -137,7 +137,12 @@ class VendorOrderController extends Controller
             'payments',
             'items' => function ($query) use ($shop) {
                 $this->visibleVendorItemQuery($query, (int) $shop->id)
-                    ->with(['product', 'statusHistories', 'sellerTrackingSession']);
+                    ->with([
+                        'product',
+                        'statusHistories',
+                        'sellerTrackingSession',
+                        'deliveryAssignments.driver',
+                    ]);
             },
         ]);
 
@@ -260,7 +265,7 @@ class VendorOrderController extends Controller
         $status = $validated['vendor_status'] ?? $validated['status'] ?? 'accepted';
         $note = $validated['vendor_status_note'] ?? null;
 
-        DB::transaction(function () use ($order, $shop, $status, $note, $validated, $transitions, $workflow) {
+        DB::transaction(function () use ($order, $shop, $status, $note, $validated, $transitions, $workflow, $logistics) {
             $lockedOrder = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
             $items = $this->vendorItems($lockedOrder, (int) $shop->id)
                 ->lockForUpdate()
@@ -317,7 +322,7 @@ class VendorOrderController extends Controller
         $message = $status !== 'ready'
             ? 'Statut de préparation mis à jour pour vos lignes de commande.'
             : ($hasOvanieLogistics
-                ? 'Préparation terminée. Les lignes OVANIE Logistics ont été transmises à la logistique pour enlèvement.'
+                ? 'Préparation terminée. OVANIE Logistics est informé et le livreur réservé reçoit automatiquement le signal de préparation. La collecte ne démarre que lorsque toute la mission est prête.'
                 : 'Préparation terminée. Commande prête pour enlèvement ou livraison.');
 
         return back()->with('success', $message);

@@ -8,9 +8,9 @@ use Illuminate\Support\Str;
 class SupportConversation extends Model
 {
     protected $fillable = [
-        'public_token', 'requester_user_id', 'requester_name', 'requester_email',
+        'public_token', 'support_requester_id', 'requester_user_id', 'requester_name', 'requester_email',
         'requester_phone', 'requester_match_method', 'requester_matched_at',
-        'channel', 'status', 'ai_agent_id', 'assigned_to', 'support_ticket_id',
+        'channel', 'source_app', 'status', 'ai_agent_id', 'assigned_to', 'support_ticket_id',
         'order_id', 'shop_id', 'payment_id', 'shipment_id', 'return_id',
         'dispute_id', 'delivery_incident_id', 'subject', 'summary', 'sentiment',
         'priority', 'ai_confidence', 'requires_human', 'last_message_at',
@@ -37,6 +37,7 @@ class SupportConversation extends Model
     }
 
     public function requester() { return $this->belongsTo(User::class, 'requester_user_id'); }
+    public function requesterProfile() { return $this->belongsTo(SupportRequester::class, 'support_requester_id'); }
     public function aiAgent() { return $this->belongsTo(SupportAiAgent::class, 'ai_agent_id'); }
     public function assignee() { return $this->belongsTo(User::class, 'assigned_to'); }
     public function ticket() { return $this->belongsTo(SupportTicket::class, 'support_ticket_id'); }
@@ -54,6 +55,19 @@ class SupportConversation extends Model
     public function callbackRequests() { return $this->hasMany(SupportCallbackRequest::class); }
     public function auditLogs() { return $this->hasMany(SupportAiAuditLog::class); }
     public function whatsappMessages() { return $this->hasMany(WhatsAppMessage::class); }
+
+    /**
+     * Exclut les anciennes conversations générées uniquement pour les maquettes
+     * du Support. Les conversations réelles n'utilisent pas metadata.reference
+     * comme identifiant de démonstration SUP-00xx.
+     */
+    public function scopeOperational($query)
+    {
+        return $query->where(function ($builder) {
+            $builder->whereNull('metadata->reference')
+                ->orWhere('metadata->reference', 'not like', 'SUP-%');
+        });
+    }
 
     public function scopeActive($query)
     {

@@ -75,4 +75,20 @@ class CategoryLandingPageTest extends TestCase
             ->assertOk()
             ->assertSee('Électricité &amp; Plomberie', false);
     }
+    public function test_an_admin_photo_overrides_the_legacy_category_visual_without_changing_its_public_url(): void
+    {
+        Category::create([
+            'name' => 'Électricité & Plomberie',
+            'slug' => 'electricite-plomberie',
+            'image_path' => 'categories/electricite-admin.webp',
+            'status' => 'actif',
+            'is_active' => true,
+        ]);
+
+        $html = $this->get(route('categories.show', 'electricite-plomberie'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('storage/categories/electricite-admin.webp', $html);
+        $this->assertStringNotContainsString('storage/logos/Électricité & Plomberie.png', $html);
+    }
+
 }

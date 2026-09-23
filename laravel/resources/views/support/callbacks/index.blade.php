@@ -1,7 +1,7 @@
 @extends('layouts.staff')
-@section('title', 'Demandes de rappel | OVANIE')
+@section('title', 'Rappels planifiés | OVANIE Support')
 @section('content')
-<div class="page-header"><div><h1 class="page-title">Demandes de rappel</h1><p class="page-subtitle">Rappels créés après un appel manqué, depuis une conversation IA ou par un agent humain.</p></div></div>
+<section class="support-hero compact"><span class="eyebrow"><i data-lucide="phone-call"></i> Suivi client</span><h1>Rappels planifiés</h1><p>Liste des personnes à rappeler après un appel manqué, une conversation ou une demande créée par un conseiller.</p><div class="page-actions" style="margin-top:15px"><a class="btn" href="{{ route('support.calls.index') }}"><i data-lucide="headphones"></i>Retour aux appels</a></div></section>
 <form class="filters" method="GET"><select name="status"><option value="">Tous les statuts</option>@foreach(['pending','scheduled','completed','cancelled'] as $status)<option value="{{ $status }}" @selected(request('status')===$status)>{{ $status }}</option>@endforeach</select><button class="btn" type="submit"><i data-lucide="filter"></i>Filtrer</button></form>
 <section class="card">
 <div class="table-wrap"><table class="data-table"><thead><tr><th>Référence</th><th>Demandeur</th><th>Téléphone</th><th>Motif</th><th>Date souhaitée</th><th>Statut</th><th>Traitement</th></tr></thead><tbody>

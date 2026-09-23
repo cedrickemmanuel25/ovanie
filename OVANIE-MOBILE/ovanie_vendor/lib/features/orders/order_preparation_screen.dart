@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
 import '../../data/vendor_repository.dart';
 import 'order_expedition_screen.dart';
+import 'order_tracking_screen.dart';
 import 'order_ui.dart';
 
 class OrderPreparationScreen extends StatefulWidget {
@@ -96,7 +97,7 @@ class _OrderPreparationScreenState extends State<OrderPreparationScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Cochez tous les articles et les vérifications avant expédition.',
+            'Cochez tous les articles et les vérifications avant de valider la préparation.',
           ),
         ),
       );
@@ -111,10 +112,51 @@ class _OrderPreparationScreenState extends State<OrderPreparationScreen> {
         widget.orderId,
         'ready',
       );
-      final updated = Map<String, dynamic>.from(_order)
-        ..['vendor_status'] = 'ready';
+
+      // Recharge immédiatement le dossier pour récupérer le vrai état
+      // logistique : mission proposée, livreur réservé et numéro de mission.
+      final refreshed = await VendorRepository.instance.order(
+        widget.orderId,
+        fresh: true,
+      );
+      final updated = orderMap(refreshed['order']);
+      final effectiveOrder = updated.isEmpty
+          ? (Map<String, dynamic>.from(_order)..['vendor_status'] = 'ready')
+          : updated;
+
       if (!mounted) return;
-      setState(() => _order = updated);
+      setState(() => _order = effectiveOrder);
+
+      final provider =
+          '${effectiveOrder['delivery_provider'] ?? ''}'.toLowerCase();
+      final tracking = orderMap(effectiveOrder['tracking']);
+      final driverReserved = tracking['driver_reserved'] == true;
+
+      if (provider == 'ovanie') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              driverReserved
+                  ? 'Préparation terminée. Le livreur réservé a été informé automatiquement.'
+                  : 'Préparation terminée. OVANIE Logistics recherche un livreur partenaire disponible.',
+            ),
+          ),
+        );
+
+        // Avec OVANIE Logistics, le vendeur ne confirme pas lui-même une
+        // "expédition". Sa responsabilité est de préparer puis remettre les
+        // produits au livreur lorsque celui-ci vient les collecter.
+        Navigator.of(context).pushReplacement<void, void>(
+          MaterialPageRoute<void>(
+            builder: (_) => OrderTrackingScreen(
+              orderId: widget.orderId,
+              initialOrder: effectiveOrder,
+            ),
+          ),
+        );
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Préparation validée. La commande est prête.'),
@@ -124,7 +166,7 @@ class _OrderPreparationScreenState extends State<OrderPreparationScreen> {
         MaterialPageRoute<bool>(
           builder: (_) => OrderExpeditionScreen(
             orderId: widget.orderId,
-            initialOrder: updated,
+            initialOrder: effectiveOrder,
           ),
         ),
       );
@@ -164,7 +206,7 @@ class _OrderPreparationScreenState extends State<OrderPreparationScreen> {
             child: OrderHeader(
               title: 'Préparation de commande',
               subtitle:
-                  'Préparez soigneusement les articles avant l’expédition.',
+                  'Préparez et vérifiez les articles avant de signaler la commande prête.',
               showBack: true,
               bottom: Align(
                 alignment: Alignment.centerRight,
@@ -773,7 +815,7 @@ class _OrderPreparationScreenState extends State<OrderPreparationScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Vérifications avant expédition',
+                  'Vérifications avant validation',
                   style: TextStyle(
                     color: orderOrange,
                     fontSize: 15,

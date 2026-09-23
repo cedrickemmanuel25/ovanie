@@ -228,6 +228,10 @@ class DriverMissionSummary {
     this.totalWeightKg = 0,
     this.vehicleLabel,
     this.preparationPercent = 0,
+    this.readyPickupCount = 0,
+    this.netAmount = 0,
+    this.canStart = false,
+    this.reservationState,
   });
 
   final String missionNumber;
@@ -244,6 +248,10 @@ class DriverMissionSummary {
   final double totalWeightKg;
   final String? vehicleLabel;
   final int preparationPercent;
+  final int readyPickupCount;
+  final double netAmount;
+  final bool canStart;
+  final String? reservationState;
 
   factory DriverMissionSummary.fromJson(Map<String, dynamic> json) => DriverMissionSummary(
         missionNumber: '${json['mission_number'] ?? ''}',
@@ -260,6 +268,10 @@ class DriverMissionSummary {
         totalWeightKg: double.tryParse('${json['total_weight_kg'] ?? 0}') ?? 0,
         vehicleLabel: json['vehicle_label']?.toString(),
         preparationPercent: int.tryParse('${json['preparation_percent'] ?? 0}') ?? 0,
+        readyPickupCount: int.tryParse('${json['ready_pickup_count'] ?? 0}') ?? 0,
+        netAmount: double.tryParse('${json['net_amount'] ?? 0}') ?? 0,
+        canStart: json['can_start'] == true,
+        reservationState: json['reservation_state']?.toString(),
       );
 }
 

@@ -156,11 +156,15 @@
             </div>
 
             @if($mission['status'] === 'arrived')
-                <p class="driver-operation-copy">Demandez le code à 6 chiffres au client après la remise complète des articles.</p>
-                <input id="otp-code" class="driver-otp-input" inputmode="numeric" maxlength="6" placeholder="000000">
-                <button id="verify-otp" class="driver-btn driver-btn--primary driver-btn--block" type="button">
+                <p class="driver-operation-copy">Remettez tous les articles au client avant de lui demander son code à 6 chiffres.</p>
+                <label class="driver-operation-note is-ready" style="cursor:pointer;align-items:flex-start;">
+                    <input id="handover-confirmed" type="checkbox" value="1" style="margin-top:4px;accent-color:#0a9b62;">
+                    <span>Je confirme que tous les articles de la mission ont été remis au client.</span>
+                </label>
+                <input id="otp-code" class="driver-otp-input" inputmode="numeric" maxlength="6" placeholder="000000" disabled>
+                <button id="verify-otp" class="driver-btn driver-btn--primary driver-btn--block" type="button" disabled>
                     <i data-lucide="badge-check"></i>
-                    Confirmer la livraison
+                    Confirmer la remise
                 </button>
             @else
                 <div class="driver-operation-note"><i data-lucide="key-round"></i><span>La confirmation par code sera disponible à votre arrivée.</span></div>
@@ -537,10 +541,31 @@
         }, 1200);
     });
 
-    document.getElementById('verify-otp')?.addEventListener('click', async () => {
-        const code = document.getElementById('otp-code').value.trim();
+    const handoverCheckbox = document.getElementById('handover-confirmed');
+    const otpInput = document.getElementById('otp-code');
+    const otpButton = document.getElementById('verify-otp');
+
+    const syncOtpState = () => {
+        if (!handoverCheckbox || !otpInput || !otpButton) return;
+        otpInput.disabled = !handoverCheckbox.checked;
+        otpButton.disabled = !handoverCheckbox.checked || otpInput.value.trim().length !== 6;
+    };
+
+    handoverCheckbox?.addEventListener('change', syncOtpState);
+    otpInput?.addEventListener('input', () => {
+        otpInput.value = otpInput.value.replace(/\D/g, '').slice(0, 6);
+        syncOtpState();
+    });
+    syncOtpState();
+
+    otpButton?.addEventListener('click', async () => {
+        const code = otpInput.value.trim();
+        if (!handoverCheckbox.checked || code.length !== 6) return;
         try {
-            await post(otpUrl, {delivery_otp_code: code});
+            await post(otpUrl, {
+                delivery_otp_code: code,
+                handover_confirmed: true,
+            });
             location.reload();
         } catch (error) {
             alert(error.message);

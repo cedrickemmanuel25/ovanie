@@ -135,8 +135,7 @@
                             <div class="ovn-account__utilities ovn-account__utilities--guest">
                                 <a href="{{ $_trackingUrl }}">Suivre une commande</a>
                                 <a href="{{ $_giftCardsUrl }}">Cartes OVANIE</a>
-                                <a href="{{ $_helpUrl }}">Centre d’aide</a>
-                            </div>
+                                            </div>
                         @endauth
                     </div>
                 </div>
@@ -180,9 +179,6 @@
                 <a href="{{ $_guaranteeUrl }}">Garantie acheteur</a>
                 <a href="{{ $_giftCardsUrl }}">Cartes cadeaux</a>
                 <a href="{{ $_trackingUrl }}">Suivi de commande</a>
-                <a href="{{ $_helpUrl }}">Centre d’aide</a>
-                <a href="{{ $_faqUrl }}">FAQ</a>
-                <a href="{{ $_aboutUrl }}">Qui sommes-nous</a>
             </nav>
 
             <a href="{{ $_sellUrl }}" class="ovn-sell-button">Vendre sur OVANIE</a>

@@ -6,6 +6,7 @@ import '../../data/vendor_repository.dart';
 import '../orders/order_ui.dart';
 import 'data_ui.dart';
 import 'finance_ui.dart';
+import '../support/vendor_support_screen.dart';
 
 class PayoutFollowUpScreen extends StatefulWidget {
   const PayoutFollowUpScreen({super.key, required this.payoutId, this.initialPayout});
@@ -274,7 +275,15 @@ class _PayoutFollowUpScreenState extends State<PayoutFollowUpScreen> {
                                 ],
                               ),
                               OutlinedButton.icon(
-                                onPressed: () {},
+                                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                                  builder: (_) => VendorSupportScreen(
+                                    initialCategory: 'payouts',
+                                    initialContextType: 'vendor_payout',
+                                    initialContextId: widget.payoutId,
+                                    initialSubject: 'Assistance versement $reference',
+                                    startNew: true,
+                                  ),
+                                )),
                                 icon: const Icon(Icons.headset_mic_outlined, size: 18),
                                 label: const Text('Contacter le support', style: TextStyle(fontSize: 12.5)),
                                 style: OutlinedButton.styleFrom(

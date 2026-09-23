@@ -304,16 +304,30 @@ class MissionStatusPill extends StatelessWidget {
   final MissionStatusKind kind;
 
   factory MissionStatusPill.forMission(DriverMissionSummaryModel mission) {
+    if (mission.isOffered) {
+      return const MissionStatusPill(
+        label: 'Disponible',
+        icon: Icons.notifications_active_rounded,
+        kind: MissionStatusKind.warning,
+      );
+    }
     if (mission.isToAccept) {
-      return MissionStatusPill(
-        label: 'À accepter',
+      return const MissionStatusPill(
+        label: 'À réserver',
         icon: Icons.schedule_rounded,
         kind: MissionStatusKind.warning,
       );
     }
-    if (mission.isAccepted) {
-      return MissionStatusPill(
-        label: 'Acceptée',
+    if (mission.isWaitingVendor) {
+      return const MissionStatusPill(
+        label: 'Réservée',
+        icon: Icons.lock_clock_rounded,
+        kind: MissionStatusKind.neutral,
+      );
+    }
+    if (mission.isReadyForPickup) {
+      return const MissionStatusPill(
+        label: 'Prête',
         icon: Icons.check_circle_rounded,
         kind: MissionStatusKind.success,
       );

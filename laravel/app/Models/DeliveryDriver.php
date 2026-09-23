@@ -219,6 +219,11 @@ class DeliveryDriver extends Authenticatable
         return $this->hasMany(DriverLocation::class, 'driver_id');
     }
 
+    public function supportRequesterProfiles()
+    {
+        return $this->hasMany(SupportRequester::class, 'delivery_driver_id');
+    }
+
     public function assignments()
     {
         return $this->hasMany(DeliveryAssignment::class, 'driver_id');

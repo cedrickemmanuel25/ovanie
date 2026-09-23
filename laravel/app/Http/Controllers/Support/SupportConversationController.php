@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Support;
 
 use App\Http\Controllers\Controller;
 use App\Models\SupportConversation;
+use App\Models\SupportConversationMessage;
+use App\Models\SupportRequester;
 use App\Models\User;
 use App\Services\SupportAi\SupportAiAuditLogger;
 use App\Services\SupportAi\SupportAiOrchestrator;
@@ -19,9 +21,29 @@ class SupportConversationController extends Controller
     public function index(Request $request, SupportServiceStatusService $services)
     {
         $query = SupportConversation::query()
-            ->with(['requester', 'aiAgent', 'assignee', 'ticket', 'order', 'shipment', 'commercialLead', 'deliveryIncident'])
+            ->operational()
+            ->with(['requester', 'requesterProfile', 'aiAgent', 'assignee', 'ticket.contextLinks', 'order', 'payment', 'shipment', 'shop', 'returnRequest', 'dispute', 'commercialLead', 'deliveryIncident'])
             ->withCount('messages')
             ->latest('last_message_at');
+
+        $scope = trim((string) $request->query('scope', 'waiting'));
+        $currentUser = $request->user('admin');
+        if ($scope === 'waiting') {
+            $query->where(function ($builder) {
+                $builder->where(function ($waiting) {
+                    $waiting->where('requires_human', true)->orWhere('status', 'waiting_human');
+                })->whereNull('assigned_to');
+            });
+        } elseif ($scope === 'mine' && $currentUser) {
+            $query->where('assigned_to', $currentUser->id)->whereIn('status', ['active', 'waiting_human', 'human']);
+        } elseif ($scope === 'closed') {
+            $query->whereIn('status', ['resolved', 'closed']);
+        } elseif ($scope === 'all') {
+            // Aucun filtre de statut.
+        } else {
+            $scope = 'open';
+            $query->whereIn('status', ['active', 'waiting_human', 'human']);
+        }
 
         if ($search = trim((string) $request->query('q'))) {
             $query->where(function ($builder) use ($search) {
@@ -31,21 +53,36 @@ class SupportConversationController extends Controller
                     ->orWhere('requester_phone', 'like', "%{$search}%")
                     ->orWhereHas('order', fn ($order) => $order->where('order_number', 'like', "%{$search}%"))
                     ->orWhereHas('shipment', fn ($shipment) => $shipment->where('tracking_number', 'like', "%{$search}%"))
+                    ->orWhereHas('payment', fn ($payment) => $payment->where('reference', 'like', "%{$search}%")->orWhere('transaction_id', 'like', "%{$search}%"))
                     ->orWhereHas('ticket', fn ($ticket) => $ticket->where('reference', 'like', "%{$search}%"));
             });
         }
 
-        foreach (['status', 'channel', 'ai_agent_id', 'assigned_to'] as $filter) {
+        foreach (['status', 'channel', 'assigned_to'] as $filter) {
             if ($request->filled($filter)) {
                 $query->where($filter, $request->query($filter));
             }
         }
 
+        $base = SupportConversation::query()->operational();
+        $stats = [
+            'open' => (clone $base)->whereIn('status', ['active', 'waiting_human', 'human'])->count(),
+            'waiting' => (clone $base)->where(function ($builder) {
+                $builder->where(function ($waiting) {
+                    $waiting->where('requires_human', true)->orWhere('status', 'waiting_human');
+                })->whereNull('assigned_to');
+            })->count(),
+            'mine' => $currentUser ? (clone $base)->where('assigned_to', $currentUser->id)->whereIn('status', ['active', 'waiting_human', 'human'])->count() : 0,
+            'closed' => (clone $base)->whereIn('status', ['resolved', 'closed'])->count(),
+            'all' => (clone $base)->count(),
+        ];
+
         return view('support.conversations.index', [
             'conversations' => $query->paginate(25)->withQueryString(),
-            'agents' => \App\Models\SupportAiAgent::orderBy('name')->get(),
             'humanAgents' => $this->humanAgents(),
             'services' => $services->all(),
+            'conversationStats' => $stats,
+            'scope' => $scope,
         ]);
     }
 
@@ -83,13 +120,26 @@ class SupportConversationController extends Controller
         }
 
         $requester = ! empty($data['requester_user_id']) ? User::find($data['requester_user_id']) : null;
+        $supportRequester = null;
+        if ($requester) {
+            $requesterType = $requester->role === 'vendor' ? 'vendor' : ($requester->role === 'commercial' ? 'commercial' : 'client');
+            $shopId = $requesterType === 'vendor' ? $requester->shop?->id : null;
+            $supportRequester = SupportRequester::firstOrCreate(
+                ['requester_type' => $requesterType, 'user_id' => $requester->id, 'shop_id' => $shopId],
+                ['name' => $requester->name, 'email' => $requester->email, 'phone' => $requester->phone]
+            );
+        }
         $conversation = SupportConversation::create([
+            'support_requester_id' => $supportRequester?->id,
             'requester_user_id' => $requester?->id,
             'requester_name' => $data['requester_name'] ?? $requester?->name,
             'requester_email' => $data['requester_email'] ?? $requester?->email,
             'requester_phone' => $data['requester_phone'] ?? $requester?->phone,
             'channel' => $data['channel'],
-            'status' => 'active',
+            'source_app' => 'support_web',
+            'status' => 'human',
+            'assigned_to' => $request->user('admin')->id,
+            'requires_human' => true,
             'subject' => $data['subject'],
             'order_id' => $data['order_id'] ?? null,
             'payment_id' => $data['payment_id'] ?? null,
@@ -100,21 +150,27 @@ class SupportConversationController extends Controller
         ]);
 
         $conversation = $linker->link($conversation, $data['message'], $data, true, $requester);
-        $orchestrator->receiveCustomerMessage($conversation, $data['message'], $conversation->requester, [
-            'entered_by_staff' => $request->user('admin')->id,
-            'order_reference' => $data['order_reference'] ?? null,
-            'payment_reference' => $data['payment_reference'] ?? null,
-            'tracking_reference' => $data['tracking_reference'] ?? null,
+
+        SupportConversationMessage::create([
+            'support_conversation_id' => $conversation->id,
+            'sender_type' => 'human',
+            'sender_user_id' => $request->user('admin')->id,
+            'body' => trim($data['message']),
+            'format' => 'text',
+            'is_internal' => false,
+            'provider' => 'support_web',
+            'metadata' => ['outbound_follow_up' => true],
         ]);
+        $conversation->forceFill(['last_message_at' => now()])->save();
 
         return redirect()->route('support.conversations.show', $conversation)
-            ->with('success', 'Conversation créée, compte et dossiers réels recherchés automatiquement.');
+            ->with('success', 'Suivi sortant créé. Il est pris en charge par vous et n’est pas renvoyé automatiquement à l’assistant IA.');
     }
 
     public function show(SupportConversation $conversation)
     {
         $conversation->load([
-            'requester', 'aiAgent', 'assignee', 'ticket', 'commercialLead.assignee',
+            'requester', 'requesterProfile', 'aiAgent', 'assignee', 'ticket.contextLinks', 'commercialLead.assignee',
             'order', 'payment', 'shipment', 'shop', 'returnRequest', 'dispute', 'deliveryIncident',
             'messages.sender', 'messages.aiAgent',
             'handoffs.aiAgent', 'handoffs.assignee', 'handoffs.ticket', 'handoffs.deliveryIncident', 'handoffs.commercialLead',
@@ -159,6 +215,7 @@ class SupportConversationController extends Controller
         SupportConversation $conversation,
         SupportHandoffQueueService $queue,
         SupportAiAuditLogger $audit,
+        SupportTicketFactory $tickets,
     ) {
         $user = $request->user('admin');
         $handoff = $conversation->handoffs()->open()->where('target_department', 'support')->latest('requested_at')->first();
@@ -180,13 +237,26 @@ class SupportConversationController extends Controller
             ]);
         }
 
-        return back()->with('success', 'Vous avez pris en charge cette conversation.');
+        // Dès qu'un conseiller prend réellement la main, le suivi devient un
+        // Dossier Support. Les simples échanges encore gérés par l'assistant
+        // restent de simples conversations tant qu'aucune action humaine n'est requise.
+        if (! $conversation->support_ticket_id) {
+            $ticket = $tickets->fromConversation(
+                $conversation->fresh(['aiAgent']),
+                $conversation->summary ?: ('Prise en charge humaine : '.($conversation->subject ?: 'demande Support OVANIE')),
+                $conversation->priority ?: 'normal',
+                ['assigned_to' => $user->id, 'team' => 'support'],
+            );
+            $conversation->forceFill(['support_ticket_id' => $ticket->id])->save();
+        }
+
+        return back()->with('success', 'Conversation prise en charge et dossier Support lié automatiquement.');
     }
 
     public function handoff(Request $request, SupportConversation $conversation, SupportHandoffQueueService $queue, SupportTicketFactory $tickets)
     {
         $data = $request->validate([
-            'target_department' => ['required', Rule::in(['support', 'logistique', 'commercial', 'administration'])],
+            'target_department' => ['required', Rule::in(['logistique', 'commercial', 'administration'])],
             'severity' => ['required', Rule::in(['normal', 'high', 'urgent'])],
             'reason' => ['required', 'string', 'max:3000'],
         ]);
@@ -195,10 +265,10 @@ class SupportConversationController extends Controller
             $conversation->load('aiAgent'),
             $data['reason'],
             $data['severity'] === 'urgent' ? 'urgent' : ($data['severity'] === 'high' ? 'high' : 'normal'),
-            ['team' => $data['target_department']],
+            ['team' => 'support'],
         );
 
-        $queue->enqueue(
+        $handoff = $queue->enqueue(
             $conversation,
             $data['target_department'],
             $data['reason'],
@@ -210,7 +280,28 @@ class SupportConversationController extends Controller
             requestedByType: 'human',
         );
 
-        return back()->with('success', 'Le dossier a été ajouté à la file réelle du service sélectionné.');
+        if (! in_array($ticket->status, ['closed', 'cancelled'], true)) {
+            $metadata = is_array($ticket->metadata) ? $ticket->metadata : [];
+            $ticket->forceFill([
+                'status' => 'waiting_internal',
+                'team' => 'support',
+                'escalation_level' => max(1, (int) $ticket->escalation_level),
+                'metadata' => array_merge($metadata, [
+                    'last_handoff_reference' => $handoff->reference,
+                    'last_handoff_department' => $data['target_department'],
+                    'last_handoff_at' => now()->toIso8601String(),
+                ]),
+            ])->save();
+        }
+
+        $ticket->messages()->create([
+            'author_id' => $request->user('admin')->id,
+            'author_type' => 'staff',
+            'body' => 'Dossier transmis à '.ucfirst($data['target_department']).".\nMotif : ".trim($data['reason']),
+            'is_internal_note' => true,
+        ]);
+
+        return back()->with('success', 'Dossier transmis à '.ucfirst($data['target_department']).'. Le Support reste responsable du suivi avec le demandeur.');
     }
 
     public function createTicket(Request $request, SupportConversation $conversation, SupportTicketFactory $factory)
@@ -230,7 +321,7 @@ class SupportConversationController extends Controller
         $user = $request->user('admin');
         foreach ($conversation->handoffs()->open()->where('target_department', 'support')->get() as $handoff) {
             if (! $handoff->assigned_to || (int) $handoff->assigned_to === (int) $user->id) {
-                $queue->resolve($handoff, $user, 'Conversation résolue depuis la console Support.', 'conversation_resolved');
+                $queue->resolve($handoff, $user, 'Suivi de conversation terminé depuis la console Support.', 'conversation_resolved');
             }
         }
 
@@ -248,7 +339,7 @@ class SupportConversationController extends Controller
             'risk_level' => 'low',
         ]);
 
-        return back()->with('success', 'Conversation marquée comme résolue.');
+        return back()->with('success', 'Conversation terminée. Le suivi reste conservé dans l’historique.');
     }
 
     private function humanAgents()

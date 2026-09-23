@@ -40,7 +40,6 @@ use App\Http\Controllers\Api\MobileReturnController;
 use App\Http\Controllers\Api\MobileClientAccountController;
 use App\Http\Controllers\Api\MobileReviewController;
 use App\Http\Controllers\Api\MobileRecentlyViewedController;
-use App\Http\Controllers\Api\MobileSupportController;
 use App\Http\Controllers\Api\MobilePushDeviceController;
 use App\Http\Controllers\Api\MobileCheckoutController;
 use App\Http\Controllers\Api\DeliveryTerritoryController;
@@ -65,6 +64,8 @@ use App\Http\Controllers\Admin\UserApiController;
 use App\Http\Controllers\Api\Staff\SupportTicketApiController;
 use App\Http\Controllers\Api\Staff\CommercialLeadApiController;
 use App\Http\Controllers\Api\Support\PublicSupportChatController;
+use App\Http\Controllers\Api\Support\UnifiedMobileSupportController;
+use App\Http\Controllers\Api\Commercial\CommercialSupportTransferController;
 use App\Http\Controllers\Webhooks\SupportTelephonyWebhookController;
 use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
 use App\Http\Controllers\Webhooks\TwilioSupportVoiceController;
@@ -333,6 +334,12 @@ Route::prefix('mobile/v1/vendor')
         Route::post('/disputes/{dispute}/respond', [VendorMobileController::class, 'respondDispute']);
         Route::post('/disputes/{dispute}/escalate', [VendorMobileController::class, 'escalateDispute']);
 
+        Route::get('/support', [UnifiedMobileSupportController::class, 'index'])->defaults('support_requester_type', 'vendor')->defaults('support_source_app', 'vendor_mobile');
+        Route::post('/support/tickets', [UnifiedMobileSupportController::class, 'store'])->defaults('support_requester_type', 'vendor')->defaults('support_source_app', 'vendor_mobile')->middleware('throttle:10,1');
+        Route::get('/support/tickets/{ticket}', [UnifiedMobileSupportController::class, 'show'])->defaults('support_requester_type', 'vendor')->defaults('support_source_app', 'vendor_mobile');
+        Route::post('/support/tickets/{ticket}/messages', [UnifiedMobileSupportController::class, 'reply'])->defaults('support_requester_type', 'vendor')->defaults('support_source_app', 'vendor_mobile')->middleware('throttle:20,1');
+        Route::get('/support/tickets/{ticket}/messages/{message}/attachments/{index}', [UnifiedMobileSupportController::class, 'download'])->defaults('support_requester_type', 'vendor')->defaults('support_source_app', 'vendor_mobile')->whereNumber('index');
+
         Route::get('/notifications', [VendorMobileController::class, 'notifications']);
         Route::post('/notifications/read-all', [VendorMobileController::class, 'readAllNotifications']);
         Route::post('/notifications/{notification}/read', [VendorMobileController::class, 'readNotification']);
@@ -441,11 +448,11 @@ Route::middleware(['auth:sanctum', 'throttle:240,1,private-api:'])->group(functi
     Route::post('/mobile/client/recently-viewed/{product}', [MobileRecentlyViewedController::class, 'store']);
     Route::delete('/mobile/client/recently-viewed', [MobileRecentlyViewedController::class, 'destroy']);
 
-    Route::get('/mobile/client/support', [MobileSupportController::class, 'index']);
-    Route::post('/mobile/client/support/tickets', [MobileSupportController::class, 'storeTicket'])->middleware('throttle:10,1,mobile-support-ticket:');
-    Route::get('/mobile/client/support/tickets/{ticket}', [MobileSupportController::class, 'showTicket']);
-    Route::post('/mobile/client/support/tickets/{ticket}/messages', [MobileSupportController::class, 'replyTicket'])->middleware('throttle:20,1,mobile-support-reply:');
-    Route::get('/mobile/client/support/tickets/{ticket}/messages/{message}/attachments/{index}', [MobileSupportController::class, 'downloadAttachment'])
+    Route::get('/mobile/client/support', [UnifiedMobileSupportController::class, 'index'])->defaults('support_requester_type', 'client')->defaults('support_source_app', 'client_mobile');
+    Route::post('/mobile/client/support/tickets', [UnifiedMobileSupportController::class, 'store'])->defaults('support_requester_type', 'client')->defaults('support_source_app', 'client_mobile')->middleware('throttle:10,1,mobile-support-ticket:');
+    Route::get('/mobile/client/support/tickets/{ticket}', [UnifiedMobileSupportController::class, 'show'])->defaults('support_requester_type', 'client')->defaults('support_source_app', 'client_mobile');
+    Route::post('/mobile/client/support/tickets/{ticket}/messages', [UnifiedMobileSupportController::class, 'reply'])->defaults('support_requester_type', 'client')->defaults('support_source_app', 'client_mobile')->middleware('throttle:20,1,mobile-support-reply:');
+    Route::get('/mobile/client/support/tickets/{ticket}/messages/{message}/attachments/{index}', [UnifiedMobileSupportController::class, 'download'])->defaults('support_requester_type', 'client')->defaults('support_source_app', 'client_mobile')
         ->whereNumber('index')
         ->name('mobile.client.support.attachments.download');
 
@@ -626,6 +633,12 @@ Route::prefix('driver')->name('api.driver.')->group(function () {
         Route::delete('/push/devices', [DriverPushDeviceController::class, 'destroy'])
             ->middleware('throttle:15,1')
             ->name('push.devices.destroy');
+
+        Route::get('/support', [UnifiedMobileSupportController::class, 'index'])->defaults('support_requester_type', 'driver')->defaults('support_source_app', 'driver_mobile');
+        Route::post('/support/tickets', [UnifiedMobileSupportController::class, 'store'])->defaults('support_requester_type', 'driver')->defaults('support_source_app', 'driver_mobile')->middleware('throttle:10,1');
+        Route::get('/support/tickets/{ticket}', [UnifiedMobileSupportController::class, 'show'])->defaults('support_requester_type', 'driver')->defaults('support_source_app', 'driver_mobile');
+        Route::post('/support/tickets/{ticket}/messages', [UnifiedMobileSupportController::class, 'reply'])->defaults('support_requester_type', 'driver')->defaults('support_source_app', 'driver_mobile')->middleware('throttle:20,1');
+        Route::get('/support/tickets/{ticket}/messages/{message}/attachments/{index}', [UnifiedMobileSupportController::class, 'download'])->defaults('support_requester_type', 'driver')->defaults('support_source_app', 'driver_mobile')->whereNumber('index');
     });
 });
 
@@ -675,6 +688,18 @@ Route::prefix('mobile/v1/commercial')->name('api.mobile.commercial.')->group(fun
         Route::post('/products/{product:id}/steps/{step}', [CommercialMobileProductController::class, 'saveStep'])->whereNumber('product')->whereNumber('step');
         Route::post('/products/{product:id}/media', [CommercialMobileProductController::class, 'media'])->whereNumber('product');
         Route::post('/products/{product:id}/publish', [CommercialMobileProductController::class, 'publish'])->whereNumber('product');
+
+        Route::get('/support', [UnifiedMobileSupportController::class, 'index'])->defaults('support_requester_type', 'commercial')->defaults('support_source_app', 'commercial_mobile');
+        Route::post('/support/tickets', [UnifiedMobileSupportController::class, 'store'])->defaults('support_requester_type', 'commercial')->defaults('support_source_app', 'commercial_mobile')->middleware('throttle:10,1');
+        Route::get('/support/tickets/{ticket}', [UnifiedMobileSupportController::class, 'show'])->defaults('support_requester_type', 'commercial')->defaults('support_source_app', 'commercial_mobile');
+        Route::post('/support/tickets/{ticket}/messages', [UnifiedMobileSupportController::class, 'reply'])->defaults('support_requester_type', 'commercial')->defaults('support_source_app', 'commercial_mobile')->middleware('throttle:20,1');
+        Route::get('/support/tickets/{ticket}/messages/{message}/attachments/{index}', [UnifiedMobileSupportController::class, 'download'])->defaults('support_requester_type', 'commercial')->defaults('support_source_app', 'commercial_mobile')->whereNumber('index');
+
+        Route::get('/support/transfers', [CommercialSupportTransferController::class, 'index']);
+        Route::get('/support/transfers/{handoff}', [CommercialSupportTransferController::class, 'show']);
+        Route::post('/support/transfers/{handoff}/claim', [CommercialSupportTransferController::class, 'claim']);
+        Route::post('/support/transfers/{handoff}/messages', [CommercialSupportTransferController::class, 'message']);
+        Route::post('/support/transfers/{handoff}/resolve', [CommercialSupportTransferController::class, 'resolve']);
 
         // Menu OVANIE Commercial
         Route::get('/menu/overview', [CommercialMobileMenuController::class, 'overview'])->name('menu.overview');

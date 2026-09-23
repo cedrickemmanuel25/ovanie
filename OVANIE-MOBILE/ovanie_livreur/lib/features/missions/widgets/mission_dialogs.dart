@@ -107,6 +107,7 @@ Future<MissionIncidentDraft?> showMissionIncidentDialog(BuildContext context) as
     'accident': 'Accident',
     'product_damaged': 'Produit endommagé',
     'access_impossible': 'Accès impossible',
+    'delivery_refused': 'Client refuse la réception',
     'other': 'Autre problème',
   };
 

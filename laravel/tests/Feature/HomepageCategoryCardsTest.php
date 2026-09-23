@@ -94,4 +94,20 @@ class HomepageCategoryCardsTest extends TestCase
         $this->assertStringContainsString('Xyzzyx sans visuel', $html);
         $this->assertStringContainsString('images/home/product-placeholder.svg', $html);
     }
+    public function test_the_homepage_renders_categories_as_two_groups_of_four(): void
+    {
+        foreach (range(1, 8) as $i) {
+            Category::create([
+                'name' => "Groupe catégorie {$i}",
+                'slug' => "groupe-categorie-{$i}-" . uniqid(),
+                'status' => 'actif',
+                'sort_order' => $i,
+            ]);
+        }
+
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertSame(2, substr_count($html, 'class="ov-category-group"'));
+    }
+
 }

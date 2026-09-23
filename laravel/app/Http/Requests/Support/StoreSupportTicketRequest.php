@@ -15,14 +15,15 @@ class StoreSupportTicketRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'requester_type' => ['required', Rule::in(['client', 'vendor', 'commercial', 'driver', 'guest'])],
             'requester_user_id' => ['nullable', 'exists:users,id'],
+            'delivery_driver_id' => ['nullable', 'exists:delivery_drivers,id'],
             'requester_name' => ['nullable', 'string', 'max:255'],
             'requester_email' => ['nullable', 'email', 'max:255'],
             'requester_phone' => ['nullable', 'string', 'max:40'],
             'channel' => ['required', Rule::in(['internal', 'phone', 'email', 'whatsapp', 'web', 'social'])],
             'category' => ['required', 'string', 'max:60'],
             'priority' => ['required', Rule::in(['low', 'normal', 'high', 'urgent'])],
-            'team' => ['required', 'string', 'max:40'],
             'subject' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:10000'],
             'assigned_to' => ['nullable', 'exists:users,id'],
@@ -34,6 +35,8 @@ class StoreSupportTicketRequest extends FormRequest
             'dispute_id' => ['nullable', 'exists:disputes,id'],
             'delivery_incident_id' => ['nullable', 'exists:delivery_incidents,id'],
             'submission_id' => ['nullable', 'exists:submissions,id'],
+            'context_type' => ['nullable', Rule::in(['driver','delivery_assignment','mission','vendor_payout','product','commercial_lead','client'])],
+            'context_id' => ['nullable', 'integer', 'min:1'],
         ];
     }
 }

@@ -20,11 +20,15 @@ class SupportRepository {
     return SupportCenterData.fromJson(_data(response.data));
   }
 
-  Future<void> createTicket({required String category, required String subject, required String description, List<String> attachmentPaths = const []}) async {
+  Future<void> createTicket({required String category, required String subject, required String description, List<Map<String, dynamic>> contexts = const [], List<String> attachmentPaths = const []}) async {
     final form = FormData.fromMap({
       'category': category,
       'subject': subject.trim(),
       'description': description.trim(),
+      for (var i = 0; i < contexts.length; i++) ...{
+        'contexts[$i][type]': contexts[i]['type'],
+        'contexts[$i][id]': contexts[i]['id'],
+      },
       if (attachmentPaths.isNotEmpty)
         'attachments': [for (final path in attachmentPaths.take(4)) await MultipartFile.fromFile(path, filename: path.split(Platform.pathSeparator).last)],
     });

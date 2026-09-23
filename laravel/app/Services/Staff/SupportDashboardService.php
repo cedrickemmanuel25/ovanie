@@ -36,18 +36,24 @@ class SupportDashboardService
                 'open_returns' => ReturnModel::whereNotIn('status', ['rejected', 'closed', 'refunded', 'resolved', 'cancelled'])->count(),
                 'escalated_disputes' => Dispute::where('escalated', true)->count(),
                 'unlinked_messages' => Submission::whereDoesntHave('supportTickets')->count(),
-                'active_ai_conversations' => SupportConversation::active()->count(),
+                'waiting_human_conversations' => SupportConversation::query()->operational()->where(function ($query) {
+                    $query->where('status', 'waiting_human')->orWhere('requires_human', true);
+                })->whereNull('assigned_to')->whereNotIn('status', ['resolved', 'closed'])->count(),
+                'active_ai_conversations' => SupportConversation::query()->operational()->active()->count(),
                 'waiting_calls' => SupportCall::whereIn('status', ['waiting', 'ringing', 'waiting_transfer'])->count(),
                 'missed_calls_today' => SupportCall::where('status', 'missed')->whereDate('started_at', today())->count(),
                 'pending_callbacks' => SupportCallbackRequest::whereIn('status', ['pending', 'scheduled'])->count(),
-                'pending_handoffs' => SupportAgentHandoff::open()->count(),
+                'pending_handoffs' => SupportAgentHandoff::query()
+                    ->operational()
+                    ->whereIn('target_department', ['logistique', 'commercial', 'administration'])
+                    ->open()->count(),
                 'ai_created_tickets' => SupportTicket::where('created_by_ai', true)->count(),
                 'active_ai_agents' => SupportAiAgent::where('status', 'active')->count(),
             ],
             'services' => $this->services->all(),
-            'recentTickets' => SupportTicket::with(['requester', 'assignee', 'order', 'shop', 'aiAgent'])
+            'recentTickets' => SupportTicket::with(['requester', 'requesterProfile', 'assignee', 'order', 'shop', 'aiAgent'])
                 ->latest()->limit(10)->get(),
-            'myQueue' => SupportTicket::with(['requester', 'order'])
+            'myQueue' => SupportTicket::with(['requester', 'requesterProfile', 'order'])
                 ->open()->where('assigned_to', $user->id)
                 ->orderByRaw("CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END")
                 ->orderBy('sla_due_at')->limit(8)->get(),
@@ -56,9 +62,10 @@ class SupportDashboardService
                 ->with('assignee:id,name,first_name,last_name')
                 ->open()->whereNotNull('assigned_to')
                 ->groupBy('assigned_to')->orderByDesc('total')->limit(8)->get(),
-            'recentConversations' => SupportConversation::with(['requester', 'aiAgent', 'assignee', 'ticket'])
+            'recentConversations' => SupportConversation::query()->operational()->with(['requester', 'requesterProfile', 'aiAgent', 'assignee', 'ticket'])
                 ->latest('last_message_at')->limit(8)->get(),
-            'waitingHandoffs' => SupportAgentHandoff::with(['conversation.requester', 'aiAgent', 'assignee'])
+            'waitingHandoffs' => SupportAgentHandoff::query()->operational()->with(['conversation.requester', 'ticket.requesterProfile', 'aiAgent', 'assignee'])
+                ->whereIn('target_department', ['logistique', 'commercial', 'administration'])
                 ->open()->latest('requested_at')->limit(6)->get(),
             'recentCalls' => SupportCall::with(['requester', 'aiAgent', 'handler'])
                 ->latest('started_at')->limit(6)->get(),

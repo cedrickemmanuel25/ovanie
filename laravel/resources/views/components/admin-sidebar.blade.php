@@ -121,6 +121,14 @@
 
         <p class="sidebar-section">Administration</p>
 
+        <a href="{{ route('admin.support-handoffs.index') }}"
+           class="{{ request()->routeIs('admin.support-handoffs.*') ? 'active' : '' }}">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 12h12M12 6l6 6-6 6M4 5h5M4 19h5" />
+            </svg>
+            <span>Demandes du Support</span>
+        </a>
+
         <a href="{{ route('admin.staff.index') }}"
            class="{{ request()->routeIs('admin.staff.*') ? 'active' : '' }}">
             <svg viewBox="0 0 24 24" aria-hidden="true">

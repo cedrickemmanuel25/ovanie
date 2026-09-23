@@ -138,7 +138,7 @@ class _MissionListScreenState extends State<MissionListScreen> {
     try {
       await MissionRepository.instance.reject(mission.missionNumber, reason: reason);
       if (!mounted) return;
-      showMissionSnack(context, 'Mission refusée et renvoyée à OVANIE Logistics.');
+      showMissionSnack(context, 'Mission refusée. Elle reste disponible pour les autres livreurs éligibles.');
       await _load();
     } catch (error) {
       if (mounted) showMissionSnack(context, ApiClient.friendlyError(error), error: true);
@@ -157,7 +157,7 @@ class _MissionListScreenState extends State<MissionListScreen> {
         children: [
           MissionPageHeader(
             title: 'Mes missions',
-            subtitle: 'Missions à accepter, acceptées et en cours',
+            subtitle: 'Missions disponibles, réservées et en cours',
             mainPage: true,
             trailing: MissionNotificationButton(
               count: data?.unreadNotifications ?? 0,
@@ -205,7 +205,7 @@ class _MissionListScreenState extends State<MissionListScreen> {
                     const _MissionStateBox(
                       icon: Icons.assignment_turned_in_outlined,
                       title: 'Aucune mission dans cette catégorie',
-                      message: 'Les missions affectées par OVANIE Logistics apparaîtront ici.',
+                      message: 'Les missions proposées automatiquement par OVANIE Logistics apparaîtront ici.',
                     )
                   else
                     ...[
@@ -258,7 +258,7 @@ class _MissionCounters extends StatelessWidget {
             child: _CounterItem(
               icon: Icons.schedule_rounded,
               color: MissionPalette.amber,
-              label: 'À accepter',
+              label: 'À réserver',
               value: data?.toAcceptCount ?? 0,
             ),
           ),
@@ -267,7 +267,7 @@ class _MissionCounters extends StatelessWidget {
             child: _CounterItem(
               icon: Icons.check_circle_rounded,
               color: OvanieColors.green,
-              label: 'Acceptées',
+              label: 'Réservées',
               value: data?.acceptedCount ?? 0,
             ),
           ),
@@ -391,8 +391,8 @@ class _MissionFilters extends StatelessWidget {
 
   static const filters = <(String, String)>[
     ('all', 'Toutes'),
-    ('to_accept', 'À accepter'),
-    ('accepted', 'Acceptées'),
+    ('to_accept', 'À réserver'),
+    ('accepted', 'Réservées'),
     ('in_progress', 'En cours'),
     ('delivered', 'Livrées'),
   ];
@@ -596,11 +596,19 @@ class _MissionListCard extends StatelessWidget {
           const SizedBox(height: 6),
           MissionProgress(value: mission.preparationPercent),
           const SizedBox(height: 11),
-          if (mission.isAccepted)
+          if (mission.isOffered)
+            const MissionTintMessage(
+              text: 'Vous pouvez réserver cette mission maintenant. La collecte restera bloquée tant que les vendeurs ne sont pas prêts.',
+              warning: true,
+              icon: Icons.info_outline_rounded,
+            )
+          else if (mission.isAccepted)
             MissionTintMessage(
-              text: mission.preparationPercent >= 100
-                  ? 'Prête à démarrer'
-                  : 'Préparation en cours — ${mission.preparationPercent} %',
+              text: mission.canStart
+                  ? 'Tous les vendeurs sont prêts — la collecte peut démarrer.'
+                  : 'Mission réservée — ${mission.preparationLabel}. Attendez le signal de collecte.',
+              warning: !mission.canStart,
+              icon: mission.canStart ? Icons.check_circle_rounded : Icons.hourglass_top_rounded,
             )
           else if (mission.isCollecting || mission.isInProgress)
             MissionTintMessage(
@@ -622,7 +630,7 @@ class _MissionListCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: MissionPrimaryButton(
-                    label: 'Accepter',
+                    label: 'Réserver',
                     loading: busy,
                     onPressed: onAccept,
                   ),

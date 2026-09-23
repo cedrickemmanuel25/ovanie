@@ -16,8 +16,8 @@
     <button class="ops-mobile-toggle ops-icon-button" aria-label="Ouvrir la navigation" aria-expanded="false" data-nav-toggle><x-operations.icon name="list"/></button>
     <nav class="ops-navigation" aria-label="Navigation logistique">
         <a class="{{ request()->routeIs('logistics.dashboard') ? 'active' : '' }}" href="{{ route('logistics.dashboard') }}">Accueil</a>
-        <details class="ops-nav-menu"><summary class="{{ request()->routeIs('logistics.shipments*', 'logistics.assignments.*', 'logistics.active-deliveries', 'logistics.tours.*') ? 'active' : '' }}">Opérations <x-operations.icon name="chevron"/></summary><div class="ops-dropdown">
-            @foreach(['shipments'=>['box','Expéditions'], 'assignments.index'=>['user','Affectation'], 'active-deliveries'=>['truck','Livraison en cours'], 'tours.index'=>['tour','Tournée']] as $target => [$icon,$label])
+        <details class="ops-nav-menu"><summary class="{{ request()->routeIs('logistics.shipments*', 'logistics.active-deliveries', 'logistics.tours.*') ? 'active' : '' }}">Opérations <x-operations.icon name="chevron"/></summary><div class="ops-dropdown">
+            @foreach(['shipments'=>['box','Missions'], 'active-deliveries'=>['truck','Livraisons en cours'], 'tours.index'=>['tour','Tournées']] as $target => [$icon,$label])
             <a href="{{ route('logistics.'.$target) }}" class="{{ request()->routeIs('logistics.'.$target) ? 'selected' : '' }}"><x-operations.icon :name="$icon"/>{{ $label }}</a>
             @endforeach
         </div></details>

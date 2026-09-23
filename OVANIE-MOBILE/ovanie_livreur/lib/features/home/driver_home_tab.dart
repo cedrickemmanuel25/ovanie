@@ -817,18 +817,25 @@ class _AvailabilityPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final inMission = state.status == 'En mission';
+    final reserved = state.status == 'Mission réservée';
     final available = state.status == 'Disponible';
-    final title = inMission ? 'Vous êtes en mission' : (available ? 'Vous êtes disponible' : 'Vous êtes indisponible');
+    final title = inMission
+        ? 'Vous êtes en mission'
+        : reserved
+            ? 'Mission réservée'
+            : (available ? 'Vous êtes disponible' : 'Vous êtes indisponible');
     final subtitle = inMission
         ? 'La disponibilité sera modifiable après la mission.'
-        : (available ? 'Vous pouvez recevoir de nouvelles missions.' : 'Activez votre disponibilité pour recevoir des missions.');
+        : reserved
+            ? 'La mission est à vous. Attendez que les vendeurs soient prêts avant de partir.'
+            : (available ? 'Vous pouvez recevoir de nouvelles missions.' : 'Activez votre disponibilité pour recevoir des missions.');
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 15, 14, 15),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: available || inMission ? const Color(0xFFBDE7CF) : const Color(0xFFE0E6E2)),
+        border: Border.all(color: available || inMission || reserved ? const Color(0xFFBDE7CF) : const Color(0xFFE0E6E2)),
         boxShadow: const [BoxShadow(color: Color(0x0B133B2B), blurRadius: 14, offset: Offset(0, 5))],
       ),
       child: Row(
@@ -837,10 +844,10 @@ class _AvailabilityPanel extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: available || inMission ? OvanieColors.greenLight : const Color(0xFFF0F2F1),
+              color: available || inMission || reserved ? OvanieColors.greenLight : const Color(0xFFF0F2F1),
               shape: BoxShape.circle,
             ),
-            child: Icon(inMission ? Icons.local_shipping_rounded : (available ? Icons.check_rounded : Icons.pause_rounded), color: available || inMission ? OvanieColors.greenDark : const Color(0xFF7E8982)),
+            child: Icon(inMission ? Icons.local_shipping_rounded : (reserved ? Icons.lock_clock_rounded : (available ? Icons.check_rounded : Icons.pause_rounded)), color: available || inMission || reserved ? OvanieColors.greenDark : const Color(0xFF7E8982)),
           ),
           const SizedBox(width: 13),
           Expanded(
@@ -857,7 +864,7 @@ class _AvailabilityPanel extends StatelessWidget {
             const SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 2.4, color: OvanieColors.green))
           else
             Switch.adaptive(
-              value: available || inMission,
+              value: available || inMission || reserved,
               onChanged: state.canChange ? onChanged : null,
               activeColor: OvanieColors.green,
             ),
@@ -989,9 +996,11 @@ class _PriorityMissionCard extends StatelessWidget {
     }
 
     final scheduled = data.pickupScheduledAt ?? data.estimatedDeliveryAt;
-    final actionLabel = data.status == 'pending' || data.status == 'assigned' || data.status == 'planned'
-        ? 'Accepter la mission'
-        : 'Voir la mission';
+    final actionLabel = data.status == 'offered' || data.status == 'pending' || data.status == 'assigned' || data.status == 'planned'
+        ? 'Réserver la mission'
+        : data.status == 'accepted' && data.canStart
+            ? 'Démarrer les collectes'
+            : 'Voir la mission';
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(24),
@@ -1035,6 +1044,20 @@ class _PriorityMissionCard extends StatelessWidget {
               _MissionInfoLine(icon: Icons.location_on_rounded, text: data.destination ?? data.commune ?? 'Destination à confirmer', light: true),
               const SizedBox(height: 8),
               _MissionInfoLine(icon: Icons.inventory_2_outlined, text: '${data.itemCount} article(s) • ${_weight(data.totalWeightKg)}', light: true),
+              if (data.netAmount > 0) ...[
+                const SizedBox(height: 8),
+                _MissionInfoLine(icon: Icons.payments_rounded, text: 'Gain prévu : ${_money(data.netAmount)}', light: true),
+              ],
+              if (data.status == 'accepted') ...[
+                const SizedBox(height: 8),
+                _MissionInfoLine(
+                  icon: data.canStart ? Icons.check_circle_rounded : Icons.hourglass_top_rounded,
+                  text: data.canStart
+                      ? 'Tous les vendeurs sont prêts'
+                      : '${data.readyPickupCount}/${data.pickupCount} point(s) vendeur prêt(s)',
+                  light: true,
+                ),
+              ],
               if ((data.clientName ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
                 _MissionInfoLine(icon: Icons.person_outline_rounded, text: data.clientName!, light: true),
@@ -1227,6 +1250,16 @@ String _relativeTime(DateTime value) {
   if (diff.inMinutes < 60) return '${diff.inMinutes} min';
   if (diff.inHours < 24) return '${diff.inHours} h';
   return '${diff.inDays} j';
+}
+
+String _money(double amount) {
+  final rounded = amount.round().toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < rounded.length; i++) {
+    if (i > 0 && (rounded.length - i) % 3 == 0) buffer.write(' ');
+    buffer.write(rounded[i]);
+  }
+  return '${buffer.toString()} FCFA';
 }
 
 String _weight(double value) {

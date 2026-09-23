@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DeliveryIncident;
+use App\Models\DeliveryAssignment;
 use App\Models\OrderItem;
 use App\Notifications\Delivery\IncidentVendorNotification;
 use App\Services\DeliveryNotificationService;
@@ -195,6 +196,10 @@ class DeliveryIncidentController extends Controller
             return $this->forwardIncidentToVendor($incident);
         }
 
+        if ($incidentAction === 'resume_mission') {
+            return $this->resumeMission($incident, $request);
+        }
+
         if ($request->has('note')) {
             $request->validate(['note' => 'required|string|max:1000']);
             $meta = $incident->meta ?? [];
@@ -212,7 +217,7 @@ class DeliveryIncidentController extends Controller
             'status' => ['required', 'in:open,in_progress,rescheduled,resolved,closed'],
             'next_action' => ['nullable', 'string', 'max:255'],
             'resolution_note' => ['nullable', 'string', 'max:2000'],
-            'rescheduled_at' => ['nullable', 'date'],
+            'rescheduled_at' => ['nullable', 'date', 'required_if:status,rescheduled'],
         ]);
 
         DB::transaction(function () use ($incident, $data, $request) {
@@ -224,34 +229,13 @@ class DeliveryIncidentController extends Controller
                 'resolved_at' => $closing ? ($lockedIncident->resolved_at ?: now()) : null,
             ])->save();
 
-            if ($closing && $lockedIncident->orderItem?->delivery_status === OrderWorkflowService::DELIVERY_FAILED) {
-                $item = $lockedIncident->orderItem;
-                $previousStatus = data_get($lockedIncident->meta, 'delivery_status_before_incident');
-                $resumableStatuses = [
-                    OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
-                    OrderWorkflowService::DELIVERY_ASSIGNED,
-                    OrderWorkflowService::DELIVERY_PICKED_UP,
-                    OrderWorkflowService::DELIVERY_IN_TRANSIT,
-                    OrderWorkflowService::DELIVERY_LATE,
-                ];
-
-                $resumeStatus = in_array($previousStatus, $resumableStatuses, true)
-                    ? $previousStatus
-                    : ($item->latestDeliveryAssignment?->driver_id
-                        ? OrderWorkflowService::DELIVERY_ASSIGNED
-                        : OrderWorkflowService::DELIVERY_READY_FOR_PICKUP);
-
-                app(OrderWorkflowService::class)->setDeliveryStatus(
-                    $item,
-                    $resumeStatus,
-                    $request->user('admin') ?: $request->user(),
-                    'admin',
-                    'Incident résolu. La mission reprend à son dernier état opérationnel réel.',
-                    [
-                        'incident_id' => $lockedIncident->id,
-                        'suppress_notifications' => true,
-                    ]
+            if ($closing || $data['status'] === 'rescheduled') {
+                $this->restoreDeliveryItemsAfterIncident(
+                    $lockedIncident,
+                    $request,
+                    $data['status'] === 'rescheduled'
                 );
+                $this->restoreAssignmentsAfterIncident($lockedIncident, $data['rescheduled_at'] ?? null);
             }
         });
 
@@ -285,6 +269,7 @@ class DeliveryIncidentController extends Controller
                     'support_ai',
                     'client',
                     'customer',
+                    'system_alert',
                 ])->orWhereIn('meta->signal_source', [
                     'ovanie_driver_app',
                     'seller_driver_app',
@@ -292,6 +277,7 @@ class DeliveryIncidentController extends Controller
                     'client_app',
                     'seller_app',
                     'vendor_app',
+                    'system_alert',
                 ]);
             });
     }
@@ -384,6 +370,114 @@ class DeliveryIncidentController extends Controller
         ])->save();
 
         return back()->with('success', 'Le dossier incident a été transmis au vendeur concerné.');
+    }
+
+    private function resumeMission(DeliveryIncident $incident, Request $request)
+    {
+        abort_if(in_array($incident->status, ['resolved', 'closed'], true), 409, 'Cet incident est déjà terminé.');
+
+        DB::transaction(function () use ($incident, $request) {
+            $incident = DeliveryIncident::query()->whereKey($incident->id)->lockForUpdate()->firstOrFail();
+            $this->restoreAssignmentsAfterIncident($incident, $incident->rescheduled_at);
+
+            $this->restoreDeliveryItemsAfterIncident($incident, $request, false);
+
+            $meta = is_array($incident->meta) ? $incident->meta : [];
+            $meta['mission_resumed_at'] = now()->toIso8601String();
+            $meta['mission_resumed_by'] = $request->user('admin')?->name ?? $request->user()?->name ?? 'OVANIE Logistics';
+            $incident->forceFill([
+                'meta' => $meta,
+                'status' => 'in_progress',
+                'next_action' => 'Mission reprise. Surveiller la progression jusqu’à la livraison.',
+            ])->save();
+        });
+
+        return back()->with('success', 'La mission a été remise en circulation avec son dernier état opérationnel connu.');
+    }
+
+    private function restoreDeliveryItemsAfterIncident(DeliveryIncident $incident, Request $request, bool $rescheduled): void
+    {
+        $statusMap = (array) data_get($incident->meta, 'item_statuses_before_incident', []);
+        $itemIds = collect(data_get($incident->meta, 'mission_item_ids', []))->filter()->values();
+        if ($itemIds->isEmpty() && $incident->order_item_id) {
+            $itemIds = collect([$incident->order_item_id]);
+        }
+
+        $items = OrderItem::query()->whereIn('id', $itemIds->all())->get();
+        $allowed = [
+            OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
+            OrderWorkflowService::DELIVERY_ASSIGNED,
+            OrderWorkflowService::DELIVERY_PICKED_UP,
+            OrderWorkflowService::DELIVERY_IN_TRANSIT,
+            OrderWorkflowService::DELIVERY_LATE,
+        ];
+
+        foreach ($items as $item) {
+            if ($item->delivery_status !== OrderWorkflowService::DELIVERY_FAILED) {
+                continue;
+            }
+
+            $previousStatus = $statusMap[(string) $item->id]
+                ?? data_get($incident->meta, 'delivery_status_before_incident');
+            $resumeStatus = in_array($previousStatus, $allowed, true)
+                ? $previousStatus
+                : ($item->latestDeliveryAssignment?->driver_id
+                    ? OrderWorkflowService::DELIVERY_ASSIGNED
+                    : OrderWorkflowService::DELIVERY_READY_FOR_PICKUP);
+
+            app(OrderWorkflowService::class)->setDeliveryStatus(
+                $item,
+                $resumeStatus,
+                $request->user('admin') ?: $request->user(),
+                'admin',
+                $rescheduled
+                    ? 'Incident reprogrammé. La mission reprend avec un nouveau créneau.'
+                    : 'Incident résolu. La mission reprend à son dernier état opérationnel réel.',
+                ['incident_id' => $incident->id, 'suppress_notifications' => true]
+            );
+        }
+    }
+
+    private function restoreAssignmentsAfterIncident(DeliveryIncident $incident, $rescheduledAt = null): void
+    {
+        $statusMap = (array) data_get($incident->meta, 'assignment_statuses_before_incident', []);
+        $itemIds = collect([$incident->order_item_id])->filter();
+
+        $assignments = DeliveryAssignment::query()
+            ->when($itemIds->isNotEmpty(), fn ($query) => $query->whereIn('order_item_id', $itemIds->all()))
+            ->where(function ($query) use ($incident) {
+                $mission = data_get($incident->meta, 'mission_number');
+                if ($mission) {
+                    $query->where('mission_number', $mission)->orWhere('meta->mission_number', $mission);
+                } else {
+                    $query->where('order_id', $incident->order_id);
+                }
+            })
+            ->get();
+
+        foreach ($assignments as $assignment) {
+            $meta = is_array($assignment->meta) ? $assignment->meta : [];
+            $previous = $statusMap[(string) $assignment->id]
+                ?? data_get($meta, 'status_before_incident')
+                ?? 'accepted';
+
+            if ($assignment->status === 'incident') {
+                $assignment->status = in_array($previous, ['accepted','assigned','collecting','picked_up','in_transit','arrived'], true)
+                    ? $previous
+                    : 'accepted';
+            }
+            if ($rescheduledAt) {
+                $assignment->manual_eta_at = $rescheduledAt;
+            }
+            unset($meta['active_incident_id']);
+            $meta['last_incident_resolved_at'] = now()->toIso8601String();
+            $assignment->meta = $meta;
+            $assignment->save();
+
+            if ($assignment->driver && in_array($assignment->status, ['collecting','picked_up','in_transit','arrived'], true)) {
+                $assignment->driver->forceFill(['status' => 'En livraison'])->save();
+            }
+        }
     }
 
     private function ensureRealIncident(DeliveryIncident $incident): void
