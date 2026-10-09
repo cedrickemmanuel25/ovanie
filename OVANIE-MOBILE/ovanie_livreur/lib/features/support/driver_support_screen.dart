@@ -147,12 +147,10 @@ class _DriverSupportScreenState extends State<DriverSupportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final requester = _map(_data['requester']);
-    final active = _tickets.where((e) => !['resolved','closed','cancelled'].contains('${e['status']}')).length;
     return Scaffold(
       backgroundColor: MissionPalette.mint,
       body: Column(children: [
-        const MissionPageHeader(title: 'Aide & support', subtitle: 'Assistance pour les livreurs partenaires'),
+        MissionPageHeader(title: 'Aide & support', subtitle: '', showBack: true, onBack: () => Navigator.of(context).maybePop()),
         Expanded(child: RefreshIndicator(
           color: OvanieColors.green,
           onRefresh: _load,
@@ -163,29 +161,32 @@ class _DriverSupportScreenState extends State<DriverSupportScreen> {
               if (_loading && _data.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 80), child: Center(child: CircularProgressIndicator(color: OvanieColors.green)))
               else ...[
                 if (_error != null) _ErrorCard(message: _error!, onRetry: _load),
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0B3D2E), Color(0xFF147A55)]), borderRadius: BorderRadius.circular(18)),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Row(children: [Icon(Icons.support_agent_rounded, color: Colors.white, size: 30), SizedBox(width: 10), Expanded(child: Text('Support OVANIE Logistics', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)))]),
-                    const SizedBox(height: 7),
-                    Text(requester['name'] == null ? 'Votre compte partenaire est identifié automatiquement.' : 'Livreur partenaire : ${requester['name']}', style: const TextStyle(color: Color(0xFFDDF4EA), height: 1.4)),
-                    const SizedBox(height: 14),
-                    SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _compose, style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: OvanieColors.greenDark), icon: const Icon(Icons.add_comment_outlined), label: const Text('Nouvelle demande', style: TextStyle(fontWeight: FontWeight.w900)))),
-                  ]),
+                Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    onTap: _compose,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: MissionPalette.cardBorder)),
+                      child: const Row(children: [
+                        CircleAvatar(radius: 21, backgroundColor: Color(0xFFE9F6F0), child: Icon(Icons.support_agent_rounded, color: OvanieColors.green)),
+                        SizedBox(width: 12),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('Contacter le support', style: TextStyle(color: MissionPalette.navy, fontSize: 15.5, fontWeight: FontWeight.w700)),
+                          SizedBox(height: 2),
+                          Text('Compte, application ou gains', style: TextStyle(color: MissionPalette.slate, fontSize: 13)),
+                        ])),
+                        Icon(Icons.chevron_right_rounded, color: MissionPalette.slate),
+                      ]),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: _Metric(value: '$active', label: 'À suivre', icon: Icons.pending_actions_rounded)),
-                  const SizedBox(width: 10),
-                  Expanded(child: _Metric(value: '${_tickets.length}', label: 'Total', icon: Icons.folder_open_rounded)),
-                ]),
-                const SizedBox(height: 18),
-                const Text('Mes demandes', style: TextStyle(color: MissionPalette.navy, fontSize: 17, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 20),
+                const Text('Mes demandes', style: TextStyle(color: MissionPalette.navy, fontSize: 16, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 9),
                 if (_tickets.isEmpty) const _Empty() else ..._tickets.map((ticket) => _TicketCard(ticket: ticket, onTap: () => _openTicket((ticket['id'] as num).toInt()))),
-                const SizedBox(height: 12),
-                Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFFE9F6F0), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFCDE8DB))), child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.info_outline_rounded, color: OvanieColors.green), SizedBox(width: 10), Expanded(child: Text('Un incident opérationnel pendant une mission reste signalé depuis l’écran de mission. Cette page sert à contacter le Support pour votre compte, l’application, vos gains ou un dossier nécessitant de l’aide.', style: TextStyle(color: MissionPalette.slate, fontSize: 12, height: 1.4))) ])),
               ],
             ],
           ),
@@ -199,7 +200,6 @@ InputDecoration _field(String label) => InputDecoration(labelText: label, filled
 String _status(dynamic s) => const {'open':'Nouveau','in_progress':'Pris en charge','waiting':'En attente','waiting_customer':'Votre réponse attendue','waiting_internal':'Vérification OVANIE en cours','resolved':'Terminé','closed':'Archivé'}['$s'] ?? '$s';
 Color _statusColor(dynamic s) => ['resolved','closed'].contains('$s') ? OvanieColors.green : '$s' == 'waiting_customer' ? const Color(0xFFD77C00) : const Color(0xFF2469C8);
 
-class _Metric extends StatelessWidget { const _Metric({required this.value,required this.label,required this.icon}); final String value,label; final IconData icon; @override Widget build(BuildContext context)=>MissionSurfaceCard(child:Row(children:[CircleAvatar(backgroundColor:const Color(0xFFE9F6F0),child:Icon(icon,color:OvanieColors.green)),const SizedBox(width:10),Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(value,style:const TextStyle(color:MissionPalette.navy,fontSize:20,fontWeight:FontWeight.w900)),Text(label,style:const TextStyle(color:MissionPalette.slate,fontSize:11.5))]) ])); }
 class _TicketCard extends StatelessWidget { const _TicketCard({required this.ticket,required this.onTap}); final Map<String,dynamic> ticket; final VoidCallback onTap; @override Widget build(BuildContext context)=>Padding(padding:const EdgeInsets.only(bottom:9),child:MissionSurfaceCard(child:InkWell(onTap:onTap,borderRadius:BorderRadius.circular(14),child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[CircleAvatar(backgroundColor:_statusColor(ticket['status']).withValues(alpha:.10),child:Icon(Icons.headset_mic_outlined,color:_statusColor(ticket['status']))),const SizedBox(width:12),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('${ticket['reference']??''}',style:const TextStyle(color:MissionPalette.slate,fontSize:11)),Text('${ticket['subject']??'Demande support'}',maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:MissionPalette.navy,fontSize:14,fontWeight:FontWeight.w900)),const SizedBox(height:5),Text(_status(ticket['status']),style:TextStyle(color:_statusColor(ticket['status']),fontWeight:FontWeight.w800,fontSize:11))])),const Icon(Icons.chevron_right_rounded,color:MissionPalette.slate)])))); }
 class _Empty extends StatelessWidget { const _Empty(); @override Widget build(BuildContext context)=>MissionSurfaceCard(child:const Padding(padding:EdgeInsets.symmetric(vertical:18),child:Column(children:[Icon(Icons.mark_chat_read_outlined,color:MissionPalette.slate,size:36),SizedBox(height:8),Text('Aucune demande support',style:TextStyle(color:MissionPalette.navy,fontWeight:FontWeight.w900)),SizedBox(height:4),Text('Vos demandes et les réponses OVANIE apparaîtront ici.',textAlign:TextAlign.center,style:TextStyle(color:MissionPalette.slate,fontSize:12))]))); }
 class _ErrorCard extends StatelessWidget { const _ErrorCard({required this.message,required this.onRetry}); final String message; final Future<void> Function() onRetry; @override Widget build(BuildContext context)=>Padding(padding:const EdgeInsets.only(bottom:12),child:MissionSurfaceCard(child:Row(children:[const Icon(Icons.cloud_off_rounded,color:OvanieColors.green),const SizedBox(width:10),Expanded(child:Text(message,style:const TextStyle(color:MissionPalette.slate,fontSize:12))),TextButton(onPressed:onRetry,child:const Text('Réessayer'))]))); }

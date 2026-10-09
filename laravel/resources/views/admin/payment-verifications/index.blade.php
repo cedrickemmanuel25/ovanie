@@ -68,7 +68,7 @@
                             </td>
                             <td>{{ $verification->shop->name ?? 'N/A' }}</td>
                             <td>{{ $verification->vendor->name ?? $verification->requester->name ?? 'N/A' }}</td>
-                            <td>{{ ucfirst(str_replace('_', ' ', $verification->payment_method)) }}</td>
+                            <td>{{ ['cash' => 'Espèces', 'mobile_money' => 'Mobile Money', 'bank_transfer' => 'Virement bancaire', 'wave' => 'Wave', 'cheque' => 'Chèque', 'other' => 'Autre'][$verification->payment_method] ?? ucfirst(str_replace('_', ' ', (string) $verification->payment_method)) }}</td>
                             <td>{{ number_format((float) $verification->amount_claimed, 0, ',', ' ') }} FCFA</td>
                             <td>{{ $verification->payment_reference ?: '—' }}</td>
                             <td>
@@ -79,7 +79,7 @@
                                         default => 'warning',
                                     };
                                 @endphp
-                                <span class="badge bg-{{ $badge }}">{{ ucfirst($verification->status) }}</span>
+                                <span class="badge bg-{{ $badge }}">{{ ['pending' => 'En attente', 'approved' => 'Validé', 'rejected' => 'Refusé'][$verification->status] ?? ucfirst((string) $verification->status) }}</span>
                             </td>
                             <td style="min-width:260px">
                                 @if($verification->vendor_note)

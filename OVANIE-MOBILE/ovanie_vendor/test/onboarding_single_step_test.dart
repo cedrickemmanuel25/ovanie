@@ -16,7 +16,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Informations personnelles'), findsOneWidget);
-    expect(find.text('Informations boutique'), findsNothing);
+    expect(find.text('Informations de la boutique'), findsNothing);
     expect(find.text('Vérification d’identité'), findsNothing);
     expect(find.text('Paiement vendeur'), findsNothing);
     expect(find.text('Conditions vendeur'), findsNothing);

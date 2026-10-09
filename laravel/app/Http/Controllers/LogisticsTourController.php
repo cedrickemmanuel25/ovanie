@@ -204,6 +204,9 @@ class LogisticsTourController extends Controller
     public function start(DeliveryTour $tour): RedirectResponse
     {
         abort_if(str_starts_with((string) $tour->reference, 'TRN-DEMO-'), 404);
+        if ($tour->status !== 'planned') {
+            return back()->with('error', 'Cette tournée a déjà été démarrée ou est terminée : elle ne peut pas être démarrée de nouveau.');
+        }
         $tour->load('driver');
 
         DB::transaction(function () use ($tour) {
@@ -340,6 +343,9 @@ class LogisticsTourController extends Controller
         $this->assertAssignmentsCompatible($groups, $driver);
 
         $departureAt = Carbon::parse($data['tour_date'] . ' ' . $data['departure_time'])->startOfMinute();
+        if ($departureAt->lt(now()->startOfDay())) {
+            throw ValidationException::withMessages(['tour_date' => 'La date de la tournée ne peut pas être dans le passé.']);
+        }
         if ($departureAt->lt(now()->startOfMinute())) {
             throw ValidationException::withMessages([
                 'departure_time' => 'L’heure de départ doit être actuelle ou future.',
@@ -750,7 +756,7 @@ class LogisticsTourController extends Controller
                     $assignment->forceFill([
                         'estimated_delivery_at' => $deliveryAt,
                         'vehicle_id' => $vehicle['id'],
-                    ])->save();
+                    ] + $this->driverPricing($item, $assignment))->save();
                 } elseif ($item->delivery_status === OrderWorkflowService::DELIVERY_ASSIGNED) {
                     $assignment = $item->latestDeliveryAssignment;
                     if ($assignment) {
@@ -759,11 +765,29 @@ class LogisticsTourController extends Controller
                             'vehicle_id' => $vehicle['id'],
                             'pickup_scheduled_at' => $pickupAt,
                             'estimated_delivery_at' => $deliveryAt,
-                        ])->save();
+                        ] + $this->driverPricing($item, $assignment))->save();
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Une mission planifiée en tournée est payée au livreur comme une mission
+     * proposée : prix de la livraison − commission OVANIE.
+     */
+    private function driverPricing(OrderItem $item, DeliveryAssignment $assignment): array
+    {
+        if ((float) ($assignment->driver_net_amount ?? 0) > 0) {
+            return [];
+        }
+        $pricing = app(\App\Services\LogisticsShipmentWorkflowService::class)->priceForItem($item);
+
+        return [
+            'price_amount' => $pricing['gross'],
+            'driver_commission_percent' => $pricing['commission_percent'],
+            'driver_net_amount' => $pricing['net'],
+        ];
     }
 
     private function nextReference(): string

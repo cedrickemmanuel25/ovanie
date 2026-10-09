@@ -1,6 +1,7 @@
-@extends('admin.layouts.app')
+@extends($catalogueLayout ?? 'admin.layouts.app')
+@includeWhen(! ($isAdminSpace ?? true), 'support.partials.catalogue-scope')
 
-@section('title', 'Produits | Administration OVANIE')
+@section('title', 'Produits | ' . ($spaceLabel ?? 'Administration OVANIE'))
 @section('page-title', 'Produits')
 
 @push('styles')
@@ -21,11 +22,17 @@
         </div>
 
         <div class="products-heading-actions">
+            <a href="{{ route(($productRoutes ?? 'admin.products') . '.index', ['status' => 'commercial_capture']) }}" class="secondary-action">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4zM8 11h8M12 7v12"/></svg>
+                Captures à compléter ({{ number_format((int) ($summary['commercial_capture_incomplete'] ?? 0), 0, ',', ' ') }})
+            </a>
+            @if($isAdminSpace ?? true)
             <a href="{{ route('admin.master-products.index') }}" class="secondary-action">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h5"/></svg>
                 Catalogue de références
             </a>
-            <a href="{{ route('admin.products.create') }}" class="primary-action">
+            @endif
+            <a href="{{ route(($productRoutes ?? 'admin.products') . '.create') }}" class="primary-action">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 Ajouter un produit
             </a>
@@ -78,7 +85,7 @@
         </article>
     </section>
 
-    <form method="GET" action="{{ route('admin.products.index') }}" class="product-filter-card">
+    <form method="GET" action="{{ route(($productRoutes ?? 'admin.products') . '.index') }}" class="product-filter-card">
         <div class="filter-field filter-search">
             <label for="search">Recherche</label>
             <div class="search-input-wrap">
@@ -88,7 +95,7 @@
                     type="search"
                     name="search"
                     value="{{ request('search') }}"
-                    placeholder="Nom, marque, SKU, boutique ou vendeur"
+                    placeholder="Nom, marque, catégorie, boutique ou vendeur"
                 >
             </div>
         </div>
@@ -106,12 +113,28 @@
         </div>
 
         <div class="filter-field">
-            <label for="category_id">Catégorie</label>
-            <select id="category_id" name="category_id">
+            <label for="main_category_id">Catégorie principale</label>
+            <select id="main_category_id" name="main_category_id">
                 <option value="">Toutes les catégories</option>
-                @foreach($categories as $category)
-                    <option value="{{ $category->id }}" @selected((string) request('category_id') === (string) $category->id)>
+                @foreach($mainCategories as $category)
+                    <option value="{{ $category->id }}" @selected((string) request('main_category_id') === (string) $category->id)>
                         {{ $category->name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+
+        <div class="filter-field">
+            <label for="category_id">Sous-catégorie</label>
+            <select id="category_id" name="category_id">
+                <option value="">Toutes les sous-catégories</option>
+                @foreach($subCategories as $subcategory)
+                    <option
+                        value="{{ $subcategory->id }}"
+                        data-parent="{{ $subcategory->parent_id }}"
+                        @selected((string) request('category_id') === (string) $subcategory->id)
+                    >
+                        {{ $subcategory->name }}
                     </option>
                 @endforeach
             </select>
@@ -125,6 +148,7 @@
                 <option value="inactive" @selected(request('status') === 'inactive')>Non publié</option>
                 <option value="out_of_stock" @selected(request('status') === 'out_of_stock')>Rupture de stock</option>
                 <option value="draft" @selected(request('status') === 'draft')>Brouillon</option>
+                <option value="commercial_capture" @selected(request('status') === 'commercial_capture')>Capture Commercial à compléter</option>
                 <option value="pending_logistics" @selected(request('status') === 'pending_logistics')>En attente logistique</option>
                 <option value="incomplete_logistics" @selected(request('status') === 'incomplete_logistics')>Données logistiques manquantes</option>
                 <option value="archived" @selected(request('status') === 'archived')>Archivé</option>
@@ -153,7 +177,7 @@
         </div>
 
         <div class="filter-actions">
-            <a href="{{ route('admin.products.index') }}" class="filter-reset">Réinitialiser</a>
+            <a href="{{ route(($productRoutes ?? 'admin.products') . '.index') }}" class="filter-reset">Réinitialiser</a>
             <button type="submit" class="filter-submit">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
                 Rechercher
@@ -178,6 +202,8 @@
                     $isOutOfStock = (int) $product->stock <= 0;
                     $isDraft = in_array($rawStatus, ['draft', 'brouillon'], true);
                     $isPendingLogistics = in_array($rawStatus, ['pending_logistics', 'incomplete', 'logistics_incomplete'], true);
+                    $isCommercialCapture = (bool) data_get($product->product_attributes, 'commercial_capture', false);
+                    $needsAdminCompletion = (bool) data_get($product->product_attributes, 'admin_completion_required', false);
                     $isPublished = !$isArchived
                         && !$isDraft
                         && !$isPendingLogistics
@@ -212,23 +238,29 @@
                     $logisticsType = $product->shop?->logistics_type === 'seller' ? 'seller' : 'ovanie';
                     $logisticsLabel = $logisticsType === 'seller' ? 'Logistique vendeur' : 'OVANIE Logistics';
                     $shopLogisticsReady = in_array((string) $product->shop?->logistics_status, ['ready', 'approved'], true);
+                    $productCategory = $product->category;
+                    $mainCategory = $productCategory?->parent ?: ($productCategory && $productCategory->parent_id === null ? $productCategory : null);
+                    $subCategory = $productCategory?->parent_id ? $productCategory : null;
                 @endphp
 
                 <article class="product-row">
                     <div class="product-identity">
-                        <a href="{{ route('product.show', $product) }}" class="product-thumb" target="_blank" rel="noopener" aria-label="Voir {{ $product->name }}">
+                        <a href="{{ route(($productRoutes ?? 'admin.products') . '.show', $product) }}" class="product-thumb" target="_blank" rel="noopener" aria-label="Voir {{ $product->name }}">
                             <img src="{{ $product->card_image_url }}" alt="{{ $product->name }}" loading="lazy">
                         </a>
                         <div>
                             <div class="product-name-line">
-                                <a href="{{ route('product.show', $product) }}" target="_blank" rel="noopener">{{ $product->name }}</a>
+                                <a href="{{ route(($productRoutes ?? 'admin.products') . '.show', $product) }}" target="_blank" rel="noopener">{{ $product->name }}</a>
                                 <span class="status-badge {{ $statusClass }}">{{ $statusLabel }}</span>
                             </div>
                             <p>{{ $product->brand ?: 'Marque non renseignée' }}</p>
                             <div class="identity-tags">
                                 <span>#{{ $product->id }}</span>
-                                <span>{{ $product->sku ?: 'Sans SKU' }}</span>
-                                <span>{{ $product->category?->name ?: 'Sans catégorie' }}</span>
+                                <span>Catégorie : {{ $mainCategory?->name ?: 'Non renseignée' }}</span>
+                                <span>Sous-catégorie : {{ $subCategory?->name ?: 'Non renseignée' }}</span>
+                                @if($isCommercialCapture)
+                                    <span>{{ $needsAdminCompletion ? 'Capture Commercial · à compléter' : 'Capture Commercial · vérifiée' }}</span>
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -238,6 +270,12 @@
                             <span class="detail-label">Boutique</span>
                             <strong>{{ $product->shop?->name ?: 'Boutique supprimée' }}</strong>
                             <small>{{ $product->shop?->user?->name ?: $product->shop?->user?->email ?: 'Vendeur non renseigné' }}</small>
+                        </div>
+
+                        <div class="detail-block category-cell">
+                            <span class="detail-label">Catégorisation</span>
+                            <strong>{{ $mainCategory?->name ?: 'Catégorie non renseignée' }}</strong>
+                            <small>{{ $subCategory?->name ? 'Sous-catégorie : ' . $subCategory->name : 'Sous-catégorie non renseignée' }}</small>
                         </div>
 
                         <div class="detail-block price-stock-cell">
@@ -272,15 +310,16 @@
                     </div>
 
                     <div class="row-actions">
-                        <a href="{{ route('admin.products.edit', $product) }}" class="row-action edit">
+                        <a href="{{ route(($productRoutes ?? 'admin.products') . '.edit', $product) }}" class="row-action edit">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11-4-4L4 16v4zM13.5 6.5l4 4"/></svg>
-                            Modifier
+                            {{ $needsAdminCompletion ? 'Compléter la fiche' : 'Modifier' }}
                         </a>
-                        <a href="{{ route('product.show', $product) }}" class="row-action view" target="_blank" rel="noopener">
+                        <a href="{{ route(($productRoutes ?? 'admin.products') . '.show', $product) }}" class="row-action view" target="_blank" rel="noopener">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
                             Voir
                         </a>
-                        <form method="POST" action="{{ route('admin.products.destroy', $product) }}" onsubmit="return confirm('Supprimer définitivement ce produit ?');">
+                        @if($canDeleteProducts ?? true)
+                        <form method="POST" action="{{ route(($productRoutes ?? 'admin.products') . '.destroy', $product) }}" onsubmit="return confirm('Supprimer définitivement ce produit ?');">
                             @csrf
                             @method('DELETE')
                             <button type="submit" class="row-action delete">
@@ -288,6 +327,7 @@
                                 Supprimer
                             </button>
                         </form>
+                        @endif
                     </div>
                 </article>
             @empty
@@ -297,7 +337,7 @@
                     </div>
                     <h3>Aucun produit trouvé</h3>
                     <p>Modifiez les filtres ou ajoutez un nouveau produit au catalogue.</p>
-                    <a href="{{ route('admin.products.create') }}" class="primary-action">Ajouter un produit</a>
+                    <a href="{{ route(($productRoutes ?? 'admin.products') . '.create') }}" class="primary-action">Ajouter un produit</a>
                 </div>
             @endforelse
         </div>
@@ -310,3 +350,36 @@
     </section>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+(()=>{
+    const main=document.getElementById('main_category_id');
+    const sub=document.getElementById('category_id');
+    if(!main || !sub) return;
+
+    const sync=()=>{
+        const parent=String(main.value || '');
+        const selected=String(sub.value || '');
+        let visible=0;
+
+        [...sub.options].forEach((option,index)=>{
+            if(index===0) return;
+            const matches=!parent || String(option.dataset.parent || '')===parent;
+            option.hidden=!matches;
+            option.disabled=!matches;
+            if(matches) visible++;
+        });
+
+        const selectedOption=[...sub.options].find(option=>option.value===selected && !option.disabled);
+        if(!selectedOption) sub.value='';
+        sub.options[0].textContent=parent
+            ? (visible ? 'Toutes les sous-catégories' : 'Aucune sous-catégorie disponible')
+            : 'Toutes les sous-catégories';
+    };
+
+    main.addEventListener('change',()=>{ sub.value=''; sync(); });
+    sync();
+})();
+</script>
+@endpush

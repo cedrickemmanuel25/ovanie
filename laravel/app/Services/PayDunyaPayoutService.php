@@ -112,6 +112,18 @@ class PayDunyaPayoutService
             return $this->payoutService->fail($payout, 'Boutique introuvable pour le reversement.');
         }
 
+        if (! $shop->hasConfiguredPayout()) {
+            $meta = $payout->meta ?? [];
+            $meta['blocked_reason'] = 'Configurez et confirmez votre mode de reversement et votre compte Mobile Money.';
+            $payout->forceFill([
+                'status' => VendorPayout::STATUS_BLOCKED,
+                'processing_at' => null,
+                'meta' => $meta,
+            ])->save();
+
+            return $payout->refresh();
+        }
+
         try {
             $phone = $this->normalizeBeneficiaryPhone((string) ($payout->phone ?: $shop->mm_number));
             $withdrawMode = $this->resolveWithdrawMode((string) ($payout->payment_channel ?: $shop->mm_operator));

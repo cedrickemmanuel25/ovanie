@@ -60,17 +60,28 @@ class VendorDeliverySettingsController extends Controller
     public function mode(Request $request)
     {
         $shop = $this->sellerLogisticsShop();
+
+        if (! $shop->hasConfirmedLogistics()) {
+            return redirect()->route('vendor.delivery.index')
+                ->with('info', 'Choisissez d’abord le mode logistique de votre boutique.');
+        }
+
         if ($shop->usesOvanieLogistics()) {
             return redirect()->route('vendor.delivery.edit');
         }
+
         return view('vendor.delivery.location', ['shop' => $shop, 'changing' => true]);
     }
 
     public function location()
     {
         $shop = $this->sellerLogisticsShop();
-        abort_unless($shop->usesOvanieLogistics(), 404);
-        return view('vendor.delivery.location', ['shop' => $shop, 'changing' => false]);
+        abort_unless(! $shop->hasConfirmedLogistics() || $shop->usesOvanieLogistics(), 404);
+
+        return view('vendor.delivery.location', [
+            'shop' => $shop,
+            'changing' => $shop->hasConfirmedLogistics() && ! $shop->usesOvanieLogistics(),
+        ]);
     }
 
     public function saveMode(Request $request, ShopLogisticsSettingsService $settings)
@@ -120,11 +131,18 @@ class VendorDeliverySettingsController extends Controller
             );
         });
 
-        $validator->synchronizeShopStatus($shop->refresh());
+        $shop = $shop->refresh()->load('sellerDeliveryProfile', 'sellerDeliveryZones');
+        if ($this->finalizeInitialSellerLogisticsIfReady($shop, $validator)) {
+            return redirect()
+                ->route('vendor.configuration.index')
+                ->with('success', 'Votre propre logistique est configurée. Finalisez maintenant le reversement de votre boutique.');
+        }
+
+        $validator->synchronizeShopStatus($shop);
 
         return redirect()
             ->route('vendor.delivery.edit')
-            ->with('success', 'Capacités logistiques enregistrées. Configurez maintenant vos tarifs par commune.');
+            ->with('success', 'Capacités logistiques enregistrées. Configurez maintenant au moins une commune avec son tarif et son délai.');
     }
 
     /**
@@ -151,7 +169,14 @@ class VendorDeliverySettingsController extends Controller
             'is_active' => true,
         ]);
 
-        $validator->synchronizeShopStatus($shop->refresh());
+        $shop = $shop->refresh()->load('sellerDeliveryProfile', 'sellerDeliveryZones');
+        if ($this->finalizeInitialSellerLogisticsIfReady($shop, $validator)) {
+            return redirect()
+                ->route('vendor.configuration.index')
+                ->with('success', 'Votre propre logistique est maintenant opérationnelle. Finalisez le reversement pour terminer la configuration de la boutique.');
+        }
+
+        $validator->synchronizeShopStatus($shop);
 
         return redirect()
             ->route('vendor.delivery.edit')
@@ -175,7 +200,14 @@ class VendorDeliverySettingsController extends Controller
             'is_active' => $request->boolean('is_active'),
         ]);
 
-        $validator->synchronizeShopStatus($shop->refresh());
+        $shop = $shop->refresh()->load('sellerDeliveryProfile', 'sellerDeliveryZones');
+        if ($this->finalizeInitialSellerLogisticsIfReady($shop, $validator)) {
+            return redirect()
+                ->route('vendor.configuration.index')
+                ->with('success', 'Votre propre logistique est maintenant opérationnelle. Finalisez le reversement pour terminer la configuration de la boutique.');
+        }
+
+        $validator->synchronizeShopStatus($shop);
 
         return redirect()
             ->route('vendor.delivery.edit')
@@ -196,6 +228,33 @@ class VendorDeliverySettingsController extends Controller
         return redirect()
             ->route('vendor.delivery.edit')
             ->with('success', 'Commune retirée de votre grille tarifaire.');
+    }
+
+    /**
+     * Pendant la régularisation d'une ancienne boutique, le vendeur a déjà
+     * choisi « Ma propre logistique ». Dès que le profil et au moins une zone
+     * valide sont renseignés, on finalise ce premier choix automatiquement.
+     * Un changement ultérieur depuis OVANIE Logistics garde, lui, sa confirmation
+     * explicite via l'écran de changement de mode.
+     */
+    private function finalizeInitialSellerLogisticsIfReady($shop, SellerLogisticsValidator $validator): bool
+    {
+        if ($shop->hasConfirmedLogistics() || ! $shop->usesSellerLogistics()) {
+            return false;
+        }
+
+        $validation = $validator->validate($shop, false);
+        if (! $validation['complete']) {
+            return false;
+        }
+
+        $shop->sellerDeliveryProfile()->update(['is_enabled' => true]);
+        $shop->forceFill([
+            'logistics_status' => $validation['status'],
+            'logistics_confirmed_at' => now(),
+        ])->save();
+
+        return true;
     }
 
     private function validateCommuneRate(Request $request): array

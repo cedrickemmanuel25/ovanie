@@ -64,6 +64,18 @@ class BusinessController extends Controller
             ->flatMap(fn ($shop) => [$shop->commune, $shop->city])
             ->filter()->unique()->sort()->values();
 
-        return view('catalog.business', compact('businessOffers', 'categories', 'leadTimes', 'zones', 'filters'));
+        // Offres et besoins publiés par les membres OVANIE Pro (comptes simples et professionnels).
+        $announcementKind = ['offres' => 'offer', 'besoins' => 'need'][$request->query('annonces')] ?? null;
+        $announcements = \App\Models\ProPublication::query()
+            ->visible()
+            ->with(['category:id,name', 'files'])
+            ->when($announcementKind, fn ($query, $kind) => $query->where('kind', $kind))
+            ->latest('published_at')
+            ->limit(12)
+            ->get();
+        $announcementCounts = \App\Models\ProPublication::query()->visible()
+            ->selectRaw('kind, COUNT(*) as total')->groupBy('kind')->pluck('total', 'kind');
+
+        return view('catalog.business', compact('businessOffers', 'categories', 'leadTimes', 'zones', 'filters', 'announcements', 'announcementCounts', 'announcementKind'));
     }
 }

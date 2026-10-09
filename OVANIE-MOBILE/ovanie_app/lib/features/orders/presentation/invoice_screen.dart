@@ -705,7 +705,7 @@ class _InvoiceItemRow extends StatelessWidget {
                           style: const TextStyle(color: OvanieColors.navy, fontSize: 11.8, fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 2),
-                        const Text('Produit OVANIE', style: TextStyle(color: OvanieColors.muted, fontSize: 9.7)),
+                        const Text('Produit OVANIE', style: TextStyle(color: OvanieColors.muted, fontSize: 11.5)),
                       ],
                     ),
                   ),
@@ -717,14 +717,14 @@ class _InvoiceItemRow extends StatelessWidget {
             ),
             Expanded(
               flex: 2,
-              child: Text(formatFcfa(item.unitPrice), textAlign: TextAlign.right, style: const TextStyle(color: OvanieColors.navy, fontSize: 10.7)),
+              child: Text(formatFcfa(item.unitPrice), textAlign: TextAlign.right, style: const TextStyle(color: OvanieColors.navy, fontSize: 12)),
             ),
             Expanded(
               flex: 2,
               child: Text(
                 formatFcfa(item.subtotal),
                 textAlign: TextAlign.right,
-                style: const TextStyle(color: OvanieColors.orange, fontSize: 10.7, fontWeight: FontWeight.w800),
+                style: const TextStyle(color: OvanieColors.orange, fontSize: 12, fontWeight: FontWeight.w800),
               ),
             ),
           ],
@@ -768,7 +768,7 @@ class _PaymentField extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: OvanieColors.muted, fontSize: 9.8)),
+          Text(label, style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5)),
           const SizedBox(height: 5),
           Row(
             children: [
@@ -790,7 +790,7 @@ class _PaymentField extends StatelessWidget {
                             Flexible(
                               child: Text(
                                 value,
-                                style: const TextStyle(color: Color(0xFF13843E), fontSize: 10.5, fontWeight: FontWeight.w800),
+                                style: const TextStyle(color: Color(0xFF13843E), fontSize: 12, fontWeight: FontWeight.w800),
                               ),
                             ),
                           ],
@@ -800,7 +800,7 @@ class _PaymentField extends StatelessWidget {
                         value,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: OvanieColors.navy, fontSize: 10.8, fontWeight: FontWeight.w800),
+                        style: const TextStyle(color: OvanieColors.navy, fontSize: 12, fontWeight: FontWeight.w800),
                       ),
               ),
             ],
@@ -835,7 +835,7 @@ class _PaidBadge extends StatelessWidget {
               style: TextStyle(
                 color: paid ? const Color(0xFF13843E) : OvanieColors.orange,
                 fontWeight: FontWeight.w800,
-                fontSize: 10.8,
+                fontSize: 12,
               ),
             ),
           ],
@@ -855,7 +855,7 @@ class _TaxBadge extends StatelessWidget {
         ),
         child: const Text(
           'TVA / taxes incluses',
-          style: TextStyle(color: Color(0xFF1559E6), fontSize: 9.8),
+          style: TextStyle(color: Color(0xFF1559E6), fontSize: 11.5),
         ),
       );
 }
@@ -893,7 +893,7 @@ class _InvoiceText {
   );
   static const tableHeader = TextStyle(
     color: OvanieColors.navy,
-    fontSize: 10.5,
+    fontSize: 12,
     fontWeight: FontWeight.w700,
   );
 }

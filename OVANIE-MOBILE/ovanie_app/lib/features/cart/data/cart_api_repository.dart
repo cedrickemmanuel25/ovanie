@@ -1,4 +1,5 @@
 import '../../home/data/marketplace_repository.dart';
+import '../../products/domain/product_model.dart';
 import '../domain/cart_store.dart';
 import 'cart_server_sync.dart';
 
@@ -24,17 +25,21 @@ class CartApiRepository {
   Future<void> mergeLocalCartIntoServer({bool refreshLocal = false}) async {
     await CartStore.instance.flushPendingServerMutations();
 
+    final revisionAtStart = CartStore.instance.localMutationRevision;
     final local = CartStore.instance.lines;
     const remote = CartServerSync();
     final initial = await remote.fetchItems();
-    final byProduct = <int, ServerCartItem>{
-      for (final item in initial) item.productId: item,
+    final byProduct = <String, ServerCartItem>{
+      for (final item in initial) '${item.productId}:${item.variantId ?? 0}': item,
     };
 
     for (final line in local) {
-      final existing = byProduct[line.product.id];
+      // L'utilisateur a modifié le panier pendant la fusion (ex. suppression) :
+      // on arrête d'envoyer l'ancienne photo du panier.
+      if (CartStore.instance.localMutationRevision != revisionAtStart) break;
+      final existing = byProduct['${line.product.id}:${line.variant?.id ?? 0}'];
       if (existing == null) {
-        await remote.setProductQuantity(line.product.id, line.quantity);
+        await remote.setProductQuantity(line.product.id, line.quantity, productVariantId: line.variant?.id);
         continue;
       }
 
@@ -44,7 +49,23 @@ class CartApiRepository {
           ? existing.quantity
           : line.quantity;
       if (target != existing.quantity) {
-        await remote.setProductQuantity(line.product.id, target);
+        await remote.setProductQuantity(line.product.id, target, productVariantId: line.variant?.id);
+      }
+    }
+
+    // Une requête de fusion partie juste avant une modification locale peut
+    // arriver au serveur après elle et réintroduire un article supprimé :
+    // on réécrit alors l'état local actuel, qui est l'intention la plus récente.
+    if (CartStore.instance.localMutationRevision != revisionAtStart) {
+      await CartStore.instance.flushPendingServerMutations();
+      final current = <String, int>{};
+      for (final line in CartStore.instance.lines) {
+        final key = '${line.product.id}:${line.variant?.id ?? 0}';
+        current[key] = (current[key] ?? 0) + line.quantity;
+      }
+      for (final line in local) {
+        final key = '${line.product.id}:${line.variant?.id ?? 0}';
+        await remote.setProductQuantity(line.product.id, current[key] ?? 0, productVariantId: line.variant?.id);
       }
     }
 
@@ -66,11 +87,21 @@ class CartApiRepository {
       if (item.productSlug.trim().isEmpty) continue;
       try {
         final product = await marketplace.getProductBySlug(item.productSlug);
+        ProductVariantModel? variant;
+        if (item.variantId != null) {
+          for (final candidate in product.variants) {
+            if (candidate.id == item.variantId) {
+              variant = candidate;
+              break;
+            }
+          }
+        }
         hydrated.add(
           CartLine(
             product: product,
             quantity: item.quantity,
             unitPrice: item.unitPrice > 0 ? item.unitPrice : null,
+            variant: variant,
           ),
         );
       } catch (_) {

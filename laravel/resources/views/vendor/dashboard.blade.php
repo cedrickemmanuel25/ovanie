@@ -1071,7 +1071,9 @@
     $shopName = $shop?->name ?: (auth()->user()?->name ?: 'Ma boutique');
     $shopScore = min(100, max(0, (int) $stat('shop_score', 0)));
 
-    $category = $shop?->main_category ?: 'Non renseignée';
+    $category = $shop?->main_category
+        ? (\App\Models\Category::query()->where('slug', $shop->main_category)->value('name') ?: \Illuminate\Support\Str::headline($shop->main_category))
+        : 'Non renseignée';
     $city = trim((string) ($shop?->city ?? ''));
     $commune = trim((string) ($shop?->commune ?? ''));
     $zone = collect([$city, $commune])->filter()->implode(' - ');

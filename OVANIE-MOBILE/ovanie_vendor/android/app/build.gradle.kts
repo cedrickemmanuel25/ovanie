@@ -36,6 +36,13 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Aperçu de design : avec ORG_GRADLE_PROJECT_ovaniePreview=true, l'application s'installe
+        // à côté de l'application réelle (« .apercu »), sans toucher à ses données ni à sa session.
+        if (project.findProperty("ovaniePreview") == "true") {
+            applicationIdSuffix = ".apercu"
+            versionNameSuffix = "-apercu"
+        }
     }
 
     buildTypes {

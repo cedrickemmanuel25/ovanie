@@ -86,7 +86,7 @@ class VendorReturnController extends Controller
                 : $this->fallbackAcceptedLogisticsStatus($return);
 
             $response = trim((string) ($validated['vendor_response'] ?? ''))
-                ?: 'Retour accepté par la boutique. OVANIE Logistics doit confirmer les informations avant transmission au client.';
+                ?: 'Retour accepté par la boutique. OVANIE organise la collecte de votre article.';
 
             $meta = is_array($return->meta) ? $return->meta : [];
             $meta['vendor_decision'] = [

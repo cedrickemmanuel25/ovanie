@@ -22,6 +22,7 @@
     ];
     $kycLabels = [
         'pending' => 'KYC à contrôler',
+        'automated_checked' => 'Fichiers contrôlés automatiquement',
         'verified' => 'KYC vérifié',
         'rejected' => 'KYC rejeté',
     ];
@@ -36,9 +37,14 @@
     <header class="shops-page-heading">
         <div>
             <span class="shops-kicker">Vendeurs et conformité</span>
-            <h2>Validation des boutiques vendeurs</h2>
-            <p>Contrôlez l’identité, la localisation, la logistique et l’attribution commerciale avant d’autoriser la vente.</p>
+            <h2>Suivi des boutiques vendeurs</h2>
+            <p>L’ouverture et les contrôles techniques du dossier sont automatiques. Suivez ici les boutiques et les éventuelles anomalies.</p>
         </div>
+        <a class="shops-primary-button" href="{{ route('admin.products.create') }}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Ajouter un produit pour un vendeur
+        </a>
+        <a class="shops-secondary-button" href="{{ route('admin.shop-configuration-missions.index') }}">Missions boutiques</a>
         <a class="shops-secondary-button" href="{{ route('admin.dashboard') }}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg>
             Retour au tableau de bord
@@ -138,7 +144,7 @@
                 $hasGps = $shop->latitude !== null && $shop->longitude !== null;
                 $canPublish = $shop->canPublishProducts();
                 $issues = [];
-                if ($kycStatus !== 'verified') $issues[] = 'KYC';
+                if (! in_array($kycStatus, ['verified', 'automated_checked'], true)) $issues[] = 'KYC';
                 if (!$hasGps && $shop->usesOvanieLogistics()) $issues[] = 'position GPS';
                 if ($logisticsStatus !== 'ready') $issues[] = 'logistique';
                 if (!$shop->is_active) $issues[] = 'activation';
@@ -176,7 +182,7 @@
                     <section>
                         <span class="shop-section-label">Vérifications</span>
                         <div class="shop-check-list">
-                            <span class="mini-status {{ $kycStatus === 'verified' ? 'is-success' : ($kycStatus === 'rejected' ? 'is-danger' : 'is-warning') }}">
+                            <span class="mini-status {{ in_array($kycStatus, ['verified', 'automated_checked'], true) ? 'is-success' : ($kycStatus === 'rejected' ? 'is-danger' : 'is-warning') }}">
                                 {{ $kycLabels[$kycStatus] ?? 'KYC à contrôler' }}
                             </span>
                             <span class="mini-status {{ $canPublish ? 'is-success' : 'is-warning' }}">
@@ -222,6 +228,18 @@
                     <a class="shops-primary-button" href="{{ route('admin.shops.show', $shop) }}">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                         Examiner le dossier
+                    </a>
+                    <a class="shops-secondary-button" href="{{ route('admin.products.index', ['shop_id' => $shop->id]) }}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/></svg>
+                        Voir les produits
+                    </a>
+                    <a class="shops-secondary-button" href="{{ route('admin.products.create', ['shop_id' => $shop->id]) }}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                        Ajouter un produit
+                    </a>
+                    <a class="shops-secondary-button" href="{{ route('admin.shops.operational-configuration', $shop) }}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/></svg>
+                        Configurer logistique & reversement
                     </a>
                     @if($status !== 'approved')
                         <form method="POST" action="{{ route('admin.shops.updateStatus', $shop) }}" onsubmit="return confirm('Approuver et activer cette boutique ?')">

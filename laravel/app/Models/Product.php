@@ -254,6 +254,11 @@ class Product extends Model
         return $this->belongsTo(MasterProduct::class);
     }
 
+    public function variants()
+    {
+        return $this->hasMany(ProductVariant::class)->orderBy('sort_order')->orderBy('id');
+    }
+
     public function images()
     {
         // Ne pas utiliser sort_order ici : ta table product_images ne possède pas toujours cette colonne.
@@ -385,26 +390,7 @@ class Product extends Model
     {
         return $query->notArchived()
             ->active()
-            ->whereHas('shop', function (Builder $shop) {
-                $shop->where('status', 'approved')
-                    ->where('is_active', true)
-                    ->where(function (Builder $q) {
-                        $q->where('logistics_type', 'ovanie')
-                            ->orWhere(function (Builder $seller) {
-                                $seller->where('logistics_type', 'seller')
-                                    ->whereHas('sellerDeliveryProfile', fn (Builder $profile) => $profile
-                                        ->where('is_enabled', true)
-                                        ->whereIn('status', ['pending_review', 'approved'])
-                                        ->whereNotNull('default_delay')
-                                        ->whereNotNull('max_weight_kg')
-                                        ->whereNotNull('max_volume_m3')
-                                        ->whereNotNull('conditions'))
-                                    ->whereHas('sellerDeliveryZones', fn (Builder $zones) => $zones
-                                        ->where('is_active', true)
-                                        ->whereNotNull('commune'));
-                            });
-                    });
-            });
+            ->whereHas('shop', fn (Builder $shop) => $shop->canPublishProducts());
     }
 
     public function scopeActiveBoosted(Builder $query): Builder
@@ -1007,23 +993,67 @@ class Product extends Model
 
     public function getDisplayUnitAttribute(): string
     {
-        return $this->unit_label ?: match ($this->unit) {
-            'sac' => 'sac',
-            'tonne' => 'tonne',
-            'm3' => 'm³',
-            'm2' => 'm²',
-            'ml' => 'mètre linéaire',
-            'piece' => 'pièce',
-            'palette' => 'palette',
-            'rouleau' => 'rouleau',
-            'seau' => 'seau',
-            'carton' => 'carton',
-            'paquet' => 'paquet',
-            'barre' => 'barre',
-            'bidon' => 'bidon',
-            'kg' => 'kg',
-            'litre' => 'litre',
-            default => 'unité',
+        // Le libellé saisi n'est retenu que s'il désigne une vraie unité ; sinon on se rabat sur le code d'unité.
+        // Un texte libre (« Brique terre cuite Brique rouge », « La brique ») décrit le produit, pas l'unité.
+        // Une précision entre parenthèses est conservée : « Sac (50 kg) » reste « sac (50 kg) ».
+        if (preg_match('/^(.+?)\s*(\([^()]{1,20}\))$/u', trim((string) $this->unit_label), $parts)
+            && ($base = self::translateSaleUnit($parts[1])) !== null) {
+            return $base . ' ' . $parts[2];
+        }
+
+        return self::translateSaleUnit((string) $this->unit_label)
+            ?? self::translateSaleUnit((string) $this->unit)
+            ?? 'pièce';
+    }
+
+    /** Unité de vente normalisée, ou null si le texte n'est pas une unité connue. */
+    public static function translateSaleUnit(string $rawLabel): ?string
+    {
+        $normalized = Str::of(trim($rawLabel))
+            ->lower()
+            ->ascii()
+            ->replace(['_', '-'], ' ')
+            ->replaceMatches('/\s+/', ' ')
+            ->replaceMatches('/^(la|le|l|un|une|par) /', '')
+            ->trim()
+            ->toString();
+
+        return match ($normalized) {
+            'piece', 'pieces', 'pc', 'pcs' => 'pièce',
+            'unit', 'units', 'unite', 'unites' => 'unité',
+            'bag', 'bags', 'sac', 'sacs' => 'sac',
+            'brique', 'briques', 'bloc', 'blocs', 'parpaing', 'parpaings' => 'pièce',
+            'benne', 'bennes', 'camion', 'camions' => 'benne',
+            'lot', 'lots' => 'lot',
+            'metre', 'metres', 'm' => 'mètre',
+            'ton', 'tons', 'tonne', 'tonnes' => 'tonne',
+            'm3', 'm 3', 'metre cube', 'metres cubes' => 'm³',
+            'm2', 'm 2', 'metre carre', 'metres carres' => 'm²',
+            'ml', 'linear meter', 'linear metre', 'metre lineaire', 'metres lineaires' => 'mètre linéaire',
+            'pallet', 'pallets', 'palette', 'palettes' => 'palette',
+            'roll', 'rolls', 'rouleau', 'rouleaux' => 'rouleau',
+            'bucket', 'buckets', 'seau', 'seaux' => 'seau',
+            'box', 'boxes', 'carton', 'cartons' => 'carton',
+            'pack', 'packs', 'paquet', 'paquets' => 'paquet',
+            'bar', 'bars', 'barre', 'barres' => 'barre',
+            'can', 'cans', 'bidon', 'bidons' => 'bidon',
+            'kg', 'kilogram', 'kilograms', 'kilogramme', 'kilogrammes' => 'kg',
+            'liter', 'liters', 'litre', 'litres' => 'litre',
+            default => null,
+        };
+    }
+
+    /** Unité accordée avec la quantité : « 500 pièces », « 1 pièce », « 3 m³ ». */
+    public static function pluralizeSaleUnit(string $unit, float|int $quantity): string
+    {
+        if ($quantity < 2 || preg_match('/(s|x|²|³|kg|\))$/u', $unit)) {
+            return $unit;
+        }
+
+        return match ($unit) {
+            'rouleau', 'seau' => $unit . 'x',
+            'mètre linéaire' => 'mètres linéaires',
+            default => $unit . 's',
         };
     }
 
@@ -1199,6 +1229,11 @@ class Product extends Model
     protected static function booted(): void
     {
         static::saving(function (Product $product) {
+            // Titre au format unique dès l'ajout ou la modification (majuscules, dimensions, fautes connues).
+            if ($product->isDirty('name') && filled($product->name)) {
+                $product->name = \App\Support\ProductTitleNormalizer::normalize((string) $product->name);
+            }
+
             if (blank($product->slug) && filled($product->name)) {
                 $product->slug = Str::slug($product->name) . '-' . Str::lower(Str::random(5));
             }

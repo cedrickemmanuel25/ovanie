@@ -27,14 +27,58 @@
     $category = data_get($productSheet, 'category');
     $parentCategory = data_get($productSheet, 'category.parent');
     $technicalSpecs = collect($sheet->get('technical_specs', []))->filter(fn ($value) => filled($value));
-    $images = collect($sheet->get('images', []))
+    $variants = collect($sheet->get('variants', []))->filter(fn ($variant) => (bool) data_get($variant, 'stock', 0) || data_get($variant, 'stock') === 0)->values();
+    // Les images normalisées de product_images sont la source prioritaire.
+    // Le champ historique products.gallery ne sert que de repli pour les anciens produits
+    // qui n'ont encore aucune ligne dans product_images. Cela évite d'afficher deux fois
+    // la même photo après une modification Admin/Vendeur.
+    $structuredImages = collect($sheet->get('images', []))
         ->pluck('url')
-        ->merge($sheet->get('gallery', []))
-        ->prepend($sheet->get('main_image_url'))
         ->filter()
         ->unique()
         ->values();
+
+    $images = $structuredImages->isNotEmpty()
+        ? $structuredImages
+        : collect($sheet->get('gallery', []))
+            ->prepend($sheet->get('main_image_url'))
+            ->filter()
+            ->unique()
+            ->values();
+
     if ($images->isEmpty()) $images = collect([asset('images/product-placeholder.svg')]);
+
+    // Une image de variante n'est pas une simple photo de galerie : elle identifie
+    // le modèle/couleur exact commandé. On l'intègre donc à la galerie avec son ID.
+    // Si la même URL est déjà présente comme image produit, elle est enrichie plutôt
+    // que dupliquée.
+    $variantByImage = $variants
+        ->filter(fn ($variant) => filled(data_get($variant, 'image_url')) || filled(data_get($variant, 'card_url')))
+        ->mapWithKeys(function ($variant) {
+            $url = (string) (data_get($variant, 'image_url') ?: data_get($variant, 'card_url'));
+            return [$url => $variant];
+        });
+
+    $galleryItems = $images->map(function ($url) use ($variantByImage) {
+        $variant = $variantByImage->get((string) $url);
+        return [
+            'url' => (string) $url,
+            'variant_id' => $variant ? (int) data_get($variant, 'id') : null,
+            'variant_label' => $variant ? (string) data_get($variant, 'label') : null,
+        ];
+    })->values();
+
+    foreach ($variantByImage as $url => $variant) {
+        if (! $galleryItems->contains(fn ($item) => (string) data_get($item, 'url') === (string) $url)) {
+            $galleryItems->push([
+                'url' => (string) $url,
+                'variant_id' => (int) data_get($variant, 'id'),
+                'variant_label' => (string) data_get($variant, 'label'),
+            ]);
+        }
+    }
+
+    $images = $galleryItems->pluck('url')->values();
 
     $fmtMoney = fn ($value) => number_format((float) $value, 0, ',', ' ') . ' FCFA';
     $homeUrl = Route::has('home') ? route('home') : url('/');
@@ -63,9 +107,9 @@
         'État' => $sheet->get('product_state_label', 'Neuf'),
         'Disponibilité' => $availabilityLabel,
         'Unité de vente' => $unit,
-        'Quantité minimum' => $minimum . ' ' . $unit,
+        'Minimum de commande' => number_format($minimum, 0, ',', ' ') . ' ' . \App\Models\Product::pluralizeSaleUnit($unit, $minimum),
         'Conditionnement' => $sheet->get('packaging'),
-        'Stock disponible' => $stock > 0 ? number_format($stock, 0, ',', ' ') . ' ' . $unit : $availabilityLabel,
+        'Stock disponible' => $stock > 0 ? number_format($stock, 0, ',', ' ') . ' ' . \App\Models\Product::pluralizeSaleUnit($unit, $stock) . ' ' . ($stock > 1 ? 'disponibles' : 'disponible') : $availabilityLabel,
         'Poids' => (float) $sheet->get('weight_kg', 0) > 0 ? number_format((float) $sheet->get('weight_kg'), 2, ',', ' ') . ' kg' : null,
         'Marque' => $sheet->get('brand'),
         'Origine' => $sheet->get('origin_country'),
@@ -123,9 +167,19 @@
         <section class="ov-product-hero">
             <article class="ov-product-gallery-panel">
                 <div class="ov-product-thumbs" aria-label="Images du produit">
-                    @foreach($images as $index => $imageUrl)
-                        <button type="button" class="ov-product-thumb {{ $index === 0 ? 'is-active' : '' }} {{ $index >= 5 ? 'is-extra' : '' }}" data-product-thumb data-image="{{ $imageUrl }}" aria-label="Voir image {{ $index + 1 }}">
-                            <img src="{{ $imageUrl }}" alt="{{ $name }} miniature {{ $index + 1 }}">
+                    @foreach($galleryItems as $index => $galleryItem)
+                        @php
+                            $imageUrl = data_get($galleryItem, 'url');
+                            $galleryVariantId = data_get($galleryItem, 'variant_id');
+                            $galleryVariantLabel = data_get($galleryItem, 'variant_label');
+                        @endphp
+                        <button type="button"
+                            class="ov-product-thumb {{ $index === 0 ? 'is-active' : '' }} {{ $index >= 5 ? 'is-extra' : '' }}"
+                            data-product-thumb
+                            data-image="{{ $imageUrl }}"
+                            @if($galleryVariantId) data-variant-id="{{ $galleryVariantId }}" data-variant-label="{{ $galleryVariantLabel }}" @endif
+                            aria-label="{{ $galleryVariantLabel ? 'Choisir '.$galleryVariantLabel : 'Voir image '.($index + 1) }}">
+                            <img src="{{ $imageUrl }}" alt="{{ $galleryVariantLabel ?: ($name.' miniature '.($index + 1)) }}">
                         </button>
                     @endforeach
                     @if($images->count() > 5)
@@ -146,9 +200,13 @@
                 <div class="ov-product-summary__status"><span class="ov-product-status {{ $availabilityClass }}"><i data-lucide="{{ $availabilityIcon }}"></i>{{ $availabilityLabel }}</span>@if($sheet->get('reference'))<small>Réf. {{ $sheet->get('reference') }}</small>@endif</div>
                 <h1>{{ $name }}</h1>
                 <div class="ov-product-rating-row">
-                    <span class="ov-stars">★★★★★</span>
-                    <strong>{{ $rating !== null ? number_format((float) $rating, 1, ',', ' ') : '—' }}</strong>
-                    <a href="#productReviews">({{ $reviewsCount }} avis)</a>
+                    @if($reviewsCount > 0 && $rating !== null)
+                        <span class="ov-stars">★★★★★</span>
+                        <strong>{{ number_format((float) $rating, 1, ',', ' ') }}</strong>
+                        <a href="#productReviews">({{ $reviewsCount }} avis)</a>
+                    @else
+                        <a href="#productReviews">Aucun avis pour le moment</a>
+                    @endif
                 </div>
 
                 <div class="ov-product-summary__price">
@@ -171,7 +229,7 @@
                 <div class="ov-product-quality-grid">
                     <div><i data-lucide="shield-check"></i><span><strong>Produit vérifié</strong><small>Contrôle OVANIE</small></span></div>
                     <div><i data-lucide="badge-check"></i><span><strong>Qualité professionnelle</strong><small>Informations produit centralisées</small></span></div>
-                    <div><i data-lucide="refresh-cw"></i><span><strong>Données synchronisées</strong><small>Web & applications</small></span></div>
+                    <div><i data-lucide="refresh-cw"></i><span><strong>Stock à jour</strong><small>Disponibilité vérifiée</small></span></div>
                 </div>
 
                 <dl class="ov-product-quick-facts">
@@ -205,9 +263,32 @@
                     </div>
                 @endif
 
+                @if($variants->isNotEmpty())
+                    <div class="ov-variant-selector" data-variant-selector>
+                        <div class="ov-variant-selector__head"><strong>Choisissez votre modèle</strong><span data-selected-variant>Non sélectionné</span></div>
+                        <div class="ov-variant-options">
+                            @foreach($variants as $variant)
+                                <button type="button" class="ov-variant-option" data-variant-option
+                                    data-id="{{ data_get($variant,'id') }}"
+                                    data-label="{{ data_get($variant,'label') }}"
+                                    data-image="{{ data_get($variant,'image_url') }}"
+                                    data-stock="{{ data_get($variant,'stock',0) }}"
+                                    data-price="{{ data_get($variant,'price_override') }}"
+                                    @disabled((int)data_get($variant,'stock',0) <= 0)>
+                                    @if(data_get($variant,'color_hex'))<span class="ov-variant-swatch" style="background:{{ data_get($variant,'color_hex') }}"></span>@endif
+                                    <span>{{ data_get($variant,'value') }}</span>
+                                    @if((int)data_get($variant,'stock',0)<=0)<small>Rupture</small>@endif
+                                </button>
+                            @endforeach
+                        </div>
+                        <p class="ov-variant-help">L’image, le stock et la commande correspondent exactement au modèle sélectionné.</p>
+                    </div>
+                @endif
+
                 @if($canAddToCart)
                     <form method="POST" action="{{ Route::has('cart.add') ? route('cart.add', $product->id) : '#' }}" class="ov-product-cart-form" data-product-form>
                         @csrf
+                        @if($variants->isNotEmpty())<input type="hidden" name="product_variant_id" data-variant-input required>@endif
                         <label class="ov-buybox-qty-label">Quantité</label>
                         <div class="ov-product-qty-row">
                             <button type="button" data-qty-minus aria-label="Diminuer">−</button>
@@ -288,7 +369,7 @@
                         <dl class="ov-product-quick-facts is-tab">
                             <div><dt>État</dt><dd>{{ $sheet->get('product_state_label', 'Neuf') }}</dd></div>
                             <div><dt>Unité de vente</dt><dd>{{ $unit }}</dd></div>
-                            <div><dt>Quantité minimum</dt><dd>{{ $minimum }} {{ $unit }}</dd></div>
+                            <div><dt>Minimum de commande</dt><dd>{{ number_format($minimum, 0, ',', ' ') }} {{ \App\Models\Product::pluralizeSaleUnit($unit, $minimum) }}</dd></div>
                             @if($sheet->get('brand'))<div><dt>Marque</dt><dd>{{ $sheet->get('brand') }}</dd></div>@endif
                             @if($sheet->get('packaging'))<div><dt>Conditionnement</dt><dd>{{ $sheet->get('packaging') }}</dd></div>@endif
                         </dl>
@@ -331,8 +412,9 @@
                     <li><i data-lucide="check"></i>Délai confirmé avant validation</li>
                     <li><i data-lucide="check"></i>Suivi de commande assuré par OVANIE</li>
                 </ul>
-                @if($sheet->get('return_policy'))<p><strong>Politique de retour :</strong> {{ $sheet->get('return_policy') }}</p>@endif
-                @if($sheet->get('warranty'))<p><strong>Garantie :</strong> {{ $sheet->get('warranty') }}</p>@endif
+                <p><strong>Retours :</strong> {{ $sheet->get('return_policy') ?: 'selon les conditions générales OVANIE ; un produit défectueux ou non conforme peut toujours être signalé.' }}</p>
+                <p><strong>Garantie commerciale du produit :</strong> {{ $sheet->get('warranty') ?: 'aucune garantie commerciale n’est indiquée pour ce produit.' }}</p>
+                <p><strong>Protection d’achat OVANIE :</strong> applicable à votre commande selon les conditions générales, indépendamment de la garantie commerciale du produit.</p>
             </div>
         </section>
 

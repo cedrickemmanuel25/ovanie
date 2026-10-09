@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 abstract final class ApiConfig {
   static const String _definedEnvironment = String.fromEnvironment(
     'OVANIE_ENV',
-    defaultValue: 'local',
+    defaultValue: 'production',
   );
 
   static const String _definedApiBase = String.fromEnvironment(

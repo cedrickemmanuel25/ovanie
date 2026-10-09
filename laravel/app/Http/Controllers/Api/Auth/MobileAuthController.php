@@ -269,10 +269,16 @@ class MobileAuthController extends Controller
         $mobileTokens = $user->tokens()
             ->where('name', 'like', 'ovanie-mobile%')
             ->orderByDesc('created_at')
-            ->get(['id', 'created_at']);
+            ->get(['id', 'created_at', 'last_used_at']);
 
+        // Un appareil reste connecté tant qu'il sert : seul un token inutilisé
+        // depuis 1 an est considéré comme abandonné.
         $staleIds = $mobileTokens
-            ->filter(fn ($token) => $token->created_at && $token->created_at->lt(now()->subDays(180)))
+            ->filter(function ($token) {
+                $lastActivity = $token->last_used_at ?? $token->created_at;
+
+                return $lastActivity && $lastActivity->lt(now()->subYear());
+            })
             ->pluck('id')
             ->all();
 

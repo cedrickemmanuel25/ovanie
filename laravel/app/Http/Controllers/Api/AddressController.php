@@ -224,7 +224,7 @@ class AddressController extends Controller
                     $data['commune'] = $resolved['commune']
                         ?: $registry->canonicalCommune($data['commune'] ?? null)
                         ?: ($data['commune'] ?? 'Abidjan');
-                    $data['quartier'] = $resolved['quartier'] ?? $data['quartier'] ?? null;
+                    $data['quartier'] = filled($data['quartier'] ?? null) ? $data['quartier'] : ($resolved['quartier'] ?? null);
                 }
             } else {
                 $data['commune'] = $registry->canonicalCommune($data['commune'] ?? null) ?: ($data['commune'] ?? null);

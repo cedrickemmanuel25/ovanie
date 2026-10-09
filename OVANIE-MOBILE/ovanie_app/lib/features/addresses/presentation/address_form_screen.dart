@@ -263,6 +263,27 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFE4EAF2)))),
+          child: SizedBox(
+            height: 50,
+            child: FilledButton(
+              onPressed: _saving ? null : _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6500),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: _saving
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.3, color: Colors.white))
+                  : Text(editing ? 'Enregistrer les modifications' : 'Enregistrer l’adresse', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -271,41 +292,33 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(34, 22, 34, 0),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
                   child: _FormHeader(
                     title: editing ? 'Modifier l’adresse' : 'Ajouter une adresse',
-                    subtitle: 'Renseignez les informations pour une livraison rapide et précise.',
+                    subtitle: '',
                     onBack: () => Navigator.maybePop(context),
-                  ),
-                ),
-              ),
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(34, 22, 34, 0),
-                  child: _InfoBanner(
-                    text: 'L’adresse principale est utilisée par défaut lors de la validation de votre commande.',
                   ),
                 ),
               ),
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(34, 20, 34, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   child: Row(
                     children: [
                       Expanded(
                         child: _TopLocationButton(
                           filled: true,
                           icon: Icons.my_location_rounded,
-                          label: _locating ? 'Localisation…' : 'Utiliser ma position actuelle',
+                          label: _locating ? 'Localisation…' : 'Ma position',
                           onTap: _locating ? null : _useCurrentPosition,
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: _TopLocationButton(
                           filled: false,
                           icon: Icons.map_outlined,
-                          label: 'Choisir sur la carte',
+                          label: 'Sur la carte',
                           onTap: _pickOnMap,
                         ),
                       ),
@@ -315,12 +328,12 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
               ),
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(34, 30, 34, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const _SectionTitle('Type d’adresse'),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 10),
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final types = _effectiveTypes;
@@ -347,7 +360,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                           );
                         },
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 20),
                       _LabeledField(
                         label: 'Nom de l’adresse',
                         requiredField: true,
@@ -355,11 +368,9 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                         hint: 'Ex. Chantier Cocody Riviera 3',
                         validator: (value) => (value ?? '').trim().isEmpty ? 'Renseignez le nom de l’adresse.' : null,
                       ),
-                      const SizedBox(height: 34),
+                      const SizedBox(height: 28),
                       const _SectionTitle('Localisation'),
-                      const SizedBox(height: 22),
-                      const _StaticSelectField(label: 'Pays / Région', requiredField: true, value: 'Côte d’Ivoire'),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 14),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -369,18 +380,16 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                               requiredField: true,
                               controller: _city,
                               hint: 'Abidjan',
-                              suffixIcon: Icons.keyboard_arrow_down_rounded,
                               validator: (value) => (value ?? '').trim().isEmpty ? 'Ville requise.' : null,
                             ),
                           ),
-                          const SizedBox(width: 28),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: _LabeledField(
                               label: 'Commune',
                               requiredField: true,
                               controller: _commune,
                               hint: 'Cocody',
-                              suffixIcon: Icons.keyboard_arrow_down_rounded,
                               validator: (value) => (value ?? '').trim().isEmpty ? 'Commune requise.' : null,
                             ),
                           ),
@@ -396,11 +405,10 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                               requiredField: true,
                               controller: _quartier,
                               hint: 'Riviera 3',
-                              suffixIcon: Icons.keyboard_arrow_down_rounded,
                               validator: (value) => (value ?? '').trim().isEmpty ? 'Quartier requis.' : null,
                             ),
                           ),
-                          const SizedBox(width: 28),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: _LabeledField(
                               label: 'Sous-quartier / Lot',
@@ -428,16 +436,8 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                         controller: _landmark,
                         hint: 'Ex. Immeuble beige à côté de la station Shell',
                       ),
-                      const SizedBox(height: 32),
-                      const Text(
-                        'Contact sur place ',
-                        style: TextStyle(color: Color(0xFF061A56), fontSize: 15, fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Personne à contacter pour faciliter la livraison',
-                        style: TextStyle(color: Color(0xFF53658F), fontSize: 12.5),
-                      ),
+                      const SizedBox(height: 28),
+                      const _SectionTitle('Contact sur place'),
                       const SizedBox(height: 14),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,7 +450,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                               hint: 'Ex. Ali Koné',
                             ),
                           ),
-                          const SizedBox(width: 28),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: _LabeledField(
                               label: 'Téléphone',
@@ -470,13 +470,8 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Définir comme adresse principale',
-                                  style: TextStyle(color: Color(0xFF061A56), fontSize: 14.5, fontWeight: FontWeight.w800),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Cette adresse sera utilisée par défaut lors de la validation de votre commande.',
-                                  style: TextStyle(color: Color(0xFF53658F), fontSize: 11.7),
+                                  'Adresse principale',
+                                  style: TextStyle(color: Color(0xFF061A56), fontSize: 15, fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -492,30 +487,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                         const SizedBox(height: 16),
                         _ErrorBox(message: _error!),
                       ],
-                      const SizedBox(height: 26),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 62,
-                        child: FilledButton(
-                          onPressed: _saving ? null : _save,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF0A50EB),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          child: _saving
-                              ? const SizedBox(
-                                  width: 23,
-                                  height: 23,
-                                  child: CircularProgressIndicator(strokeWidth: 2.3, color: Colors.white),
-                                )
-                              : Text(
-                                  editing ? 'Enregistrer les modifications' : 'Enregistrer l’adresse',
-                                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 26),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
@@ -538,17 +510,17 @@ class _FormHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         InkWell(
           onTap: onBack,
           borderRadius: BorderRadius.circular(30),
           child: const Padding(
             padding: EdgeInsets.all(3),
-            child: Icon(Icons.arrow_back_rounded, color: Color(0xFF061A56), size: 31),
+            child: Icon(Icons.arrow_back_rounded, color: Color(0xFF061A56), size: 26),
           ),
         ),
-        const SizedBox(width: 20),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,13 +529,13 @@ class _FormHeader extends StatelessWidget {
                 title,
                 style: const TextStyle(
                   color: Color(0xFF061A56),
-                  fontSize: 29,
-                  fontWeight: FontWeight.w900,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
                   letterSpacing: -0.4,
                 ),
               ),
-              const SizedBox(height: 7),
-              Text(
+              if (subtitle.isNotEmpty) const SizedBox(height: 7),
+              if (subtitle.isNotEmpty) Text(
                 subtitle,
                 style: const TextStyle(color: Color(0xFF53658F), fontSize: 13.5),
               ),

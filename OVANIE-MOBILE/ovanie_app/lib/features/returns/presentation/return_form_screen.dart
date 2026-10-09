@@ -222,9 +222,6 @@ class _ReturnFormScreenState extends State<ReturnFormScreen> {
       }
     }
     if (_step == 2) {
-      if (_detailsController.text.trim().length < 10) {
-        return 'Ajoutez quelques détails supplémentaires sur le problème.';
-      }
       if (_storageController.text.trim().isEmpty) {
         return 'Indiquez le lieu où le produit est actuellement stocké.';
       }
@@ -471,9 +468,9 @@ class _ReturnFormScreenState extends State<ReturnFormScreen> {
           quantity: _existing?.quantity ?? _item?.orderedQuantity ?? _quantity,
         ),
         const SizedBox(height: 20),
-        _FieldLabel(title: 'Motif du retour', subtitle: 'Sélectionnez la raison principale de votre retour', requiredField: true),
+        const _FieldLabel(title: 'Motif du retour', requiredField: true),
         const SizedBox(height: 8),
-        _SelectBox(
+        _ReasonList(
           value: _reason,
           items: _reasons,
           onChanged: (value) => setState(() => _reason = value),
@@ -542,15 +539,13 @@ class _ReturnFormScreenState extends State<ReturnFormScreen> {
         ),
         const SizedBox(height: 20),
         const _FieldLabel(
-          title: 'Détails supplémentaires',
-          subtitle: 'Décrivez plus précisément le problème rencontré',
-          requiredField: true,
+          title: 'Précisions (facultatif)',
         ),
         const SizedBox(height: 8),
         _LargeTextField(controller: _detailsController, hint: 'Ajoutez les détails utiles pour comprendre le problème.'),
         const SizedBox(height: 18),
         const _FieldLabel(
-          title: 'Date de découverte du problème',
+          title: 'Date du problème',
           subtitle: 'Indiquez quand vous avez constaté le problème',
           requiredField: true,
         ),
@@ -558,7 +553,7 @@ class _ReturnFormScreenState extends State<ReturnFormScreen> {
         _DateBox(date: _discoveryDate, onTap: () => _pickDate(pickup: false)),
         const SizedBox(height: 18),
         const _FieldLabel(
-          title: 'Lieu de stockage du produit au moment du problème',
+          title: 'Où se trouve le produit',
           subtitle: 'Où le produit était-il stocké lorsque vous avez constaté le problème ?',
           requiredField: true,
         ),
@@ -654,7 +649,7 @@ class _ReturnFormScreenState extends State<ReturnFormScreen> {
                   children: [
                     const _FieldLabel(title: 'Créneau horaire préféré', requiredField: true),
                     const SizedBox(height: 8),
-                    _SelectBox(value: _pickupSlot, items: _timeSlots, onChanged: (value) => setState(() => _pickupSlot = value)),
+                    Wrap(spacing: 8, runSpacing: 8, children: [for (final slot in _timeSlots) ChoiceChip(label: Text(slot), selected: _pickupSlot == slot, showCheckmark: false, selectedColor: const Color(0xFFFFF4EC), side: BorderSide(color: _pickupSlot == slot ? OvanieColors.orange : OvanieColors.border), labelStyle: TextStyle(color: OvanieColors.navy, fontSize: 14, fontWeight: _pickupSlot == slot ? FontWeight.w700 : FontWeight.w500), onSelected: (_) => setState(() => _pickupSlot = slot))]),
                   ],
                 ),
               ),
@@ -831,7 +826,7 @@ class _StepProgress extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: active ? const Color(0xFF0B45F5) : done ? OvanieColors.navy : const Color(0xFF40547A),
-                  fontSize: 10.7,
+                  fontSize: 12,
                   height: 1.28,
                   fontWeight: active ? FontWeight.w800 : FontWeight.w600,
                 ),
@@ -984,32 +979,72 @@ class _FieldLabel extends StatelessWidget {
             ],
           ),
         ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 4),
-          Text(subtitle!, style: const TextStyle(color: Color(0xFF40547A), fontSize: 11.5, height: 1.3)),
-        ],
+
       ],
     );
   }
 }
 
-class _SelectBox extends StatelessWidget {
+class _ReasonList extends StatelessWidget {
   final String value;
   final List<String> items;
   final ValueChanged<String> onChanged;
-  const _SelectBox({required this.value, required this.items, required this.onChanged});
+  const _ReasonList({required this.value, required this.items, required this.onChanged});
+
+  static IconData _icon(String reason) => switch (reason) {
+        'Produit endommagé' => Icons.broken_image_outlined,
+        'Produit non conforme' => Icons.rule_rounded,
+        'Erreur de livraison' => Icons.local_shipping_outlined,
+        'Mauvais article reçu' => Icons.swap_horiz_rounded,
+        'Article incomplet' => Icons.extension_off_outlined,
+        'Problème de qualité' => Icons.thumb_down_alt_outlined,
+        _ => Icons.more_horiz_rounded,
+      };
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      value: items.contains(value) ? value : items.first,
-      isExpanded: true,
-      decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
-      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: OvanieColors.navy),
-      items: items.map((item) => DropdownMenuItem<String>(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(growable: false),
-      onChanged: (value) {
-        if (value != null) onChanged(value);
-      },
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: OvanieColors.border),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            InkWell(
+              onTap: () => onChanged(items[i]),
+              child: Container(
+                color: items[i] == value ? const Color(0xFFFFF4EC) : null,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                child: Row(
+                  children: [
+                    Icon(_icon(items[i]), size: 21, color: items[i] == value ? OvanieColors.orange : OvanieColors.muted),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        items[i],
+                        style: TextStyle(
+                          color: OvanieColors.navy,
+                          fontSize: 15,
+                          fontWeight: items[i] == value ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      items[i] == value ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                      size: 21,
+                      color: items[i] == value ? OvanieColors.orange : const Color(0xFFB8C2D1),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (i != items.length - 1) const Divider(height: 1, color: OvanieColors.border),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1052,7 +1087,7 @@ class _LargeTextFieldState extends State<_LargeTextField> {
         Positioned(
           right: 12,
           bottom: 9,
-          child: Text('${widget.controller.text.length.clamp(0, 500)}/500', style: const TextStyle(color: Color(0xFF526486), fontSize: 10.5)),
+          child: Text('${widget.controller.text.length.clamp(0, 500)}/500', style: const TextStyle(color: Color(0xFF526486), fontSize: 12)),
         ),
       ],
     );
@@ -1181,7 +1216,7 @@ class _AddMediaTile extends StatelessWidget {
           children: [
             Icon(icon, color: const Color(0xFF0B45F5), size: 26),
             const SizedBox(height: 8),
-            Text(label, textAlign: TextAlign.center, style: const TextStyle(color: OvanieColors.navy, fontSize: 10.7, height: 1.2, fontWeight: FontWeight.w700)),
+            Text(label, textAlign: TextAlign.center, style: const TextStyle(color: OvanieColors.navy, fontSize: 12, height: 1.2, fontWeight: FontWeight.w700)),
           ],
         ),
       ),
@@ -1197,7 +1232,7 @@ class _ExistingMediaTile extends StatelessWidget {
         height: 106,
         margin: const EdgeInsets.only(right: 9),
         decoration: BoxDecoration(color: const Color(0xFFF1F7FF), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFBCD2F5))),
-        child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.check_circle_rounded, color: OvanieColors.success, size: 28), SizedBox(height: 7), Text('Preuves déjà\nenregistrées', textAlign: TextAlign.center, style: TextStyle(color: OvanieColors.navy, fontSize: 10.5, fontWeight: FontWeight.w700))]),
+        child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.check_circle_rounded, color: OvanieColors.success, size: 28), SizedBox(height: 7), Text('Preuves déjà\nenregistrées', textAlign: TextAlign.center, style: TextStyle(color: OvanieColors.navy, fontSize: 12, fontWeight: FontWeight.w700))]),
       );
 }
 
@@ -1208,7 +1243,7 @@ class _AddedVideoTile extends StatelessWidget {
         width: 102,
         height: 106,
         decoration: BoxDecoration(color: const Color(0xFFF1F7FF), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFBCD2F5))),
-        child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.videocam_rounded, color: Color(0xFF0B45F5), size: 28), SizedBox(height: 7), Text('Vidéo ajoutée', textAlign: TextAlign.center, style: TextStyle(color: OvanieColors.navy, fontSize: 10.5, fontWeight: FontWeight.w700))]),
+        child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.videocam_rounded, color: Color(0xFF0B45F5), size: 28), SizedBox(height: 7), Text('Vidéo ajoutée', textAlign: TextAlign.center, style: TextStyle(color: OvanieColors.navy, fontSize: 12, fontWeight: FontWeight.w700))]),
       );
 }
 
@@ -1219,20 +1254,7 @@ class _TipCard extends StatelessWidget {
   const _TipCard({required this.icon, required this.title, required this.text});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-      decoration: BoxDecoration(color: const Color(0xFFFFF6E9), borderRadius: BorderRadius.circular(9)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: const Color(0xFFFFA000), size: 26),
-          const SizedBox(width: 11),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: Color(0xFFCD7100), fontSize: 13, fontWeight: FontWeight.w900)), const SizedBox(height: 3), Text(text, style: const TextStyle(color: OvanieColors.navy, fontSize: 11.5, height: 1.4))])),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _DateBox extends StatelessWidget {
@@ -1285,7 +1307,7 @@ class _CollectionCard extends StatelessWidget {
               OutlinedButton(onPressed: onEdit, style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF0B45F5), side: const BorderSide(color: Color(0xFF0B45F5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))), child: const Text('Modifier', style: TextStyle(fontWeight: FontWeight.w800))),
             ],
           ),
-          if (footer != null) ...[const SizedBox(height: 9), Text(footer!, style: const TextStyle(color: Color(0xFF40547A), fontSize: 10.8))],
+          if (footer != null) ...[const SizedBox(height: 9), Text(footer!, style: const TextStyle(color: Color(0xFF40547A), fontSize: 12))],
         ],
       ),
     );
@@ -1350,7 +1372,7 @@ class _CheckLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 5),
-        child: Row(children: [const Icon(Icons.check_circle_outline_rounded, color: OvanieColors.success, size: 17), const SizedBox(width: 7), Expanded(child: Text(text, style: const TextStyle(color: Color(0xFF40547A), fontSize: 10.8)))]),
+        child: Row(children: [const Icon(Icons.check_circle_outline_rounded, color: OvanieColors.success, size: 17), const SizedBox(width: 7), Expanded(child: Text(text, style: const TextStyle(color: Color(0xFF40547A), fontSize: 12)))]),
       );
 }
 

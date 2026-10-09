@@ -10,6 +10,7 @@ import '../../../core/network/api_client.dart';
 import '../data/mission_repository.dart';
 import '../models/driver_mission.dart';
 import '../widgets/mission_dialogs.dart';
+import '../widgets/mission_live_map.dart';
 import '../widgets/mission_sections.dart';
 import '../widgets/mission_ui.dart';
 
@@ -37,12 +38,14 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
   bool _loading = false;
   bool _actionBusy = false;
   bool _handoverConfirmed = false;
+  bool _cashCollected = false;
   bool _sendingLocation = false;
   String? _error;
   DateTime? _lastLocationSentAt;
   final _otpController = TextEditingController();
   StreamSubscription<Position>? _positionSubscription;
   Timer? _poller;
+  double? _distanceToClient;
 
   @override
   void initState() {
@@ -53,7 +56,10 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
     _startLiveTracking();
     _poller = Timer.periodic(const Duration(seconds: 15), (_) {
       final mission = _mission;
-      if (mounted && !_actionBusy && mission != null && mission.isInTransit) {
+      if (mounted &&
+          !_actionBusy &&
+          mission != null &&
+          (mission.isLoaded || mission.isInTransit)) {
         _load(showSpinner: false, silent: true);
       }
     });
@@ -91,9 +97,16 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
     }
   }
 
-  Future<void> _onStablePosition(Position position, {bool force = false}) async {
+  Future<void> _onStablePosition(
+    Position position, {
+    bool force = false,
+  }) async {
     final mission = _mission;
-    if (mission == null || !mission.isInTransit || _sendingLocation) return;
+    // Chargé : le départ est détecté par GPS. En route : l'arrivée aussi.
+    if (mission == null ||
+        !(mission.isLoaded || mission.isInTransit) ||
+        _sendingLocation)
+      return;
 
     final now = DateTime.now();
     if (!force &&
@@ -104,7 +117,20 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
 
     _sendingLocation = true;
     try {
-      await MissionRepository.instance.recordLocation(
+      final destination = mission.mapPoints
+          .where((point) => point.type == 'destination')
+          .firstOrNull;
+      if (destination != null && mounted) {
+        setState(
+          () => _distanceToClient = Geolocator.distanceBetween(
+            position.latitude,
+            position.longitude,
+            destination.latitude,
+            destination.longitude,
+          ),
+        );
+      }
+      final arrival = await MissionRepository.instance.recordLocation(
         mission.missionNumber,
         latitude: position.latitude,
         longitude: position.longitude,
@@ -113,6 +139,26 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
         heading: position.heading.isFinite ? position.heading : null,
       );
       _lastLocationSentAt = now;
+      if (arrival == 'departed' && mounted) {
+        await _load(showSpinner: false, silent: true);
+        if (mounted) {
+          HapticFeedback.mediumImpact();
+          showMissionSnack(
+            context,
+            'Départ détecté par GPS. Le client suit maintenant votre trajet.',
+          );
+        }
+      }
+      if (arrival == 'customer_arrived' && mounted) {
+        await _load(showSpinner: false, silent: true);
+        if (mounted) {
+          HapticFeedback.mediumImpact();
+          showMissionSnack(
+            context,
+            'Arrivée chez le client détectée par GPS. Remettez les articles puis demandez son code.',
+          );
+        }
+      }
     } catch (_) {
       // Une coupure réseau ponctuelle ne bloque jamais la livraison.
     } finally {
@@ -123,7 +169,9 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
   Future<void> _load({bool showSpinner = true, bool silent = false}) async {
     if (showSpinner && mounted) setState(() => _loading = true);
     try {
-      final mission = await MissionRepository.instance.fetchMission(widget.missionNumber);
+      final mission = await MissionRepository.instance.fetchMission(
+        widget.missionNumber,
+      );
       if (!mounted) return;
       setState(() {
         _mission = mission;
@@ -160,34 +208,8 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
         );
       }
     } catch (error) {
-      if (mounted) showMissionSnack(context, ApiClient.friendlyError(error), error: true);
-    } finally {
-      if (mounted) setState(() => _actionBusy = false);
-    }
-  }
-
-  Future<void> _confirmArrival() async {
-    final mission = _mission;
-    if (mission == null || _actionBusy || !mission.isInTransit) return;
-    setState(() => _actionBusy = true);
-    try {
-      final stable = DriverPresenceService.instance.stablePosition;
-      if (stable != null) {
-        await _onStablePosition(stable, force: true);
-      }
-
-      final updated = await MissionRepository.instance.updateStage(
-        mission.missionNumber,
-        'arrived',
-      );
-      if (!mounted) return;
-      setState(() => _mission = updated);
-      showMissionSnack(
-        context,
-        'Arrivée confirmée. Remettez tous les articles avant de demander le code au client.',
-      );
-    } catch (error) {
-      if (mounted) showMissionSnack(context, ApiClient.friendlyError(error), error: true);
+      if (mounted)
+        showMissionSnack(context, ApiClient.friendlyError(error), error: true);
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
@@ -200,6 +222,7 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
         _actionBusy ||
         !mission.isArrived ||
         !_handoverConfirmed ||
+        (mission.cashToCollect > 0 && !_cashCollected) ||
         code.length != 6) {
       return;
     }
@@ -210,13 +233,18 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
         mission.missionNumber,
         code,
         handoverConfirmed: _handoverConfirmed,
+        cashCollected: _cashCollected,
       );
       if (!mounted) return;
       _otpController.clear();
       setState(() => _mission = delivered);
-      showMissionSnack(context, 'Livraison confirmée. La mission est terminée.');
+      showMissionSnack(
+        context,
+        'Livraison confirmée. La mission est terminée.',
+      );
     } catch (error) {
-      if (mounted) showMissionSnack(context, ApiClient.friendlyError(error), error: true);
+      if (mounted)
+        showMissionSnack(context, ApiClient.friendlyError(error), error: true);
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
@@ -236,7 +264,8 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
       showMissionSnack(context, 'Problème transmis à OVANIE Logistics.');
       await _load(showSpinner: false);
     } catch (error) {
-      if (mounted) showMissionSnack(context, ApiClient.friendlyError(error), error: true);
+      if (mounted)
+        showMissionSnack(context, ApiClient.friendlyError(error), error: true);
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
@@ -245,7 +274,11 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
   Future<void> _copyDestination() async {
     final mission = _mission;
     if (mission == null) return;
-    await Clipboard.setData(ClipboardData(text: mission.destinationAddress ?? mission.displayDestination));
+    await Clipboard.setData(
+      ClipboardData(
+        text: mission.destinationAddress ?? mission.displayDestination,
+      ),
+    );
     if (mounted) showMissionSnack(context, 'Adresse client copiée.');
   }
 
@@ -255,7 +288,7 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
     final route = mission?.routePlan;
     final delivered = mission?.isDelivered ?? false;
 
-    String primaryLabel = 'Démarrer la livraison client';
+    String primaryLabel = 'Démarrer maintenant';
     VoidCallback? primaryAction = _startTrip;
     var primaryEnabled = mission?.isLoaded ?? false;
 
@@ -266,11 +299,15 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
     } else if (mission != null && mission.isArrived) {
       primaryLabel = 'Confirmer la remise';
       primaryAction = _confirmDelivery;
-      primaryEnabled = _handoverConfirmed && _otpController.text.trim().length == 6;
+      primaryEnabled =
+          _handoverConfirmed &&
+          (mission.cashToCollect <= 0 || _cashCollected) &&
+          _otpController.text.trim().length == 6;
     } else if (mission != null && mission.isInTransit) {
-      primaryLabel = 'Je suis arrivé chez le client';
-      primaryAction = _confirmArrival;
-      primaryEnabled = true;
+      // Arrivée chez le client détectée automatiquement par le GPS.
+      primaryLabel = 'En attente d’arrivée (GPS)';
+      primaryAction = null;
+      primaryEnabled = false;
     }
 
     return Scaffold(
@@ -284,7 +321,9 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
                 : 'Dernière étape de la mission OVANIE',
             showBack: true,
             onBack: () => Navigator.of(context).pop(),
-            trailing: mission == null ? null : MissionStatusPill.forMission(mission),
+            trailing: mission == null
+                ? null
+                : MissionStatusPill.forMission(mission),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -297,7 +336,11 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
                   if (_loading && mission == null)
                     const SizedBox(
                       height: 390,
-                      child: Center(child: CircularProgressIndicator(color: OvanieColors.green)),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: OvanieColors.green,
+                        ),
+                      ),
                     )
                   else if (_error != null && mission == null)
                     MissionSurfaceCard(
@@ -306,10 +349,16 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
                           Text(
                             _error!,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: MissionPalette.slate, height: 1.4),
+                            style: const TextStyle(
+                              color: MissionPalette.slate,
+                              height: 1.4,
+                            ),
                           ),
                           const SizedBox(height: 14),
-                          MissionPrimaryButton(label: 'Réessayer', onPressed: () => _load()),
+                          MissionPrimaryButton(
+                            label: 'Réessayer',
+                            onPressed: () => _load(),
+                          ),
                         ],
                       ),
                     )
@@ -318,14 +367,16 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
                       mission: mission,
                       progressTitle: 'Collecte vendeurs',
                       progressValue: 100,
-                      progressCompletedText: 'Tous les articles ont été récupérés',
+                      progressCompletedText:
+                          'Tous les articles ont été récupérés',
                       message: _missionMessage(mission),
                       messageWarning: mission.isArrived,
                     ),
                     if (mission.incidentType != null) ...[
                       const SizedBox(height: 12),
                       MissionTintMessage(
-                        text: 'Incident en cours : ${incidentTypeLabel(mission.incidentType)}${(mission.incidentDescription ?? '').trim().isNotEmpty ? ' — ${mission.incidentDescription}' : ''}. OVANIE Logistics suit le dossier.',
+                        text:
+                            'Incident en cours : ${incidentTypeLabel(mission.incidentType)}${(mission.incidentDescription ?? '').trim().isNotEmpty ? ' — ${mission.incidentDescription}' : ''}. OVANIE Logistics suit le dossier.',
                         warning: true,
                         icon: Icons.warning_amber_rounded,
                       ),
@@ -351,47 +402,64 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    MissionSurfaceCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              const Expanded(child: MissionSectionTitle('Trajet vers le client')),
-                              if (mission.isInTransit)
-                                const _LiveTrackingBadge(),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          MissionRouteMap(
-                            route: route,
-                            points: mission.mapPoints,
-                            height: 205,
-                          ),
-                          const SizedBox(height: 11),
-                          _RouteMetrics(route: route),
-                          if (mission.isInTransit) ...[
-                            const SizedBox(height: 12),
-                            MissionTintMessage(
-                              text: mission.gpsStatus == 'unavailable'
-                                  ? 'Le GPS de mission est signalé indisponible. La livraison reste utilisable avec les étapes manuelles.'
-                                  : 'Suivi GPS actif : OVANIE Logistics et le suivi client reçoivent votre progression pendant le trajet.',
-                              warning: mission.gpsStatus == 'unavailable',
-                              icon: mission.gpsStatus == 'unavailable'
-                                  ? Icons.gps_off_rounded
-                                  : Icons.gps_fixed_rounded,
-                            ),
-                          ],
-                        ],
+                    if (mission.isInTransit) ...[
+                      const SizedBox(height: 12),
+                      MissionArrivalRadar(
+                        placeLabel: 'chez le client',
+                        distanceMeters: _distanceToClient,
                       ),
-                    ),
+                    ],
+                    if (!delivered) ...[
+                      const SizedBox(height: 12),
+                      MissionSurfaceCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: MissionSectionTitle(
+                                    'Trajet vers le client',
+                                  ),
+                                ),
+                                if (mission.isInTransit)
+                                  const _LiveTrackingBadge(),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            MissionLiveMap(
+                              route: route,
+                              points: mission.mapPoints,
+                            ),
+                            const SizedBox(height: 11),
+                            _RouteMetrics(route: route),
+                            if (mission.isInTransit) ...[
+                              const SizedBox(height: 12),
+                              MissionTintMessage(
+                                text: mission.gpsStatus == 'unavailable'
+                                    ? 'Le GPS de mission est signalé indisponible. La livraison reste utilisable avec les étapes manuelles.'
+                                    : 'Suivi GPS actif : OVANIE Logistics et le suivi client reçoivent votre progression pendant le trajet.',
+                                warning: mission.gpsStatus == 'unavailable',
+                                icon: mission.gpsStatus == 'unavailable'
+                                    ? Icons.gps_off_rounded
+                                    : Icons.gps_fixed_rounded,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                     if (mission.isArrived) ...[
                       const SizedBox(height: 12),
                       _CustomerHandoverCard(
                         controller: _otpController,
                         handoverConfirmed: _handoverConfirmed,
-                        onChanged: (value) => setState(() => _handoverConfirmed = value),
+                        onChanged: (value) =>
+                            setState(() => _handoverConfirmed = value),
+                        cashToCollect: mission.cashToCollect,
+                        cashCollected: _cashCollected,
+                        onCashChanged: (value) =>
+                            setState(() => _cashCollected = value),
                       ),
                     ],
                     if (mission.isDelivered) ...[
@@ -400,7 +468,11 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Icon(Icons.verified_rounded, size: 46, color: OvanieColors.green),
+                            Icon(
+                              Icons.verified_rounded,
+                              size: 46,
+                              color: OvanieColors.green,
+                            ),
                             SizedBox(height: 10),
                             Text(
                               'Livraison confirmée',
@@ -415,7 +487,10 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
                             Text(
                               'Le client a confirmé la remise avec son code de sécurité. Vous êtes de nouveau disponible pour une prochaine mission.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: MissionPalette.slate, height: 1.45),
+                              style: TextStyle(
+                                color: MissionPalette.slate,
+                                height: 1.45,
+                              ),
                             ),
                           ],
                         ),
@@ -431,7 +506,9 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               decoration: const BoxDecoration(
                 color: MissionPalette.mint,
-                border: Border(top: BorderSide(color: MissionPalette.cardBorder)),
+                border: Border(
+                  top: BorderSide(color: MissionPalette.cardBorder),
+                ),
               ),
               child: SafeArea(
                 top: false,
@@ -466,15 +543,15 @@ class _MissionDepartureScreenState extends State<MissionDepartureScreen> {
 
   String _missionMessage(DriverMissionDetail mission) {
     if (mission.isDelivered) {
-      return 'La remise au client a été confirmée avec son code de sécurité. La mission est terminée.';
+      return 'Livraison confirmée. Mission terminée.';
     }
     if (mission.isArrived) {
-      return 'Vous êtes arrivé chez le client. Remettez tous les articles, puis demandez son code à 6 chiffres.';
+      return 'Remettez les articles, puis demandez le code du client.';
     }
     if (mission.isInTransit) {
-      return 'Vous êtes en route vers le client. Le suivi de mission est actif jusqu’à votre arrivée.';
+      return 'En route : l’arrivée est détectée automatiquement.';
     }
-    return 'Tous les retraits vendeurs sont terminés. Vérifiez le chargement puis démarrez la livraison client.';
+    return 'Chargement terminé : le départ est détecté automatiquement.';
   }
 }
 
@@ -485,7 +562,8 @@ class _DeliveryProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final travelling = mission.isInTransit || mission.isArrived || mission.isDelivered;
+    final travelling =
+        mission.isInTransit || mission.isArrived || mission.isDelivered;
     final arrived = mission.isArrived || mission.isDelivered;
     final delivered = mission.isDelivered;
 
@@ -561,14 +639,21 @@ class _DeliveryStep extends StatelessWidget {
                     border: Border.all(color: color, width: 2),
                   ),
                   child: Icon(
-                    done ? Icons.check_rounded : (active ? Icons.circle : Icons.circle_outlined),
+                    done
+                        ? Icons.check_rounded
+                        : (active ? Icons.circle : Icons.circle_outlined),
                     size: done ? 16 : 9,
                     color: done ? Colors.white : color,
                   ),
                 ),
                 if (!last)
                   Expanded(
-                    child: Container(width: 2, color: done ? OvanieColors.green : MissionPalette.cardBorder),
+                    child: Container(
+                      width: 2,
+                      color: done
+                          ? OvanieColors.green
+                          : MissionPalette.cardBorder,
+                    ),
                   ),
               ],
             ),
@@ -583,15 +668,23 @@ class _DeliveryStep extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      color: active ? MissionPalette.navy : MissionPalette.slate,
+                      color: active
+                          ? MissionPalette.navy
+                          : MissionPalette.slate,
                       fontSize: 13.5,
-                      fontWeight: active || done ? FontWeight.w800 : FontWeight.w600,
+                      fontWeight: active || done
+                          ? FontWeight.w800
+                          : FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
-                    style: const TextStyle(color: MissionPalette.slate, fontSize: 11.5, height: 1.3),
+                    style: const TextStyle(
+                      color: MissionPalette.slate,
+                      fontSize: 11.5,
+                      height: 1.3,
+                    ),
                   ),
                 ],
               ),
@@ -608,11 +701,17 @@ class _CustomerHandoverCard extends StatelessWidget {
     required this.controller,
     required this.handoverConfirmed,
     required this.onChanged,
+    this.cashToCollect = 0,
+    this.cashCollected = false,
+    this.onCashChanged,
   });
 
   final TextEditingController controller;
   final bool handoverConfirmed;
   final ValueChanged<bool> onChanged;
+  final double cashToCollect;
+  final bool cashCollected;
+  final ValueChanged<bool>? onCashChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -623,7 +722,8 @@ class _CustomerHandoverCard extends StatelessWidget {
           const MissionSectionTitle('Remise au client'),
           const SizedBox(height: 12),
           const MissionTintMessage(
-            text: 'Le code appartient au client. Ne le demandez qu’après avoir remis tous les articles de la mission.',
+            text:
+                'Le code appartient au client. Ne le demandez qu’après avoir remis tous les articles de la mission.',
             icon: Icons.verified_user_rounded,
           ),
           const SizedBox(height: 12),
@@ -646,10 +746,30 @@ class _CustomerHandoverCard extends StatelessWidget {
               style: TextStyle(color: MissionPalette.slate, fontSize: 11.7),
             ),
           ),
+          if (cashToCollect > 0)
+            CheckboxListTile(
+              value: cashCollected,
+              onChanged: (value) => onCashChanged?.call(value == true),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              activeColor: OvanieColors.green,
+              title: Text(
+                'J’ai encaissé ${missionMoney(cashToCollect)}',
+                style: const TextStyle(
+                  color: MissionPalette.navy,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              subtitle: const Text(
+                'Paiement à la livraison : encaissez le montant exact avant de demander le code.',
+                style: TextStyle(color: MissionPalette.slate, fontSize: 11.7),
+              ),
+            ),
           const SizedBox(height: 6),
           TextField(
             controller: controller,
-            enabled: handoverConfirmed,
+            enabled: handoverConfirmed && (cashToCollect <= 0 || cashCollected),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             textAlign: TextAlign.center,
@@ -666,7 +786,9 @@ class _CustomerHandoverCard extends StatelessWidget {
               labelText: 'Code client à 6 chiffres',
               border: const OutlineInputBorder(),
               filled: true,
-              fillColor: handoverConfirmed ? Colors.white : MissionPalette.mintStrong,
+              fillColor: handoverConfirmed
+                  ? Colors.white
+                  : MissionPalette.mintStrong,
             ),
           ),
         ],
@@ -693,7 +815,11 @@ class _LiveTrackingBadge extends StatelessWidget {
           SizedBox(width: 5),
           Text(
             'Suivi actif',
-            style: TextStyle(color: OvanieColors.green, fontSize: 10.5, fontWeight: FontWeight.w800),
+            style: TextStyle(
+              color: OvanieColors.green,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -720,9 +846,23 @@ class _RouteMetrics extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(child: _Metric(label: 'Distance', value: distance == null ? '—' : '${distance.toStringAsFixed(1)} km')),
-          Expanded(child: _Metric(label: 'Durée', value: duration == null ? '—' : '$duration min')),
-          Expanded(child: _Metric(label: 'Arrivée', value: arrivalText)),
+          Expanded(
+            child: _Metric(
+              label: 'Distance',
+              value: distance == null
+                  ? '—'
+                  : '${distance.toStringAsFixed(1)} km',
+            ),
+          ),
+          Expanded(
+            child: _Metric(
+              label: 'Durée',
+              value: duration == null ? '—' : '$duration min',
+            ),
+          ),
+          Expanded(
+            child: _Metric(label: 'Arrivée', value: arrivalText),
+          ),
         ],
       ),
     );
@@ -739,12 +879,19 @@ class _Metric extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: MissionPalette.slate, fontSize: 10.5)),
+        Text(
+          label,
+          style: const TextStyle(color: MissionPalette.slate, fontSize: 12),
+        ),
         const SizedBox(height: 3),
         Text(
           value,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: MissionPalette.navy, fontSize: 12.2, fontWeight: FontWeight.w800),
+          style: const TextStyle(
+            color: MissionPalette.navy,
+            fontSize: 12.2,
+            fontWeight: FontWeight.w800,
+          ),
         ),
       ],
     );

@@ -154,7 +154,7 @@ class LogisticsPartnerController extends Controller
             'name' => ['required', 'string', 'max:150', Rule::unique('carriers', 'name')],
             'partner_type' => ['required', Rule::in(['partner', 'specialized'])],
             'contact_name' => ['required', 'string', 'max:150'],
-            'phone' => ['required', 'string', 'max:60'],
+            'phone' => ['required', 'string', 'max:60', 'regex:/^\+?[\d\s().-]{8,}$/'],
             'email' => ['required', 'email', 'max:150'],
             'address' => ['required', 'string', 'max:255'],
             'main_zone' => ['required', 'string', 'max:160'],

@@ -43,6 +43,17 @@ class ProductSheetPresenter
         $unit = (string) ($product->display_unit ?? $product->unit_label ?? $product->unit ?? 'unité');
         $weight = (float) ($product->weight_kg ?? $product->weight ?? 0);
 
+        $structuredImages = $this->images($product);
+        $gallery = collect($structuredImages)
+            ->pluck('url')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($gallery->isEmpty()) {
+            $gallery = collect($product->gallery_urls ?? [])->filter()->unique()->values();
+        }
+
         $payload = [
             'id' => (int) $product->id,
             'slug' => (string) ($product->slug ?? ''),
@@ -115,8 +126,10 @@ class ProductSheetPresenter
             'main_image_url' => (string) ($product->main_image_url ?? ''),
             'card_image_url' => (string) ($product->card_image_url ?? ''),
             'thumb_image_url' => (string) ($product->thumb_image_url ?? ''),
-            'gallery' => collect($product->gallery_urls ?? [])->filter()->values()->all(),
-            'images' => $this->images($product),
+            'gallery' => $gallery->all(),
+            'images' => $structuredImages,
+            'variants' => $this->variants($product),
+            'has_variants' => $product->relationLoaded('variants') ? $product->variants->where('is_active', true)->isNotEmpty() : false,
         ];
 
         if (! $detailed) {
@@ -157,30 +170,179 @@ class ProductSheetPresenter
             ->all();
     }
 
+    private function variants(Product $product): array
+    {
+        if (! $product->relationLoaded('variants')) return [];
+        return $product->variants
+            ->where('is_active', true)
+            ->sortBy(['sort_order', 'id'])
+            ->map(fn ($variant) => [
+                'id' => (int) $variant->id,
+                'type' => (string) $variant->type,
+                'value' => (string) $variant->value,
+                'label' => (string) $variant->label,
+                'color_hex' => $variant->color_hex,
+                'stock' => (int) $variant->stock,
+                'price_override' => $variant->price_override !== null ? (float) $variant->price_override : null,
+                'image_url' => (string) $variant->image_url,
+                'card_url' => (string) $variant->card_url,
+                'thumb_url' => (string) $variant->thumb_url,
+            ])->values()->all();
+    }
+
     private function attributes(Product $product): array
     {
         $raw = is_array($product->product_attributes ?? null) ? $product->product_attributes : [];
         $result = [];
 
         foreach ($raw as $key => $attribute) {
+            if ($this->isInternalAttributeKey($key)) {
+                continue;
+            }
+
             if (is_array($attribute)) {
                 $label = trim((string) ($attribute['label'] ?? $attribute['name'] ?? (is_string($key) ? $key : '')));
-                $value = trim((string) ($attribute['value'] ?? ''));
+                $value = $attribute['value'] ?? null;
                 $unit = trim((string) ($attribute['unit'] ?? ''));
+
+                if ($this->isInternalAttributeKey($label)) {
+                    continue;
+                }
+
+                $label = $this->translateTechnicalLabel($label);
+                $value = $this->translateTechnicalValue($value);
+
                 if ($label !== '' && $value !== '') {
-                    $result[$label] = trim($value . ' ' . $unit);
+                    $result[$label] = trim($value . ($unit !== '' ? ' ' . $this->translateTechnicalUnit($unit) : ''));
                 }
                 continue;
             }
 
-            $label = trim((string) $key);
-            $value = trim((string) $attribute);
+            $label = $this->translateTechnicalLabel((string) $key);
+            $value = $this->translateTechnicalValue($attribute);
+
             if ($label !== '' && $value !== '') {
                 $result[$label] = $value;
             }
         }
 
         return $result;
+    }
+
+    private function isInternalAttributeKey(mixed $key): bool
+    {
+        if (! is_string($key)) {
+            return false;
+        }
+
+        $normalized = strtolower(trim($key));
+
+        return in_array($normalized, [
+            'commercial_capture',
+            'capture_session_id',
+            'admin_completion_required',
+            'completion_step',
+            'source',
+            'mission_assignment_id',
+            'captured_name',
+            'captured_price',
+            'captured_promo_price',
+            'captured_stock',
+            'captured_weight_kg',
+            'captured_unit',
+            'admin_completed_at',
+            'admin_completed_by',
+            'admin_assistance',
+            'admin_created_at',
+            'admin_created_by',
+        ], true);
+    }
+
+    private function translateTechnicalLabel(string $label): string
+    {
+        $label = trim($label);
+
+        if ($label === '') {
+            return '';
+        }
+
+        $normalized = strtolower(str_replace(['-', ' '], '_', $label));
+
+        return match ($normalized) {
+            'unit', 'sale_unit', 'sales_unit', 'unite', 'unite_de_vente' => 'Unité de vente',
+            'minimum_quantity', 'min_quantity', 'min_order_quantity', 'quantite_minimum' => 'Quantité minimum',
+            'availability', 'availability_status', 'disponibilite' => 'Disponibilité',
+            'condition', 'product_state', 'etat', 'etat_du_produit' => 'État du produit',
+            'brand', 'marque' => 'Marque',
+            'dimensions', 'dimension' => 'Dimensions',
+            'weight', 'weight_kg', 'poids' => 'Poids',
+            'volume', 'volume_m3' => 'Volume',
+            'length', 'length_cm', 'longueur' => 'Longueur',
+            'width', 'width_cm', 'largeur' => 'Largeur',
+            'height', 'height_cm', 'hauteur' => 'Hauteur',
+            'color', 'couleur' => 'Couleur',
+            'material', 'matiere', 'materiau' => 'Matériau',
+            'origin', 'origin_country', 'country_of_origin', 'origine' => 'Origine',
+            'standard', 'norm', 'norme' => 'Norme',
+            'usage', 'usage_area', 'application' => 'Usage recommandé',
+            'grade', 'material_grade', 'class', 'classe' => 'Grade / Classe',
+            'packaging', 'conditionnement' => 'Conditionnement',
+            'warranty', 'garantie' => 'Garantie',
+            'voltage', 'tension' => 'Tension',
+            'power', 'puissance' => 'Puissance',
+            'frequency', 'frequence' => 'Fréquence',
+            'current', 'amperage', 'intensite' => 'Intensité',
+            'protection_index', 'ip_rating', 'indice_de_protection' => 'Indice de protection',
+            default => $label,
+        };
+    }
+
+    private function translateTechnicalValue(mixed $value): string
+    {
+        if (is_bool($value)) {
+            return $value ? 'Oui' : 'Non';
+        }
+
+        if ($value === null) {
+            return '';
+        }
+
+        $text = trim((string) $value);
+
+        if ($text === '') {
+            return '';
+        }
+
+        $normalized = strtolower($text);
+
+        return match ($normalized) {
+            'true', 'yes' => 'Oui',
+            'false', 'no' => 'Non',
+            'piece', 'pieces' => 'pièce',
+            'unit', 'units' => 'unité',
+            'in_stock' => 'En stock immédiat',
+            'on_order' => 'Disponible sous commande',
+            'preorder' => 'Précommande',
+            'out_of_stock' => 'Rupture temporaire',
+            'new' => 'Neuf',
+            'used' => 'Occasion',
+            'reconditioned' => 'Reconditionné',
+            default => $text,
+        };
+    }
+
+    private function translateTechnicalUnit(string $unit): string
+    {
+        $normalized = strtolower(trim($unit));
+
+        return match ($normalized) {
+            'piece', 'pieces', 'pc', 'pcs' => 'pièce',
+            'unit', 'units' => 'unité',
+            'm2' => 'm²',
+            'm3' => 'm³',
+            'ml' => 'mètre linéaire',
+            default => trim($unit),
+        };
     }
 
     private function technicalSpecs(Product $product): array

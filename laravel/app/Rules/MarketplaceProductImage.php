@@ -60,9 +60,11 @@ final class MarketplaceProductImage implements ValidationRule
 
         $ratio = $width / max(1, $height);
         $minimumRatio = (float) config('product-images.minimum_ratio', 0.75);
-        $maximumRatio = (float) config('product-images.maximum_ratio', 1.333333);
+        $maximumRatio = (float) config('product-images.maximum_ratio', 4 / 3);
 
-        if ($ratio < $minimumRatio || $ratio > $maximumRatio) {
+        // Petite tolérance : une photo exactement en 3:4 ou 4:3 (ex. 1448 × 1086) doit passer malgré les arrondis.
+        $tolerance = 0.01;
+        if ($ratio < $minimumRatio - $tolerance || $ratio > $maximumRatio + $tolerance) {
             $fail(
                 "Cette photo ({$width} × {$height} px) est trop verticale ou trop horizontale. "
                 . 'Utilisez une photo carrée ou proche du carré, comprise entre les formats 3:4 et 4:3, '

@@ -29,11 +29,10 @@
         && filled(data_get($shop, 'latitude'))
         && filled(data_get($shop, 'longitude'));
 
-    $paymentReady = filled(data_get($shop, 'mm_operator'))
-        && filled(data_get($shop, 'mm_number'))
-        && filled(data_get($shop, 'mm_holder'));
+    $paymentReady = $shop->hasConfiguredPayout();
 
-    $logisticsReady = (bool) data_get($logisticsValidation, 'complete', false);
+    $logisticsReady = $shop->hasConfirmedLogistics()
+        && (bool) data_get($logisticsValidation, 'complete', false);
 
     $hasProduct = false;
     try {
@@ -50,6 +49,7 @@
 
     $kycValue = strtolower((string) data_get($shop, 'kyc_status', ''));
     $kycVerified = in_array($kycValue, ['verified', 'approved', 'validated', 'valide', 'validé'], true);
+    $kycAutoChecked = $kycValue === 'automated_checked';
 
     $scorePart = static function (array $checks): int {
         if ($checks === []) {
@@ -99,7 +99,7 @@
             'label' => 'Identité du vendeur',
             'icon' => 'circle-check',
             'state' => $identityReady ? 'valid' : 'missing',
-            'text' => $identityReady ? 'Validé' : 'À compléter',
+            'text' => $identityReady ? ($kycAutoChecked ? 'Fichiers contrôlés' : 'Validé') : 'À compléter',
         ],
         [
             'label' => 'RCCM',
@@ -110,8 +110,8 @@
         [
             'label' => 'Document fiscal',
             'icon' => 'clock-3',
-            'state' => $taxReady ? ($kycVerified ? 'valid' : 'pending') : 'missing',
-            'text' => $taxReady ? ($kycVerified ? 'Validé' : 'En cours') : 'À compléter',
+            'state' => $taxReady ? ($kycVerified || $kycAutoChecked ? 'valid' : 'pending') : 'missing',
+            'text' => $taxReady ? ($kycVerified ? 'Validé' : ($kycAutoChecked ? 'Fichier contrôlé' : 'En cours')) : 'À compléter',
         ],
         [
             'label' => 'Adresse de la boutique',
@@ -157,7 +157,7 @@
 
     $conformityText = $kycVerified
         ? 'Conforme'
-        : (($identityReady || $rccmReady || $taxReady) ? 'En vérification' : 'À compléter');
+        : ($kycAutoChecked ? 'Fichiers contrôlés automatiquement' : 'À compléter');
 
     $updatedAt = data_get($shop, 'updated_at');
     $updatedDate = $updatedAt

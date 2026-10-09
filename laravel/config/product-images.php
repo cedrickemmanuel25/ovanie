@@ -41,7 +41,7 @@ return [
     'minimum_width' => 800,
     'minimum_height' => 800,
     'minimum_ratio' => 0.75,      // portrait maximal : 3:4
-    'maximum_ratio' => 1.333333,  // paysage maximal : 4:3
+    'maximum_ratio' => 4 / 3,     // paysage maximal : 4:3 (valeur exacte, pas 1.333333)
 
     'max_file_size_kb' => 5120,
     'max_source_pixels' => 40_000_000,

@@ -363,6 +363,7 @@ class HomeMarketplaceSection {
   final String mode;
   final String title;
   final String? catalogOffer;
+  final String? categorySlug;
   final List<ProductModel> products;
 
   const HomeMarketplaceSection({
@@ -370,6 +371,7 @@ class HomeMarketplaceSection {
     required this.mode,
     required this.title,
     required this.catalogOffer,
+    this.categorySlug,
     required this.products,
   });
 
@@ -379,6 +381,7 @@ class HomeMarketplaceSection {
       mode: json['mode']?.toString() ?? '',
       title: json['title']?.toString() ?? 'Produits OVANIE',
       catalogOffer: json['catalog_offer']?.toString(),
+      categorySlug: json['category_slug']?.toString(),
       products: MarketplaceRepository._parseProducts(json['products']),
     );
   }

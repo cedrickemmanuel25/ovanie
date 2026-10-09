@@ -1070,6 +1070,7 @@
 
     @yield('styles')
     @stack('styles')
+    <link rel="stylesheet" href="{{ asset('css/vendor-mobile.css') }}?v={{ filemtime(public_path('css/vendor-mobile.css')) }}">
 </head>
 
 <body>
@@ -1082,7 +1083,7 @@
             <div class="ov-sidebar-header">
                 <a href="{{ $dashboardUrl }}" class="ov-sidebar-logo" aria-label="OVANIE">
                     <img
-                        src="{{ asset('storage/logos/officiel site.png') }}"
+                        src="{{ asset('images/home/logo-ovanie.png') }}"
                         alt="OVANIE"
                     >
                 </a>
@@ -1494,9 +1495,9 @@
 
                         <div class="ov-account-separator"></div>
 
-                        <a class="ov-account-link" href="{{ $clientDashboardUrl }}">
+                        <a class="ov-account-link" href="{{ $marketplaceUrl }}">
                             <i data-lucide="shopping-bag"></i>
-                            Passer en mode client
+                            Voir la marketplace
                         </a>
 
                         <a class="ov-account-link" href="{{ $marketplaceUrl }}">
@@ -1627,5 +1628,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
 @yield('scripts')
 @stack('scripts')
+<script src="{{ asset('js/vendor-mobile.js') }}?v={{ filemtime(public_path('js/vendor-mobile.js')) }}" defer></script>
+<script src="{{ asset('js/vendor-select.js') }}?v={{ filemtime(public_path('js/vendor-select.js')) }}" defer></script>
+@include('layouts.partials.live-sync')
 </body>
 </html>

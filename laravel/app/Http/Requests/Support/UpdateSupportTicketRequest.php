@@ -18,7 +18,7 @@ class UpdateSupportTicketRequest extends FormRequest
             'status' => ['required', Rule::in(['open', 'in_progress', 'waiting_customer', 'waiting_internal', 'resolved', 'closed', 'cancelled'])],
             'priority' => ['required', Rule::in(['low', 'normal', 'high', 'urgent'])],
             'category' => ['required', 'string', 'max:60'],
-            'assigned_to' => ['nullable', 'exists:users,id'],
+            'assigned_to' => ['nullable', Rule::exists('users', 'id')->whereIn('role', ['admin', 'support', 'logistique', 'commercial'])],
             'escalation_level' => ['required', 'integer', 'min:0', 'max:5'],
         ];
     }

@@ -69,7 +69,7 @@ class ProductController extends Controller
     public function show(string $identifier)
     {
         $product = $this->visibility
-            ->query(['category', 'images', 'reviews.user'], true)
+            ->query(['category', 'images', 'variants', 'reviews.user'], true)
             ->where(function ($query) use ($identifier) {
                 $query->where('products.id', $identifier)
                     ->orWhere('products.slug', $identifier);
@@ -110,6 +110,14 @@ class ProductController extends Controller
                     'id' => $image->id,
                     'url' => $image->url,
                     'is_main' => (bool) $image->is_main,
+                ])->values()->all()
+                : [],
+            'variants' => $product->relationLoaded('variants')
+                ? $product->variants->where('is_active', true)->map(fn ($variant) => [
+                    'id' => $variant->id, 'type' => $variant->type, 'value' => $variant->value,
+                    'label' => $variant->label, 'color_hex' => $variant->color_hex,
+                    'stock' => (int) $variant->stock, 'price_override' => $variant->price_override,
+                    'image_url' => $variant->image_url, 'card_url' => $variant->card_url, 'thumb_url' => $variant->thumb_url,
                 ])->values()->all()
                 : [],
         ];

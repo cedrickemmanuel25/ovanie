@@ -112,81 +112,50 @@ class MissionPageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFF008447), Color(0xFF06AE63), Color(0xFF008A4B)],
-        ),
-      ),
-      child: CustomPaint(
-        painter: _MissionHeaderPainter(),
-        child: SafeArea(
-          bottom: false,
+      color: const Color(0xFF00854A),
+      child: SafeArea(
+        bottom: false,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 60),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(20, 12, 20, mainPage ? 24 : 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: EdgeInsets.fromLTRB(showBack ? 4 : 16, 6, 12, 10),
+            child: Row(
               children: [
-                const _OvanieLogisticsBrand(),
-                SizedBox(height: mainPage ? 18 : 15),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (showBack) ...[
-                      InkWell(
-                        onTap: onBack,
-                        borderRadius: BorderRadius.circular(999),
-                        child: const Padding(
-                          padding: EdgeInsets.fromLTRB(0, 4, 14, 10),
-                          child: Icon(
-                            Icons.arrow_back_rounded,
-                            color: Colors.white,
-                            size: 34,
-                          ),
+                if (showBack)
+                  IconButton(
+                    tooltip: 'Retour',
+                    onPressed: onBack ?? () => Navigator.maybePop(context),
+                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                  ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: mainPage ? 21 : 18,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
+                      if (subtitle.trim().isNotEmpty)
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Color(0xFFD5F2E3), fontSize: 13),
+                        ),
                     ],
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: mainPage ? 30 : 29,
-                              height: 1.02,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -.7,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            subtitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15.7,
-                              height: 1.2,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (trailing != null) ...[
-                      const SizedBox(width: 10),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 1),
-                        child: trailing!,
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing!,
+                ],
               ],
             ),
           ),
@@ -194,52 +163,6 @@ class MissionPageHeader extends StatelessWidget {
       ),
     );
   }
-}
-
-class _OvanieLogisticsBrand extends StatelessWidget {
-  const _OvanieLogisticsBrand();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Text(
-          'OVANIE',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.w900,
-            letterSpacing: .4,
-          ),
-        ),
-        SizedBox(width: 7),
-        Text(
-          'Logistics',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16.5,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MissionHeaderPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withValues(alpha: .07);
-    canvas.drawCircle(Offset(size.width * .83, size.height * -.18), size.width * .42, paint);
-    paint.color = Colors.black.withValues(alpha: .055);
-    canvas.drawCircle(Offset(size.width * 1.05, size.height * 1.18), size.width * .55, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class MissionNotificationButton extends StatelessWidget {
@@ -693,10 +616,9 @@ class MissionPrimaryButton extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
                   Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(label, maxLines: 1),
                     ),
                   ),
                 ],
@@ -739,7 +661,10 @@ class MissionOutlineButton extends StatelessWidget {
                 height: 21,
                 child: CircularProgressIndicator(strokeWidth: 2.3, color: color),
               )
-            : Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            : FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(label, maxLines: 1),
+              ),
       ),
     );
   }
@@ -1019,6 +944,112 @@ class MissionDestinationBox extends StatelessWidget {
                     height: 1.2,
                     fontWeight: FontWeight.w900,
                   ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Gain du livreur pour la mission.
+class MissionEarningsCard extends StatelessWidget {
+  const MissionEarningsCard({super.key, required this.netAmount});
+
+  final double netAmount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF9F3),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFCDEEDF)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.payments_rounded, color: OvanieColors.green, size: 22),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Votre gain',
+              style: TextStyle(color: MissionPalette.navy, fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Text(
+            missionMoney(netAmount),
+            style: const TextStyle(color: OvanieColors.green, fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Suivi d'approche : l'arrivée (vendeur ou client) est validée
+/// automatiquement par le GPS, sans bouton.
+class MissionArrivalRadar extends StatelessWidget {
+  const MissionArrivalRadar({
+    super.key,
+    required this.placeLabel,
+    this.distanceMeters,
+    this.gpsMissing = false,
+  });
+
+  final String placeLabel;
+  final double? distanceMeters;
+  final bool gpsMissing;
+
+  @override
+  Widget build(BuildContext context) {
+    final distance = distanceMeters;
+    final onSite = distance != null && distance <= 150;
+    final String headline;
+    if (gpsMissing) {
+      headline = 'Activez votre GPS';
+    } else if (distance == null) {
+      headline = 'Localisation en cours…';
+    } else if (onSite) {
+      headline = 'Vous êtes sur place — validation en cours';
+    } else {
+      headline = 'À ${missionDistance(distance / 1000)}';
+    }
+
+    return MissionSurfaceCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: gpsMissing ? const Color(0xFFFFF3E1) : const Color(0xFFEAF9F3),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              gpsMissing ? Icons.location_disabled_rounded : Icons.my_location_rounded,
+              color: gpsMissing ? MissionPalette.amber : OvanieColors.green,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  headline,
+                  style: const TextStyle(color: MissionPalette.navy, fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  gpsMissing
+                      ? 'Sans GPS, votre arrivée $placeLabel ne peut pas être validée.'
+                      : 'Votre arrivée $placeLabel est détectée automatiquement par le GPS. Aucune action n’est nécessaire.',
+                  style: const TextStyle(color: MissionPalette.slate, fontSize: 12.5, height: 1.35),
                 ),
               ],
             ),

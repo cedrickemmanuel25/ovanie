@@ -21,7 +21,7 @@ class SupportServiceItem {
         configured: json['configured'] == true,
         operational: json['operational'] == true,
         provider: '${json['provider'] ?? ''}',
-        message: cleanOvanieText('${json['message'] ?? ''}'),
+        message: cleanMessageText('${json['message'] ?? ''}'),
       );
 }
 
@@ -36,7 +36,7 @@ class SupportFaqItem {
         id: _int(json['id']),
         title: cleanOvanieText('${json['title'] ?? ''}'),
         category: '${json['category'] ?? 'general'}',
-        content: cleanOvanieText('${json['content'] ?? ''}'),
+        content: cleanMessageText('${json['content'] ?? ''}'),
         updatedAt: _date(json['updated_at']),
       );
 }
@@ -158,7 +158,7 @@ class SupportTicketMessageItem {
     return SupportTicketMessageItem(
       id: _int(json['id']),
       authorType: '${json['author_type'] ?? ''}',
-      body: cleanOvanieText('${json['body'] ?? ''}'),
+      body: cleanMessageText('${json['body'] ?? ''}'),
       attachments: raw.map(SupportAttachment.fromJson).toList(growable: false),
       createdAt: _date(json['created_at']),
     );
@@ -199,7 +199,7 @@ class SupportChatMessage {
   const SupportChatMessage({required this.sender, required this.body, required this.createdAt});
   factory SupportChatMessage.fromJson(Map<String, dynamic> json) => SupportChatMessage(
         sender: '${json['sender'] ?? ''}',
-        body: cleanOvanieText('${json['body'] ?? ''}'),
+        body: cleanMessageText('${json['body'] ?? ''}'),
         createdAt: _date(json['created_at']),
       );
 }

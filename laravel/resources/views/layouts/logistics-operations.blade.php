@@ -23,6 +23,7 @@
 @include('logistics.operations.navigation')
 <main class="ops-main">
     @if(session('error'))<div class="ops-feedback is-red" role="alert">{{ session('error') }}</div>@endif
+    @if(session('info'))<div class="ops-feedback is-orange" role="status">{{ session('info') }}</div>@endif
     @if($errors->any())<div class="ops-feedback is-red" role="alert">@foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach</div>@endif
     @yield('content')
 </main>
@@ -30,4 +31,5 @@
 @stack('dialogs')
 <script type="application/json" id="ops-map-config">{!! json_encode(['token'=>config('geo.mapbox.public_token')], JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) !!}</script>
 @stack('scripts')
+@include('layouts.partials.live-sync')
 </body></html>

@@ -53,7 +53,7 @@ class SupportRepository {
   }
 
   Future<File> downloadAttachment(SupportAttachment attachment) async {
-    if (attachment.downloadEndpoint.isEmpty) throw const OvanieApiException('Cette pièce jointe n’est pas téléchargeable depuis l’API sécurisée.');
+    if (attachment.downloadEndpoint.isEmpty) throw const OvanieApiException('Cette pièce jointe n’est pas disponible au téléchargement.');
     final response = await ApiClient.dio.get<List<int>>(
       attachment.downloadEndpoint,
       options: Options(responseType: ResponseType.bytes, receiveTimeout: const Duration(seconds: 35), headers: const {'Accept': '*/*'}),

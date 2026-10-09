@@ -10,6 +10,14 @@ return [
         FILTER_VALIDATE_BOOLEAN
     ),
 
+    /*
+     * Arrivée automatique du livreur (boutique puis client) : distance en
+     * mètres sous laquelle le GPS valide l'arrivée, sans bouton.
+     */
+    // Délai de réclamation avant confirmation automatique de la réception (heures).
+    'auto_reception_hours' => max(1, (int) env('DELIVERY_AUTO_RECEPTION_HOURS', 48)),
+    'auto_arrival_radius_m' => max(30, (int) env('DELIVERY_AUTO_ARRIVAL_RADIUS_M', 150)),
+
     /* Fréquence du polling des écrans client et logistique. */
     'client_poll_seconds' => max(5, (int) env('DELIVERY_CLIENT_POLL_SECONDS', 12)),
     'logistics_poll_seconds' => max(5, (int) env('DELIVERY_LOGISTICS_POLL_SECONDS', 10)),
@@ -38,7 +46,7 @@ return [
     'route_refresh_seconds' => max(8, (int) env('DELIVERY_ROUTE_REFRESH_SECONDS', 12)),
     'route_deviation_threshold_m' => max(20, (int) env('DELIVERY_ROUTE_DEVIATION_THRESHOLD_M', 30)),
     'route_deviation_cooldown_seconds' => max(5, (int) env('DELIVERY_ROUTE_DEVIATION_COOLDOWN_SECONDS', 8)),
-    'arrival_radius_m' => max(10, (int) env('DELIVERY_ARRIVAL_RADIUS_M', 20)),
+    'arrival_radius_m' => max(10, (int) env('DELIVERY_ARRIVAL_RADIUS_M', 50)),
     'arrival_max_accuracy_m' => max(15, (int) env('DELIVERY_ARRIVAL_MAX_ACCURACY_M', 35)),
     'arrival_confirmation_fixes' => max(2, (int) env('DELIVERY_ARRIVAL_CONFIRMATION_FIXES', 2)),
 ];

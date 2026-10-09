@@ -11,6 +11,7 @@ import '../auth/login_screen.dart';
 import '../driver/data/driver_repository.dart';
 import '../driver/models/driver_dashboard.dart';
 import '../driver/models/driver_profile.dart';
+import '../earnings/earnings_screen.dart';
 import '../missions/widgets/mission_ui.dart';
 import '../support/driver_support_screen.dart';
 
@@ -35,7 +36,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   DriverDashboardData? _dashboard;
   bool _loading = true;
-  bool _updatingAvailability = false;
   bool _loggingOut = false;
   String? _error;
 
@@ -65,32 +65,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _refresh() async {
     await widget.onRefresh();
     await _load();
-  }
-
-  Future<void> _setAvailability(bool available) async {
-    final dashboard = _dashboard;
-    if (dashboard == null || !dashboard.availability.canChange || _updatingAvailability) {
-      return;
-    }
-    setState(() => _updatingAvailability = true);
-    try {
-      await DriverRepository.instance.updateAvailability(available ? 'Disponible' : 'Indisponible');
-      await _load(silent: true);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ApiClient.friendlyError(error))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _updatingAvailability = false);
-    }
-  }
-
-  void _comingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature : bientôt disponible.')),
-    );
   }
 
   Future<void> _logout() async {
@@ -151,12 +125,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           MissionPageHeader(
             title: 'Mon profil',
-            subtitle: 'Vos informations OVANIE Logistics',
+            subtitle: '',
             mainPage: true,
-            trailing: MissionNotificationButton(
-              count: dashboard?.summary.unreadNotifications ?? 0,
-              onTap: () => _comingSoon('Notifications'),
-            ),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -196,28 +166,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       isOnMission: isOnMission,
                     ),
                     const SizedBox(height: 12),
-                    _AccountCard(
-                      fullName: fullName,
-                      phone: widget.driver.phone,
-                      email: widget.driver.email,
-                    ),
-                    const SizedBox(height: 12),
-                    _VehicleCard(driver: driver),
-                    const SizedBox(height: 12),
-                    _ZonesCard(driver: driver),
-                    const SizedBox(height: 12),
-                    _AvailabilityCard(
-                      status: availabilityStatus,
-                      canChange: dashboard?.availability.canChange ?? false,
-                      loading: _updatingAvailability,
-                      onChanged: _setAvailability,
-                    ),
-                    const SizedBox(height: 12),
-                    _AccountStatusCard(dashboard: dashboard),
-                    const SizedBox(height: 12),
                     _SettingsCard(
-                      onNotifications: () => _comingSoon('Notifications'),
-                      onPrivacy: () => _comingSoon('Confidentialité'),
+                      onEarnings: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const EarningsScreen())),
+                      onInfo: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => _DriverInfoScreen(
+                            dashboard: dashboard,
+                            fullName: fullName,
+                            phone: widget.driver.phone,
+                            email: widget.driver.email,
+                          ),
+                        ),
+                      ),
                       onSupport: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DriverSupportScreen())),
                       onLogout: _loggingOut ? null : _logout,
                       loggingOut: _loggingOut,
@@ -281,32 +241,13 @@ class _IdentityCard extends StatelessWidget {
                   style: const TextStyle(
                     color: MissionPalette.navy,
                     fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 2),
                 const Text(
-                  'Livreur partenaire',
+                  'Livreur partenaire OVANIE Logistics',
                   style: TextStyle(color: MissionPalette.slate, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 9),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE3F5EC),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.groups_rounded, size: 15, color: OvanieColors.green),
-                      SizedBox(width: 5),
-                      Text(
-                        'Partenaire indépendant',
-                        style: TextStyle(color: OvanieColors.green, fontSize: 11.5, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -652,78 +593,6 @@ class _ZoneChip extends StatelessWidget {
   }
 }
 
-class _AvailabilityCard extends StatelessWidget {
-  const _AvailabilityCard({
-    required this.status,
-    required this.canChange,
-    required this.loading,
-    required this.onChanged,
-  });
-
-  final String status;
-  final bool canChange;
-  final bool loading;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final isAvailable = status == 'Disponible';
-    return MissionSurfaceCard(
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE3F5EC),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: const Icon(Icons.toggle_on_rounded, color: OvanieColors.green, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Disponibilité',
-                  style: TextStyle(color: MissionPalette.navy, fontSize: 15.5, fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  status,
-                  style: TextStyle(
-                    color: isAvailable ? OvanieColors.green : MissionPalette.slate,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                const Text(
-                  'Lorsque vous êtes disponible, OVANIE Logistics peut vous affecter des missions.',
-                  style: TextStyle(color: MissionPalette.slate, fontSize: 11.5, height: 1.35),
-                ),
-              ],
-            ),
-          ),
-          if (loading)
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.4, color: OvanieColors.green),
-            )
-          else
-            Switch(
-              value: isAvailable,
-              onChanged: canChange ? onChanged : null,
-              activeThumbColor: OvanieColors.green,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _AccountStatusCard extends StatelessWidget {
   const _AccountStatusCard({required this.dashboard});
 
@@ -788,16 +657,16 @@ class _StatusChip extends StatelessWidget {
 
 class _SettingsCard extends StatelessWidget {
   const _SettingsCard({
-    required this.onNotifications,
-    required this.onPrivacy,
+    required this.onEarnings,
+    required this.onInfo,
     required this.onSupport,
     required this.onLogout,
     required this.loggingOut,
   });
 
-  final VoidCallback onNotifications;
-  final VoidCallback onPrivacy;
+  final VoidCallback onInfo;
   final VoidCallback onSupport;
+  final VoidCallback onEarnings;
   final VoidCallback? onLogout;
   final bool loggingOut;
 
@@ -808,22 +677,8 @@ class _SettingsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(12, 10, 12, 4),
-            child: Row(
-              children: [
-                Icon(Icons.settings_rounded, color: OvanieColors.green, size: 20),
-                SizedBox(width: 9),
-                Text(
-                  'Paramètres et actions',
-                  style: TextStyle(color: MissionPalette.navy, fontSize: 15.5, fontWeight: FontWeight.w900),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: MissionPalette.cardBorder),
-          _SettingsRow(icon: Icons.notifications_none_rounded, label: 'Notifications', onTap: onNotifications),
-          _SettingsRow(icon: Icons.lock_outline_rounded, label: 'Confidentialité', onTap: onPrivacy),
+          _SettingsRow(icon: Icons.account_balance_wallet_outlined, label: 'Mes gains', onTap: onEarnings),
+          _SettingsRow(icon: Icons.badge_outlined, label: 'Mes informations', onTap: onInfo),
           _SettingsRow(icon: Icons.help_outline_rounded, label: 'Aide & support', onTap: onSupport),
           _SettingsRow(
             icon: Icons.logout_rounded,
@@ -873,12 +728,59 @@ class _SettingsRow extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w700),
+                style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w600),
               ),
             ),
             trailing ?? Icon(Icons.chevron_right_rounded, color: color.withValues(alpha: .6)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Informations du compte livreur : identité, véhicule, zones et état.
+class _DriverInfoScreen extends StatelessWidget {
+  const _DriverInfoScreen({
+    required this.dashboard,
+    required this.fullName,
+    required this.phone,
+    required this.email,
+  });
+
+  final DriverDashboardData? dashboard;
+  final String fullName;
+  final String phone;
+  final String? email;
+
+  @override
+  Widget build(BuildContext context) {
+    final driver = dashboard?.driver;
+    return Scaffold(
+      backgroundColor: MissionPalette.mint,
+      body: Column(
+        children: [
+          MissionPageHeader(
+            title: 'Mes informations',
+            subtitle: '',
+            showBack: true,
+            onBack: () => Navigator.of(context).pop(),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 22),
+              children: [
+                _AccountCard(fullName: fullName, phone: phone, email: email),
+                const SizedBox(height: 12),
+                _VehicleCard(driver: driver),
+                const SizedBox(height: 12),
+                _ZonesCard(driver: driver),
+                const SizedBox(height: 12),
+                _AccountStatusCard(dashboard: dashboard),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

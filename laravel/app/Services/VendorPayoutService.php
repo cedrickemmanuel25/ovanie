@@ -155,7 +155,9 @@ class VendorPayoutService
                         'shop_name' => $shop->name,
                         'items_count' => $items->count(),
                         'generated_at' => $meta['generated_at'] ?? now()->toDateTimeString(),
-                        'blocked_reason' => 'Le reversement attend la livraison, la réception client et la validation du paiement.',
+                        'blocked_reason' => $shop->hasConfiguredPayout()
+                            ? 'Le reversement attend la livraison, la réception client et la validation du paiement.'
+                            : 'Configurez et confirmez votre mode de reversement et votre compte Mobile Money.',
                         'refund_adjustment_total' => $refundGrossReduction,
                         'financial_breakdown' => [
                             'product_amount' => $productAmount,
@@ -179,12 +181,12 @@ class VendorPayoutService
                         'commission_amount' => $commissionAmount,
                         'processing_fee_amount' => $processingFee,
                         'payout_amount' => $payoutAmount,
-                        'phone' => $shop->mm_number ?: $shop->whatsapp,
+                        'phone' => $shop->hasConfiguredPayout() ? $shop->mm_number : null,
                         'payment_method' => $paymentMethod,
-                        'payment_channel' => $shop->mm_operator,
-                        'payment_mode_snapshot' => $shop->payment_mode ?: Shop::PAYMENT_WEEKLY,
+                        'payment_channel' => $shop->hasConfiguredPayout() ? $shop->mm_operator : null,
+                        'payment_mode_snapshot' => $shop->hasConfiguredPayout() ? $shop->payment_mode : null,
                         'payout_reference' => $payout->payout_reference
-                            ?: 'PAYOUT-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6)),
+                            ?: 'REV-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6)),
                         'status' => $payout->status ?: VendorPayout::STATUS_BLOCKED,
                         'meta' => $meta,
                     ]);

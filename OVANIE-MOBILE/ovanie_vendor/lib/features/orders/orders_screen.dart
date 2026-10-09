@@ -1,9 +1,12 @@
 import 'dart:async';
+import '../../core/sync/live_sync_service.dart';
 
 import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/ui/vendor_mockup_ui.dart';
 import '../../data/vendor_repository.dart';
+import '../notifications/vendor_notifications_screen.dart';
 import 'order_detail_screen.dart';
 import 'order_ui.dart';
 
@@ -14,7 +17,8 @@ class OrdersScreen extends StatefulWidget {
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen> {
+class _OrdersScreenState extends State<OrdersScreen>
+    with LiveSyncListener<OrdersScreen> {
   final TextEditingController _search = TextEditingController();
   final ScrollController _scroll = ScrollController();
 
@@ -27,8 +31,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
   String? _error;
   int _page = 1;
   int _lastPage = 1;
-  String _status = 'pending';
+  String _status = 'all';
   String _sort = 'newest';
+  int _notificationCount = 0;
 
   static const Map<String, String> _filters = <String, String>{
     'all': 'Toutes',
@@ -39,16 +44,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
     'cancelled': 'Annulées',
   };
 
-  static const Map<String, String> _sorts = <String, String>{
-    'newest': 'Plus récentes',
-    'oldest': 'Plus anciennes',
-  };
-
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
     _load(reset: true);
+    _loadNotifications();
+    listenLiveSync({'shop', 'notifications'}, () {
+      if (!_loadingMore) _load();
+      _loadNotifications();
+    });
   }
 
   @override
@@ -149,66 +154,86 @@ class _OrdersScreenState extends State<OrdersScreen> {
     if (mounted) _load(reset: true);
   }
 
-  Future<void> _chooseSort() async {
-    final selected = await showModalBottomSheet<String>(
+  /// Feuille de choix unique : lignes encadrées avec pictogramme et coche orange.
+  Future<String?> _pickOne(String title, List<_Option> options, String selected) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    return showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => SafeArea(
-        top: false,
+      isScrollControlled: true,
+      builder: (sheetContext) => MkTheme(
+        lightStatusBar: false,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheetContext).height * .86),
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD6DDE8),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Trier les commandes',
-                  style: TextStyle(
-                    color: orderText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              ..._sorts.entries.map(
-                (entry) => ListTile(
-                  trailing: _sort == entry.key
-                      ? const Icon(Icons.check, color: orderOrange)
-                      : null,
-                  title: Text(
-                    entry.value,
-                    style: const TextStyle(
-                      color: orderText,
-                      fontWeight: FontWeight.w700,
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 5,
+                      decoration: BoxDecoration(color: const Color(0xFFC9CED8), borderRadius: BorderRadius.circular(3)),
                     ),
                   ),
-                  onTap: () => Navigator.pop(context, entry.key),
-                ),
+                  const SizedBox(height: 16),
+                  Text(title, style: const TextStyle(color: Mk.navy, fontSize: 20, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
+                  for (final option in options)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _OptionRow(
+                        option: option,
+                        selected: option.key == selected,
+                        onTap: () => Navigator.pop(sheetContext, option.key),
+                      ),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _chooseSort() async {
+    final selected = await _pickOne(
+      'Trier les commandes',
+      const [
+        _Option('newest', 'Plus récentes', Icons.schedule_rounded, Mk.orange),
+        _Option('oldest', 'Plus anciennes', Icons.history_rounded, Mk.icon),
+      ],
+      _sort,
     );
     if (selected != null && selected != _sort) {
       setState(() => _sort = selected);
       _load(reset: true);
     }
+  }
+
+  Future<void> _chooseFilter() async {
+    final selected = await _pickOne(
+      'Filtres',
+      const [
+        _Option('all', 'Toutes', Icons.grid_view_rounded, Mk.icon),
+        _Option('pending', 'Nouvelles', Icons.article_outlined, Color(0xFF1668E3)),
+        _Option('preparing', 'Préparation', Icons.schedule_rounded, Mk.orange),
+        _Option('shipped', 'Expédiées', Icons.local_shipping_outlined, Color(0xFF6D3BD9)),
+        _Option('delivered', 'Livrées', Icons.check_circle_outline_rounded, Color(0xFF168A2B)),
+        _Option('cancelled', 'Annulées', Icons.cancel_outlined, Color(0xFFD92D20)),
+      ],
+      _status,
+    );
+    if (selected != null) _setFilter(selected);
   }
 
   void _setFilter(String value) {
@@ -217,704 +242,620 @@ class _OrdersScreenState extends State<OrdersScreen> {
     _load(reset: true);
   }
 
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VendorNotificationsScreen()));
+    if (mounted) _loadNotifications();
+  }
+
+  /// Nombre de notifications non lues, pour la pastille de la cloche.
+  Future<void> _loadNotifications() async {
+    try {
+      final notifications = await VendorRepository.instance.notifications(page: 1);
+      final unread = int.tryParse('${notifications['unread_count'] ?? 0}') ?? 0;
+      if (mounted) setState(() => _notificationCount = unread);
+    } catch (_) {
+      // La liste des commandes reste utilisable sans la pastille.
+    }
+  }
+
+  int _stat(String key) => int.tryParse('${_stats[key] ?? 0}') ?? 0;
+
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFF031D47),
-      child: Column(
-        children: [
-          OrderHeader(
-            title: 'Mes commandes',
-            subtitle: 'Suivez et traitez vos commandes efficacement',
-            bottom: TextField(
-              controller: _search,
-              textInputAction: TextInputAction.search,
-              onChanged: (_) {
-                _debounce?.cancel();
-                _debounce = Timer(
-                  const Duration(milliseconds: 350),
-                  () => _load(reset: true),
-                );
-              },
-              onSubmitted: (_) => _load(reset: true),
-              decoration: InputDecoration(
-                hintText: 'Rechercher une commande...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFF7487A7),
-                  fontSize: 15.5,
-                ),
-                suffixIcon: IconButton(
-                  onPressed: () => _load(reset: true),
-                  icon: const Icon(
-                    Icons.search_rounded,
-                    color: orderText,
-                    size: 29,
+    final top = MediaQuery.paddingOf(context).top;
+    return MkTheme(
+      lightStatusBar: false,
+      child: ColoredBox(
+        color: const Color(0xFFF5F7FB),
+        child: Column(
+          children: [
+            Container(
+              color: Colors.white,
+              padding: EdgeInsets.fromLTRB(16, top + 8, 6, 8),
+              child: Row(
+                children: [
+                  Image.asset('assets/images/mockups/logo_navy.png', height: 34, semanticLabel: 'OVANIE Vendeur'),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Notifications',
+                    onPressed: _openNotifications,
+                    icon: Badge(
+                      isLabelVisible: _notificationCount > 0,
+                      backgroundColor: Mk.orange,
+                      label: Text(_notificationCount > 99 ? '99+' : '$_notificationCount'),
+                      child: const Icon(Icons.notifications_none_rounded, color: Mk.navy, size: 28),
+                    ),
                   ),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 17,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(17),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(17),
-                  borderSide: const BorderSide(color: Color(0xFFAAC3E6)),
-                ),
+                ],
               ),
             ),
-          ),
-          Expanded(
-            child: OrderSheet(
+            const Divider(height: 1, color: _line),
+            Expanded(
               child: RefreshIndicator(
+                color: Mk.orange,
                 onRefresh: () => _load(reset: true),
                 child: CustomScrollView(
                   controller: _scroll,
                   physics: const AlwaysScrollableScrollPhysics(),
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                   slivers: [
-                    SliverToBoxAdapter(child: _topControls()),
+                    SliverToBoxAdapter(child: _intro()),
                     if (_loading)
                       const SliverFillRemaining(
                         hasScrollBody: false,
-                        child: Center(
-                          child: CircularProgressIndicator(color: orderOrange),
-                        ),
+                        child: Center(child: CircularProgressIndicator(color: Mk.orange)),
                       )
                     else if (_error != null)
                       SliverFillRemaining(
                         hasScrollBody: false,
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.error_outline_rounded,
-                                  color: Color(0xFFD92D20),
-                                  size: 42,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _error!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: orderMuted,
-                                    height: 1.4,
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                FilledButton(
-                                  onPressed: () => _load(reset: true),
-                                  child: const Text('Réessayer'),
-                                ),
-                              ],
-                            ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              MkNotice(_error!),
+                              const SizedBox(height: 14),
+                              MkBarButton(label: 'Réessayer', filled: true, onTap: () => _load(reset: true)),
+                            ],
                           ),
                         ),
                       )
                     else if (_items.isEmpty)
                       SliverFillRemaining(
                         hasScrollBody: false,
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(28),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const OrderIconSquare(
-                                  icon: Icons.inventory_2_outlined,
-                                  size: 82,
-                                ),
-                                const SizedBox(height: 14),
-                                Text(
-                                  _status == 'all'
-                                      ? 'Aucune commande pour le moment'
-                                      : 'Aucune commande dans ce statut',
-                                  style: const TextStyle(
-                                    color: orderText,
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                const SizedBox(height: 7),
-                                const Text(
-                                  'Les commandes validées apparaîtront automatiquement ici.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: orderMuted,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
-                            ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(28),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.inventory_2_outlined, color: Mk.hint, size: 48),
+                              const SizedBox(height: 12),
+                              Text(
+                                _search.text.trim().isNotEmpty
+                                    ? 'Aucune commande ne correspond à votre recherche'
+                                    : (_status == 'all' ? 'Aucune commande pour le moment' : 'Aucune commande dans cette liste'),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Mk.navy, fontSize: 16.5, fontWeight: FontWeight.w800),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Les nouvelles commandes de vos clients s’affichent ici.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Mk.muted, fontSize: 13.5, height: 1.4),
+                              ),
+                            ],
                           ),
                         ),
                       )
                     else ...[
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                         sliver: SliverList.separated(
                           itemCount: _items.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 11),
-                          itemBuilder: (context, index) =>
-                              _orderCard(_items[index]),
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) => _orderCard(_items[index]),
                         ),
                       ),
-                      SliverToBoxAdapter(child: _quickActions()),
                       if (_loadingMore)
                         const SliverToBoxAdapter(
                           child: Padding(
                             padding: EdgeInsets.symmetric(vertical: 18),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: orderOrange,
-                                strokeWidth: 2.5,
-                              ),
-                            ),
+                            child: Center(child: CircularProgressIndicator(color: Mk.orange, strokeWidth: 2.5)),
                           ),
                         ),
                     ],
-                    const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
                   ],
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _topControls() {
-    final total = _stats['total'] ?? 0;
-    final newCount = _stats['pending'] ?? _stats['new'] ?? 0;
-    final toProcess = _stats['to_process'] ?? 0;
-    final delivered = _stats['delivered'] ?? 0;
-
-    return OrderResponsiveBody(
-      padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
-      child: Column(
-        children: [
-          Row(
+  /// Titre, recherche, bloc « À traiter », actions rapides et onglets.
+  Widget _intro() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 14, 16, 0),
+          child: Text(
+            'Mes commandes',
+            style: TextStyle(color: Mk.navy, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -.4),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 2, 16, 12),
+          child: Text(
+            'Suivez et traitez vos commandes efficacement',
+            style: TextStyle(color: Mk.muted, fontSize: 13.5, fontWeight: FontWeight.w500),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
             children: [
               Expanded(
-                child: _largeControl(
-                  icon: Icons.filter_alt_outlined,
-                  label: 'Filtres',
-                  onTap: () {
-                    showModalBottomSheet<void>(
-                      context: context,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => SafeArea(
-                        top: false,
-                        child: Container(
-                          padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(24),
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFD6DDE8),
-                                  borderRadius: BorderRadius.circular(99),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              ..._filters.entries.map(
-                                (entry) => ListTile(
-                                  title: Text(
-                                    entry.value,
-                                    style: const TextStyle(
-                                      color: orderText,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  trailing: _status == entry.key
-                                      ? const Icon(
-                                          Icons.check_circle_rounded,
-                                          color: orderOrange,
-                                        )
-                                      : null,
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    _setFilter(entry.key);
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+                child: SizedBox(
+                  height: 46,
+                  child: TextField(
+                    controller: _search,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (_) {
+                      _debounce?.cancel();
+                      _debounce = Timer(const Duration(milliseconds: 350), () => _load(reset: true));
+                    },
+                    onSubmitted: (_) => _load(reset: true),
+                    style: const TextStyle(fontFamily: Mk.font, color: Mk.navy, fontSize: 14.5, fontWeight: FontWeight.w600),
+                    decoration: InputDecoration(
+                      hintText: 'Rechercher une commande…',
+                      hintStyle: const TextStyle(fontFamily: Mk.font, color: Mk.hint, fontSize: 14, fontWeight: FontWeight.w500),
+                      prefixIcon: const Icon(Icons.search_rounded, color: Mk.icon, size: 24),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: EdgeInsets.zero,
+                      border: _searchBorder(_line),
+                      enabledBorder: _searchBorder(_line),
+                      focusedBorder: _searchBorder(Mk.blue),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              _ToolButton(icon: Icons.filter_alt_outlined, label: 'Filtres', onTap: _chooseFilter),
+              const SizedBox(width: 8),
+              _ToolButton(icon: Icons.swap_vert_rounded, label: 'Trier par', onTap: _chooseSort),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: _SummaryCard(
+            total: _stat('total'),
+            fresh: _stat('pending'),
+            toProcess: _stat('to_process'),
+            delivered: _stat('delivered'),
+          ),
+        ),
+        const _Caption('ACTIONS RAPIDES'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
               Expanded(
-                child: _largeControl(
-                  icon: Icons.swap_vert_rounded,
-                  label: 'Trier par',
-                  onTap: _chooseSort,
+                child: _QuickAction(
+                  icon: Icons.assignment_turned_in_outlined,
+                  label: 'Préparer',
+                  color: const Color(0xFFE85400),
+                  background: const Color(0xFFFFEBDD),
+                  onTap: () => _setFilter('pending'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.local_shipping_outlined,
+                  label: 'Expédier',
+                  color: const Color(0xFF1456D9),
+                  background: const Color(0xFFE1ECFD),
+                  onTap: () => _setFilter('preparing'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.schedule_rounded,
+                  label: 'Historique',
+                  color: Mk.navy,
+                  background: const Color(0xFFE9ECF2),
+                  onTap: () => _setFilter('delivered'),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 42,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _filters.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 9),
-              itemBuilder: (context, index) {
-                final entry = _filters.entries.elementAt(index);
-                final active = _status == entry.key;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => _setFilter(entry.key),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    decoration: BoxDecoration(
-                      gradient: active
-                          ? const LinearGradient(
-                              colors: [Color(0xFF062A62), Color(0xFF071D59)],
-                            )
-                          : null,
-                      color: active ? null : Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: active ? Colors.transparent : orderBorder,
-                      ),
-                    ),
-                    child: Text(
-                      entry.value,
-                      style: TextStyle(
-                        color: active ? Colors.white : orderText,
-                        fontWeight: active ? FontWeight.w800 : FontWeight.w700,
-                        fontSize: 13.5,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          OrderCard(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _ListMetric(
-                    icon: Icons.inventory_2_outlined,
-                    value: total,
-                    label: 'commandes',
-                  ),
-                ),
-                const SizedBox(height: 40, child: VerticalDivider(width: 1)),
-                Expanded(
-                  child: _ListMetric(
-                    icon: Icons.star_border_rounded,
-                    value: newCount,
-                    label: 'nouvelles',
-                    color: orderOrange,
-                  ),
-                ),
-                const SizedBox(height: 40, child: VerticalDivider(width: 1)),
-                Expanded(
-                  child: _ListMetric(
-                    icon: Icons.schedule_rounded,
-                    value: toProcess,
-                    label: 'à traiter',
-                    color: orderOrange,
-                  ),
-                ),
-                const SizedBox(height: 40, child: VerticalDivider(width: 1)),
-                Expanded(
-                  child: _ListMetric(
-                    icon: Icons.check_circle_outline_rounded,
-                    value: delivered,
-                    label: 'livrées',
-                    color: orderGreen,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 22),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: OrderSectionTitle('Liste des commandes'),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        _tabs(),
+        const Divider(height: 1, color: _line),
+        const _Caption('LISTE DES COMMANDES'),
+      ],
     );
   }
 
-  Widget _largeControl({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(13),
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 15),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: orderBorder),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: orderText, size: 24),
-            const SizedBox(width: 11),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                style: const TextStyle(
-                  color: orderText,
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w700,
-                ),
+  /// Onglets soulignés des états de commande.
+  Widget _tabs() {
+    return SizedBox(
+      height: 46,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        itemCount: _filters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 18),
+        itemBuilder: (context, index) {
+          final entry = _filters.entries.elementAt(index);
+          final active = _status == entry.key;
+          return Semantics(
+            selected: active,
+            button: true,
+            child: InkWell(
+              onTap: () => _setFilter(entry.key),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      entry.value,
+                      style: TextStyle(
+                        color: active ? Mk.navy : Mk.muted,
+                        fontSize: 14,
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    height: 3,
+                    width: active ? 64 : 0,
+                    decoration: BoxDecoration(color: Mk.orange, borderRadius: BorderRadius.circular(2)),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 9),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: orderText,
-              size: 22,
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
   Widget _orderCard(Map<String, dynamic> item) {
     final status = item['vendor_status'];
-    final color = status == 'pending' ? orderText : orderStatusColor(status);
-    final paymentStatus = '${item['payment_status'] ?? ''}';
-    final paymentLabel = '${item['payment_status_label'] ?? ''}'.trim();
-    final method =
-        '${item['payment_method_label'] ?? item['payment_method'] ?? ''}'
-            .trim();
-    final number = '${item['order_number'] ?? 'Commande'}';
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 340;
-        return Semantics(
-          button: true,
-          label: 'Ouvrir la commande $number',
-          child: InkWell(
-            onTap: () => _openOrder(item),
-            borderRadius: BorderRadius.circular(14),
-            child: OrderCard(
-              padding: EdgeInsets.all(wide ? 12 : 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: wide ? 62 : 48,
-                    height: wide ? 86 : 76,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: .07),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    alignment: Alignment.center,
-                    child: CustomPaint(
-                      size: Size.square(wide ? 42 : 32),
-                      painter: _ParcelPainter(color),
-                    ),
-                  ),
-                  SizedBox(width: wide ? 12 : 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                number.startsWith('#') ? number : '#$number',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: orderText,
-                                  fontSize: wide ? 14 : 13,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+    final method = '${item['payment_method_label'] ?? item['payment_method'] ?? ''}'.trim();
+    final number = orderNumberLabel(item['order_number']);
+    final client = '${item['client_display_name'] ?? item['client_name'] ?? 'Client'}';
+    final day = orderDayLabel(item['created_at']);
+    final meta = [if (day.isNotEmpty) day, if (method.isNotEmpty) method].join(' · ');
+
+    return Semantics(
+      button: true,
+      label: 'Ouvrir la commande $number',
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _openOrder(item),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              number,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Mk.navy, fontSize: 15, fontWeight: FontWeight.w800),
                             ),
-                            if (wide)
-                              OrderStatusPill(status: status, compact: true),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${item['client_display_name'] ?? item['client_name'] ?? 'Client OVANIE'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: orderMuted,
-                            fontSize: wide ? 12 : 12,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${orderHumanDate(item['created_at'])}${method.isEmpty ? '' : '  ?  $method'}',
-                          style: TextStyle(
-                            color: orderMuted,
-                            fontSize: wide ? 10.5 : 10.5,
+                          const SizedBox(width: 8),
+                          Text(
+                            orderMoney(item['seller_products_total'] ?? item['public_products_total']),
+                            style: const TextStyle(color: Mk.navy, fontSize: 15, fontWeight: FontWeight.w800),
                           ),
-                        ),
-                        const SizedBox(height: 7),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 5,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              orderMoney(item['public_products_total']),
-                              style: TextStyle(
-                                color: orderOrange,
-                                fontSize: wide ? 16 : 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            OrderPaymentPill(
-                              status: paymentStatus,
-                              label: paymentLabel.isNotEmpty
-                                  ? paymentLabel
-                                  : ([
-                                          'paid',
-                                          'escrow_held',
-                                          'verified',
-                                          'commission_paid',
-                                          'released_to_vendor',
-                                        ].contains(paymentStatus)
-                                        ? 'Pay?e'
-                                        : 'En attente'),
-                            ),
-                          ],
-                        ),
-                        if (!wide) ...[
-                          const SizedBox(height: 6),
-                          OrderStatusPill(status: status, compact: true),
                         ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        client,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        alignment: WrapAlignment.spaceBetween,
+                        children: [
+                          if (meta.isNotEmpty)
+                            Text(meta, style: const TextStyle(color: Mk.muted, fontSize: 12.5, fontWeight: FontWeight.w500)),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              OrderStatusPill(status: status, compact: true),
+                              const SizedBox(width: 6),
+                              OrderPaymentPill(status: item['payment_status'], label: _paymentLabel(item)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: Mk.icon, size: 24),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// « Payée » ou « En attente », d'après l'état de paiement renvoyé par l'API.
+  String _paymentLabel(Map<String, dynamic> item) => orderIsPaid(item['payment_status']) ? 'Payée' : 'En attente';
+}
+
+const _line = Color(0xFFE4E9F1);
+
+OutlineInputBorder _searchBorder(Color color) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: color, width: 1.2),
+    );
+
+class _Option {
+  const _Option(this.key, this.label, this.icon, this.color);
+  final String key;
+  final String label;
+  final IconData icon;
+  final Color color;
+}
+
+class _OptionRow extends StatelessWidget {
+  const _OptionRow({required this.option, required this.selected, required this.onTap});
+  final _Option option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      inMutuallyExclusiveGroup: true,
+      checked: selected,
+      button: true,
+      label: option.label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? Mk.softOrange : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: selected ? const Color(0xFFF9B68C) : _line, width: 1.2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(color: option.color.withValues(alpha: .12), borderRadius: BorderRadius.circular(10)),
+                  child: Icon(option.icon, color: option.color, size: 23),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(option.label, style: const TextStyle(color: Mk.navy, fontSize: 15.5, fontWeight: FontWeight.w600)),
+                ),
+                Icon(
+                  selected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                  color: selected ? Mk.orange : Mk.hint,
+                  size: 26,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bouton blanc « Filtres » / « Trier par » ; réduit à son pictogramme sur un écran étroit.
+class _ToolButton extends StatelessWidget {
+  const _ToolButton({required this.icon, required this.label, required this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 400 || MediaQuery.textScalerOf(context).scale(10) > 10.5;
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: _line, width: 1.2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            height: 46,
+            constraints: const BoxConstraints(minWidth: 46),
+            padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Mk.navy, size: 22),
+                if (!compact) ...[
+                  const SizedBox(width: 6),
+                  Text(label, style: const TextStyle(color: Mk.navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Caption extends StatelessWidget {
+  const _Caption(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      child: Text(
+        text,
+        style: const TextStyle(color: Mk.muted, fontSize: 11.5, fontWeight: FontWeight.w600, letterSpacing: 2.4),
+      ),
+    );
+  }
+}
+
+/// Bloc « À traiter » : quatre compteurs et l'illustration de palette.
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({required this.total, required this.fresh, required this.toProcess, required this.delivered});
+  final int total;
+  final int fresh;
+  final int toProcess;
+  final int delivered;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget stat(int value, String label) => Expanded(
+          child: Semantics(
+            label: '$value $label',
+            excludeSemantics: true,
+            child: Column(
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('$value', style: const TextStyle(color: Mk.navy, fontSize: 21, fontWeight: FontWeight.w800, height: 1.1)),
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(label, style: const TextStyle(color: Mk.muted, fontSize: 11.5, fontWeight: FontWeight.w500)),
+                ),
+              ],
+            ),
+          ),
+        );
+    const divider = SizedBox(height: 34, child: VerticalDivider(width: 9, color: _line));
+
+    return Container(
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 4, color: Mk.orange),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 12, 4, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Text(
+                        'À TRAITER',
+                        style: TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w800, letterSpacing: 1.6),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        stat(total, 'commandes'),
+                        divider,
+                        stat(fresh, 'nouvelles'),
+                        divider,
+                        stat(toProcess, 'à traiter'),
+                        divider,
+                        stat(delivered, 'livrées'),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    width: 32,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: orderBorder),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.chevron_right,
-                      color: orderText,
-                      size: 23,
-                    ),
-                  ),
+                  ],
+                ),
+              ),
+            ),
+            if (MediaQuery.sizeOf(context).width >= 380)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Image.asset('assets/images/mockups/orders_pallet.jpg', width: 104, fit: BoxFit.contain, excludeFromSemantics: true),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({required this.icon, required this.label, required this.color, required this.background, required this.onTap});
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Color background;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          height: 52,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: color, size: 26),
+                  const SizedBox(width: 8),
+                  Text(label, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w700)),
                 ],
               ),
             ),
           ),
-        );
-      },
-    );
-  }
-
-  Widget _quickActions() => OrderResponsiveBody(
-    padding: const EdgeInsets.fromLTRB(22, 4, 22, 0),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const OrderSectionTitle('Actions rapides'),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _quickButton(
-                Icons.assignment_turned_in_outlined,
-                'Pr?parer',
-                orderText,
-                () => _setFilter('preparing'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _quickButton(
-                Icons.local_shipping_outlined,
-                'Exp?dier',
-                orderGreen,
-                () => _setFilter('preparing'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _quickButton(
-                Icons.schedule_outlined,
-                'Historique',
-                const Color(0xFF8017B6),
-                () => _setFilter('all'),
-              ),
-            ),
-          ],
         ),
-      ],
-    ),
-  );
-
-  Widget _quickButton(
-    IconData icon,
-    String label,
-    Color color,
-    VoidCallback onTap,
-  ) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(12),
-    child: OrderCard(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final symbol = Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: .08),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 21),
-          );
-          final text = Text(
-            label,
-            maxLines: 1,
-            style: const TextStyle(color: orderText, fontSize: 12),
-          );
-          return constraints.maxWidth >= 130
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [symbol, const SizedBox(width: 10), text],
-                )
-              : Column(children: [symbol, const SizedBox(height: 5), text]);
-        },
       ),
-    ),
-  );
-}
-
-class _ListMetric extends StatelessWidget {
-  const _ListMetric({
-    required this.icon,
-    required this.value,
-    required this.label,
-    this.color = orderText,
-  });
-  final IconData icon;
-  final Object value;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final symbol = Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .08),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: color, size: 23),
-      );
-      final text = Column(
-        crossAxisAlignment: constraints.maxWidth < 125
-            ? CrossAxisAlignment.center
-            : CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$value',
-            style: const TextStyle(
-              color: orderText,
-              fontSize: 23,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Text(
-            label,
-            maxLines: 1,
-            style: const TextStyle(color: orderMuted, fontSize: 11),
-          ),
-        ],
-      );
-      return constraints.maxWidth < 125
-          ? Column(children: [symbol, const SizedBox(height: 5), text])
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [symbol, const SizedBox(width: 10), text],
-            );
-    },
-  );
-}
-
-class _ParcelPainter extends CustomPainter {
-  const _ParcelPainter(this.color);
-  final Color color;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
-      ..strokeJoin = StrokeJoin.round;
-    final w = size.width;
-    final h = size.height;
-    final outline = Path()
-      ..moveTo(w * .5, 0)
-      ..lineTo(w, h * .25)
-      ..lineTo(w, h * .75)
-      ..lineTo(w * .5, h)
-      ..lineTo(0, h * .75)
-      ..lineTo(0, h * .25)
-      ..close();
-    canvas.drawPath(outline, paint);
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, h * .25)
-        ..lineTo(w * .5, h * .5)
-        ..lineTo(w, h * .25)
-        ..moveTo(w * .5, h * .5)
-        ..lineTo(w * .5, h)
-        ..moveTo(w * .25, h * .125)
-        ..lineTo(w * .75, h * .375)
-        ..lineTo(w * .75, h * .59),
-      paint,
     );
   }
-
-  @override
-  bool shouldRepaint(_ParcelPainter oldDelegate) => color != oldDelegate.color;
 }

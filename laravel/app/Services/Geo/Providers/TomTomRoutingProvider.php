@@ -17,11 +17,17 @@ class TomTomRoutingProvider implements RoutingProviderInterface
         $baseUrl = rtrim(config('geo.tomtom.routing_base_url', 'https://api.tomtom.com/routing/1'), '/');
         $path = "{$baseUrl}/calculateRoute/{$fromLat},{$fromLng}:{$toLat},{$toLng}/json";
 
+        // Service récemment injoignable : on passe directement au suivant.
+        if (\Illuminate\Support\Facades\Cache::has('geo.routing.down.tomtom')) {
+            return ['success' => false, 'provider' => 'tomtom', 'message' => 'Service momentanément indisponible.'];
+        }
+
         try {
             $response = Http::acceptJson()
+                ->connectTimeout(4)
                 ->withoutVerifying()
                 ->timeout((int) config('geo.routing_timeout_seconds', 15))
-                ->retry(1, 250)
+                ->retry(1, 250, fn ($e) => ! $e instanceof \Illuminate\Http\Client\ConnectionException)
                 ->get($path, [
                 'key' => $key,
                 'traffic' => config('geo.tomtom.traffic', true) ? 'true' : 'false',
@@ -31,7 +37,10 @@ class TomTomRoutingProvider implements RoutingProviderInterface
                 'routeRepresentation' => 'polyline',
                 'instructionsType' => 'text',
             ]);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Http\Client\ConnectionException) {
+                \Illuminate\Support\Facades\Cache::put('geo.routing.down.tomtom', true, now()->addMinutes(2));
+            }
             return ['success' => false, 'provider' => 'tomtom', 'message' => 'Service itineraire indisponible.'];
         }
 

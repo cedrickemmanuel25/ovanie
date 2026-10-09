@@ -6,6 +6,9 @@ class ServerCartItem {
   final String productSlug;
   final int quantity;
   final double unitPrice;
+  final int? variantId;
+  final String variantLabel;
+  final String variantImageUrl;
 
   const ServerCartItem({
     required this.id,
@@ -13,6 +16,9 @@ class ServerCartItem {
     required this.productSlug,
     required this.quantity,
     required this.unitPrice,
+    this.variantId,
+    this.variantLabel = '',
+    this.variantImageUrl = '',
   });
 }
 
@@ -31,7 +37,7 @@ class CartServerSync {
     final data = response.data;
     if (data is! Map || data['cart'] is! Map) {
       throw const OvanieApiException(
-        'Le panier OVANIE retourné par le serveur est invalide.',
+        'Votre panier n’a pas pu être chargé. Réessayez dans un instant.',
       );
     }
 
@@ -49,6 +55,11 @@ class CartServerSync {
       final unitPrice = raw['unit_price'] is num
           ? (raw['unit_price'] as num).toDouble()
           : double.tryParse('${raw['unit_price'] ?? ''}') ?? 0;
+      final variantRaw = raw['variant'];
+      final variant = variantRaw is Map ? Map<String, dynamic>.from(variantRaw) : null;
+      final variantId = int.tryParse('${variant?['id'] ?? ''}');
+      final variantLabel = '${variant?['label'] ?? ''}'.trim();
+      final variantImageUrl = '${variant?['image_url'] ?? ''}'.trim();
       if (id > 0 && productId > 0 && quantity > 0) {
         result.add(
           ServerCartItem(
@@ -57,6 +68,9 @@ class CartServerSync {
             productSlug: productSlug,
             quantity: quantity,
             unitPrice: unitPrice,
+            variantId: variantId,
+            variantLabel: variantLabel,
+            variantImageUrl: variantImageUrl,
           ),
         );
       }
@@ -64,11 +78,11 @@ class CartServerSync {
     return result;
   }
 
-  Future<void> setProductQuantity(int productId, int quantity) async {
+  Future<void> setProductQuantity(int productId, int quantity, {int? productVariantId}) async {
     final items = await fetchItems();
     ServerCartItem? existing;
     for (final item in items) {
-      if (item.productId == productId) {
+      if (item.productId == productId && item.variantId == productVariantId) {
         existing = item;
         break;
       }
@@ -87,6 +101,7 @@ class CartServerSync {
         data: <String, dynamic>{
           'product_id': productId,
           'quantity': quantity,
+          if (productVariantId != null) 'product_variant_id': productVariantId,
         },
       );
       ApiClient.ensureSuccess(response);

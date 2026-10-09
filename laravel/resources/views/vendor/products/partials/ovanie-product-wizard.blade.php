@@ -1250,6 +1250,7 @@
             </div>
 
             <div class="pw-body">
+                @include('components.product-variants-editor', ['product' => $product])
                 <div class="pw-upload-grid">
                     <div class="pw-upload-card">
                         <h3>Images produit <span class="pw-required">*</span></h3>

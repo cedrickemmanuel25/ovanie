@@ -281,7 +281,12 @@
     function isFieldApplicable(element, section) {
         let node = element.parentElement;
         while (node && node !== section) {
-            if (node.hidden || window.getComputedStyle(node).display === 'none') {
+            // A mobile disclosure hides presentation only; its required fields
+            // still belong to this step and must take part in validation.
+            const collapsedMobileContent = node.classList.contains('vm-fold-content')
+                && node.parentElement?.hasAttribute('data-vm-fold')
+                && node.parentElement.dataset.vmOpen === 'false';
+            if (node.hidden || (window.getComputedStyle(node).display === 'none' && !collapsedMobileContent)) {
                 return false;
             }
             node = node.parentElement;

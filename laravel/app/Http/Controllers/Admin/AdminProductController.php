@@ -10,7 +10,7 @@ use App\Jobs\SendSmsJob;
 use App\Models\Category;
 use App\Models\Shop;
 use App\Services\ProductImageNormalizer;
-use App\Services\ProductCalculatorService;
+use App\Services\ProductVariantService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
@@ -25,17 +25,44 @@ class AdminProductController extends Controller
     private const ADMIN_SHOP_ID = 1;
 
     /**
+     * Le catalogue est partagé entre l'administration et le Support Center :
+     * mêmes écrans et mêmes règles, mais le Support ne peut jamais supprimer un produit.
+     */
+    private function inSupportSpace(): bool
+    {
+        return request()->routeIs('support.*');
+    }
+
+    private function productRoutes(): string
+    {
+        return $this->inSupportSpace() ? 'support.products' : 'admin.products';
+    }
+
+    private function shareSpaceContext(): void
+    {
+        view()->share([
+            'productRoutes' => $this->productRoutes(),
+            'catalogueLayout' => $this->inSupportSpace() ? 'layouts.staff' : 'admin.layouts.app',
+            'spaceLabel' => $this->inSupportSpace() ? 'Support Center OVANIE' : 'Administration OVANIE',
+            'isAdminSpace' => ! $this->inSupportSpace(),
+            'canDeleteProducts' => ! $this->inSupportSpace(),
+        ]);
+    }
+
+    /**
      * Afficher la liste des produits
      */
     public function index(Request $request)
     {
+        $this->shareSpaceContext();
         $activeStatuses = ['actif', 'active', 'approved', 'published'];
         $productTable = (new Product())->getTable();
 
         $query = Product::query()
             ->with([
                 'images',
-                'category',
+                'variants',
+                'category.parent',
                 'shop.user',
             ]);
 
@@ -45,10 +72,13 @@ class AdminProductController extends Controller
             $query->where(function ($builder) use ($search) {
                 $builder
                     ->where('products.name', 'like', "%{$search}%")
-                    ->orWhere('products.sku', 'like', "%{$search}%")
                     ->orWhere('products.brand', 'like', "%{$search}%")
-                    ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery
-                        ->where('name', 'like', "%{$search}%"))
+                    ->orWhereHas('category', function ($categoryQuery) use ($search) {
+                        $categoryQuery
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhereHas('parent', fn ($parentQuery) => $parentQuery
+                                ->where('name', 'like', "%{$search}%"));
+                    })
                     ->orWhereHas('shop', function ($shopQuery) use ($search) {
                         $shopQuery
                             ->where('name', 'like', "%{$search}%")
@@ -63,6 +93,22 @@ class AdminProductController extends Controller
 
         if ($request->filled('shop_id')) {
             $query->where('products.shop_id', (int) $request->input('shop_id'));
+        }
+
+        if ($request->filled('main_category_id')) {
+            $mainCategoryId = (int) $request->input('main_category_id');
+
+            $query->whereHas('category', function ($categoryQuery) use ($mainCategoryId) {
+                $categoryQuery->where(function ($builder) use ($mainCategoryId) {
+                    $builder
+                        ->where('categories.parent_id', $mainCategoryId)
+                        ->orWhere(function ($legacyQuery) use ($mainCategoryId) {
+                            $legacyQuery
+                                ->where('categories.id', $mainCategoryId)
+                                ->whereNull('categories.parent_id');
+                        });
+                });
+            });
         }
 
         if ($request->filled('category_id')) {
@@ -107,6 +153,9 @@ class AdminProductController extends Controller
                 $query->whereIn('products.status', ['draft', 'brouillon']);
             } elseif ($status === 'pending_logistics') {
                 $query->whereIn('products.status', ['pending_logistics', 'incomplete', 'logistics_incomplete']);
+            } elseif ($status === 'commercial_capture') {
+                $query->whereNotNull('products.created_by_commercial_id')
+                    ->where('products.product_attributes->admin_completion_required', true);
             } elseif ($status === 'archived') {
                 $query->where(function ($builder) use ($productTable) {
                     if (Schema::hasColumn($productTable, 'archived_at')) {
@@ -141,6 +190,8 @@ class AdminProductController extends Controller
         $categories = Category::query()
             ->orderBy('name')
             ->get();
+        $mainCategories = $categories->whereNull('parent_id')->values();
+        $subCategories = $categories->whereNotNull('parent_id')->values();
 
         $shops = \App\Models\Shop::query()
             ->with('user')
@@ -158,11 +209,16 @@ class AdminProductController extends Controller
                 ->where('stock', '<=', 0)
                 ->count(),
             'incomplete_logistics' => $this->countProductsWithIncompleteLogistics(),
+            'commercial_capture_incomplete' => Product::query()
+                ->whereNotNull('created_by_commercial_id')
+                ->where('product_attributes->admin_completion_required', true)
+                ->count(),
         ];
 
         return view('admin.products.index', compact(
             'products',
-            'categories',
+            'mainCategories',
+            'subCategories',
             'shops',
             'summary'
         ));
@@ -196,12 +252,23 @@ class AdminProductController extends Controller
     /**
      * Afficher le formulaire de création
      */
-    public function create()
+    public function create(Request $request)
     {
-        $categories = Category::orderBy('name')->get();
+        $this->shareSpaceContext();
+        $categories = Category::query()->active()->ordered()->get();
+        $mainCategories = $categories->whereNull('parent_id')->values();
+        $subCategories = $categories->whereNotNull('parent_id')->values();
         $shops = Shop::query()->with('user')->orderBy('name')->get();
+        $selectedShopId = $request->integer('shop_id') ?: null;
+        $selectedShop = $selectedShopId ? $shops->firstWhere('id', $selectedShopId) : null;
 
-        return view('admin.products.create', compact('categories', 'shops'));
+        return view('admin.products.create', compact(
+            'mainCategories',
+            'subCategories',
+            'shops',
+            'selectedShopId',
+            'selectedShop'
+        ));
     }
 
     /**
@@ -209,17 +276,18 @@ class AdminProductController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'shop_id' => 'required|exists:shops,id',
             'name' => 'required|string|max:255',
+            'main_category_id' => 'required|exists:categories,id',
             'category_id' => 'required|exists:categories,id',
             'sale_type' => 'required|string|max:255',
             'price' => 'required|numeric|min:1',
             'stock' => 'required|integer|min:0',
             'transport' => 'nullable|numeric|min:0',
             'description' => 'required|string',
-            'images' => 'required|array|min:1',
-            'images.*' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'images' => 'required|array|min:1|max:20',
+            'images.*' => 'required|image|mimes:jpeg,png,jpg,webp|max:5120',
             'promo_price' => 'nullable|numeric|min:0',
             'price_p1' => 'nullable|numeric|min:0',
             'price_p2' => 'nullable|numeric|min:0',
@@ -229,7 +297,6 @@ class AdminProductController extends Controller
             'bf_end' => 'nullable|date',
             'fast_delivery' => 'nullable|boolean',
             'brand' => 'nullable|string|max:255',
-            'sku' => 'nullable|string|max:120',
             'unit' => 'required|string|max:80',
             'min_order_quantity' => 'required|integer|min:1',
             'packaging' => 'nullable|string|max:255',
@@ -240,83 +307,150 @@ class AdminProductController extends Controller
             'fragile' => 'required|boolean',
             'requires_unloading' => 'required|boolean',
             'unloading_instructions' => 'nullable|required_if:requires_unloading,1|string|max:2000',
+        ], [
+            'main_category_id.required' => 'Sélectionnez une catégorie principale.',
+            'main_category_id.exists' => 'La catégorie principale sélectionnée est invalide.',
+            'category_id.required' => 'Sélectionnez une sous-catégorie.',
+            'category_id.exists' => 'La sous-catégorie sélectionnée est invalide.',
+            'images.max' => 'Vous pouvez ajouter au maximum 20 images par produit.',
         ]);
 
-        $isNegotiable =
-            !empty($request->price_p1) &&
-            !empty($request->price_p2) &&
-            !empty($request->price_p3);
+        $mainCategory = Category::query()->find((int) $validated['main_category_id']);
+        $subCategory = Category::query()->find((int) $validated['category_id']);
 
-        $product = Product::create([
-            'shop_id' => $request->shop_id,
-            'category_id' => $request->category_id,
-            'name' => $request->name,
-            'slug' => Str::slug($request->name) . '-' . uniqid(),
-            'sale_type' => $request->sale_type,
-            'description' => $request->description,
-            'brand' => $request->brand,
-            'sku' => $request->sku,
-            'unit' => $request->unit,
-            'min_order_quantity' => $request->min_order_quantity,
-            'packaging' => $request->packaging,
-            'weight' => $request->weight_kg,
-            'weight_kg' => $request->weight_kg,
-            'length_cm' => $request->length_cm,
-            'width_cm' => $request->width_cm,
-            'height_cm' => $request->height_cm,
-            'volume_m3' => round(((float) $request->length_cm * (float) $request->width_cm * (float) $request->height_cm) / 1000000, 6),
-            'fragile' => $request->boolean('fragile'),
-            'requires_unloading' => $request->boolean('requires_unloading'),
-            'unloading_instructions' => $request->boolean('requires_unloading') ? $request->unloading_instructions : null,
-            'price' => $request->price,
-            'stock' => $request->stock,
-            'transport' => $request->transport ?? 0,
-            'promo_price' => $request->promo_price,
-            'price_p1' => $request->price_p1,
-            'price_p2' => $request->price_p2,
-            'price_p3' => $request->price_p3,
-            'is_negotiable' => $isNegotiable,
-            'flash_end' => $request->flash_end,
-            'bf_start' => $request->bf_start,
-            'bf_end' => $request->bf_end,
-            'fast_delivery' => $request->has('fast_delivery') ? 1 : 0,
-            'is_active' => true,
-            'status' => 'actif',
-        ]);
-        $this->syncProductDeliveryZones($product, $request);
-        $firstImage = true;
-
-        foreach ($request->file('images') as $imgFile) {
-            $path = $imgFile->store('products', 'public');
-
-            ProductImage::create([
-                'product_id' => $product->id,
-                'path' => $path,
-                'is_main' => $firstImage,
+        if (! $mainCategory || $mainCategory->parent_id !== null) {
+            throw ValidationException::withMessages([
+                'main_category_id' => 'Sélectionnez une catégorie principale valide.',
             ]);
-
-            $firstImage = false;
         }
 
+        if (! $subCategory || (int) $subCategory->parent_id !== (int) $mainCategory->id) {
+            throw ValidationException::withMessages([
+                'category_id' => 'La sous-catégorie doit appartenir à la catégorie principale sélectionnée.',
+            ]);
+        }
+
+        $shop = Shop::query()->with('user')->findOrFail((int) $validated['shop_id']);
+        $checkoutBlocked = ! $shop->canPublishProducts();
+        $isNegotiable = ! empty($validated['price_p1']) && ! empty($validated['price_p2']) && ! empty($validated['price_p3']);
+
+        $normalizedUploads = [];
+        $normalizer = app(ProductImageNormalizer::class);
+
+        try {
+            foreach ($request->file('images', []) as $image) {
+                $normalizedUploads[] = $normalizer->normalize($image, 'products');
+            }
+        } catch (Throwable $exception) {
+            $this->deleteNormalizedUploads($normalizedUploads, $normalizer);
+            throw ValidationException::withMessages(['images' => $exception->getMessage()]);
+        }
+
+        try {
+            $product = DB::transaction(function () use ($request, $validated, $shop, $checkoutBlocked, $isNegotiable, $normalizedUploads) {
+                $product = Product::create([
+                    'shop_id' => $shop->id,
+                    'category_id' => $validated['category_id'],
+                    'name' => $validated['name'],
+                    'slug' => Str::slug($validated['name']) . '-' . uniqid(),
+                    'sale_type' => $validated['sale_type'],
+                    'description' => $validated['description'],
+                    'brand' => $validated['brand'] ?? null,
+                    'unit' => $validated['unit'],
+                    'min_order_quantity' => $validated['min_order_quantity'],
+                    'packaging' => $validated['packaging'] ?? null,
+                    'weight_kg' => $validated['weight_kg'],
+                    'length_cm' => $validated['length_cm'],
+                    'width_cm' => $validated['width_cm'],
+                    'height_cm' => $validated['height_cm'],
+                    'volume_m3' => round(((float) $validated['length_cm'] * (float) $validated['width_cm'] * (float) $validated['height_cm']) / 1000000, 6),
+                    'fragile' => $request->boolean('fragile'),
+                    'requires_unloading' => $request->boolean('requires_unloading'),
+                    'unloading_instructions' => $request->boolean('requires_unloading') ? ($validated['unloading_instructions'] ?? null) : null,
+                    'price' => $validated['price'],
+                    'stock' => $validated['stock'],
+                    'transport' => $validated['transport'] ?? 0,
+                    'promo_price' => $validated['promo_price'] ?? null,
+                    'price_p1' => $validated['price_p1'] ?? null,
+                    'price_p2' => $validated['price_p2'] ?? null,
+                    'price_p3' => $validated['price_p3'] ?? null,
+                    'is_negotiable' => $isNegotiable,
+                    'flash_end' => $validated['flash_end'] ?? null,
+                    'bf_start' => $validated['bf_start'] ?? null,
+                    'bf_end' => $validated['bf_end'] ?? null,
+                    'fast_delivery' => $request->boolean('fast_delivery'),
+                    // Une fiche complète créée par l'administration est publiée immédiatement.
+                    // L'éligibilité à la commande reste contrôlée séparément par la boutique au checkout.
+                    'is_active' => true,
+                    'status' => 'actif',
+                    'created_by_admin_id' => auth('admin')->id(),
+                    'updated_by_admin_id' => auth('admin')->id(),
+                    'created_on_behalf_of_vendor' => true,
+                    'admin_last_image_update_at' => now(),
+                    'product_attributes' => [
+                        'admin_assistance' => true,
+                        'admin_created_at' => now()->toIso8601String(),
+                        'admin_created_by' => auth('admin')->id(),
+                    ],
+                ]);
+
+                $this->syncProductDeliveryZones($product, $request);
+
+                foreach ($normalizedUploads as $index => $result) {
+                    $product->images()->create($this->normalizedImagePayload($result, $index === 0, $index));
+                }
+
+                return $product;
+            });
+        } catch (Throwable $exception) {
+            $this->deleteNormalizedUploads($normalizedUploads, $normalizer);
+            throw $exception;
+        }
+
+        app(ProductVariantService::class)->sync($product, $request);
+
+        $message = $checkoutBlocked
+            ? 'Produit ajouté et publié en ligne. La boutique reste toutefois bloquée au checkout tant que la logistique et le reversement ne sont pas régularisés.'
+            : 'Produit ajouté pour le vendeur et publié en ligne avec les images normalisées OVANIE.';
+
         return redirect()
-            ->route('admin.products.index')
-            ->with('success', 'Produit ajouté avec succès.');
+            ->route($this->productRoutes() . '.edit', $product)
+            ->with($checkoutBlocked ? 'warning' : 'success', $message);
     }
     /**
      * Afficher le formulaire d'édition.
      */
     public function edit(Product $product)
     {
-        $categories = Category::query()->orderBy('name')->get();
+        $this->shareSpaceContext();
+        $categories = Category::query()->active()->ordered()->get();
+        $mainCategories = $categories->whereNull('parent_id')->values();
+        $subCategories = $categories->whereNotNull('parent_id')->values();
 
         $product->load([
             'images',
-            'category',
+            'variants',
+            'category.parent',
             'shop.user',
             'masterProduct',
         ]);
 
-        return view('admin.products.edit', compact('product', 'categories'));
+        $selectedMainCategoryId = old(
+            'main_category_id',
+            $product->category?->parent_id ?: $product->category_id
+        );
+        $selectedSubCategoryId = old(
+            'category_id',
+            $product->category?->parent_id ? $product->category_id : null
+        );
+
+        return view('admin.products.edit', compact(
+            'product',
+            'mainCategories',
+            'subCategories',
+            'selectedMainCategoryId',
+            'selectedSubCategoryId'
+        ));
     }
 
     /**
@@ -327,9 +461,9 @@ class AdminProductController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'brand' => ['nullable', 'string', 'max:120'],
-            'sku' => ['nullable', 'string', 'max:120'],
             'type' => ['nullable', 'string', 'max:120'],
             'product_state' => ['required', Rule::in(['new', 'used', 'refurbished'])],
+            'main_category_id' => ['required', 'exists:categories,id'],
             'category_id' => ['required', 'exists:categories,id'],
             'sale_type' => ['required', 'string', 'max:80'],
             'short_description' => ['nullable', 'string', 'max:500'],
@@ -341,7 +475,6 @@ class AdminProductController extends Controller
             'stock' => ['required', 'integer', 'min:0'],
             'availability_status' => ['required', Rule::in(['in_stock', 'out_of_stock', 'on_order', 'preorder'])],
             'unit' => ['required', 'string', 'max:80'],
-            'unit_label' => ['nullable', 'string', 'max:120'],
             'min_order_quantity' => ['required', 'integer', 'min:1'],
             'packaging' => ['nullable', 'string', 'max:255'],
 
@@ -358,14 +491,6 @@ class AdminProductController extends Controller
                 'max:2000',
             ],
 
-            'status' => ['required', Rule::in([
-                'draft',
-                'actif',
-                'pending_logistics',
-                'inactive',
-                'archived',
-            ])],
-            'is_active' => ['required', 'boolean'],
             'fast_delivery' => ['required', 'boolean'],
             'commission_paid' => ['required', 'boolean'],
             'lock_contacts' => ['required', 'boolean'],
@@ -375,7 +500,7 @@ class AdminProductController extends Controller
             'bf_start' => ['nullable', 'date'],
             'bf_end' => ['nullable', 'date', 'after_or_equal:bf_start'],
 
-            'images' => ['nullable', 'array', 'max:8'],
+            'images' => ['nullable', 'array', 'max:20'],
             'images.*' => ['image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
             'remove_images' => ['nullable', 'array'],
             'remove_images.*' => [
@@ -394,8 +519,23 @@ class AdminProductController extends Controller
         ], [
             'promo_price.lt' => 'Le prix promotionnel doit être inférieur au prix normal.',
             'unloading_instructions.required' => 'Précisez les instructions de déchargement.',
-            'images.max' => 'Vous pouvez ajouter au maximum 8 nouvelles images.',
+            'images.max' => 'Vous pouvez ajouter au maximum 20 nouvelles images.',
         ]);
+
+        $mainCategory = Category::query()->find((int) $validated['main_category_id']);
+        $subCategory = Category::query()->find((int) $validated['category_id']);
+
+        if (! $mainCategory || $mainCategory->parent_id !== null) {
+            throw ValidationException::withMessages([
+                'main_category_id' => 'Sélectionnez une catégorie principale valide.',
+            ]);
+        }
+
+        if (! $subCategory || (int) $subCategory->parent_id !== (int) $mainCategory->id) {
+            throw ValidationException::withMessages([
+                'category_id' => 'La sous-catégorie doit appartenir à la catégorie principale sélectionnée.',
+            ]);
+        }
 
         $validated['volume_m3'] = round(
             ((float) $validated['length_cm']
@@ -403,19 +543,12 @@ class AdminProductController extends Controller
                 * (float) $validated['height_cm']) / 1_000_000,
             6
         );
-        $validated['weight'] = $validated['weight_kg'];
         $validated['slug'] = Str::slug($validated['name']) . '-' . $product->id;
         $validated['unloading_instructions'] = $request->boolean('requires_unloading')
             ? ($validated['unloading_instructions'] ?? null)
             : null;
-        $validated['archived_at'] = $validated['status'] === 'archived' ? now() : null;
-
         if ((int) $validated['stock'] === 0) {
             $validated['availability_status'] = 'out_of_stock';
-        }
-
-        if (in_array($validated['status'], ['draft', 'pending_logistics', 'inactive', 'archived'], true)) {
-            $validated['is_active'] = false;
         }
 
         $normalizedUploads = [];
@@ -443,11 +576,26 @@ class AdminProductController extends Controller
                 $normalizedUploads,
                 &$imagesToDelete
             ) {
-                $product->update(collect($validated)->except([
+                $productUpdate = collect($validated)->except([
+                    'main_category_id',
                     'images',
                     'remove_images',
                     'main_image',
-                ])->all());
+                ])->all();
+                $productUpdate['updated_by_admin_id'] = auth('admin')->id();
+                if ($normalizedUploads !== [] || ! empty($validated['remove_images']) || ! empty($validated['main_image'])) {
+                    $productUpdate['admin_last_image_update_at'] = now();
+                }
+
+                $attributes = (array) ($product->product_attributes ?? []);
+                if (($attributes['commercial_capture'] ?? false) === true) {
+                    $attributes['admin_completion_required'] = false;
+                    $attributes['admin_completed_at'] = now()->toIso8601String();
+                    $attributes['admin_completed_by'] = auth('admin')->id();
+                    $productUpdate['product_attributes'] = $attributes;
+                }
+
+                $product->update($productUpdate);
 
                 $removeIds = collect($validated['remove_images'] ?? [])
                     ->map(fn ($id) => (int) $id)
@@ -495,12 +643,45 @@ class AdminProductController extends Controller
                     }
                 }
 
+                if (! $product->images()->exists()) {
+                    throw ValidationException::withMessages([
+                        'images' => 'Une image produit est obligatoire avant la publication.',
+                    ]);
+                }
+
+                // Toute fiche enregistrée par l'administration est remise en ligne.
+                // La configuration boutique ne masque pas le produit : elle bloque la commande au checkout.
+                $publishPayload = [
+                    'status' => 'actif',
+                    'is_active' => true,
+                ];
+
+                $productTable = $product->getTable();
+                if (Schema::hasColumn($productTable, 'archived_at')) {
+                    $publishPayload['archived_at'] = null;
+                }
+                if (Schema::hasColumn($productTable, 'archived_by')) {
+                    $publishPayload['archived_by'] = null;
+                }
+                if (Schema::hasColumn($productTable, 'archive_reason')) {
+                    $publishPayload['archive_reason'] = null;
+                }
+
+                $attributes = (array) ($product->product_attributes ?? []);
+                $attributes['admin_published_at'] = now()->toIso8601String();
+                $attributes['admin_published_by'] = auth('admin')->id();
+                $publishPayload['product_attributes'] = $attributes;
+
+                $product->forceFill($publishPayload)->save();
+
                 $this->syncProductDeliveryZones($product, $request);
             });
         } catch (Throwable $exception) {
             $this->deleteNormalizedUploads($normalizedUploads, $normalizer);
             throw $exception;
         }
+
+        app(ProductVariantService::class)->sync($product, $request);
 
         foreach ($imagesToDelete as $image) {
             $this->deleteProductImageFiles($image);
@@ -509,27 +690,31 @@ class AdminProductController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Produit mis à jour avec succès.',
+                'message' => 'Produit mis à jour et publié en ligne.',
                 'product_id' => $product->id,
             ]);
         }
 
+        $product->loadMissing('shop');
+        $checkoutBlocked = ! $product->shop || ! $product->shop->canPublishProducts();
+
         return redirect()
-            ->route('admin.products.edit', $product)
-            ->with('success', 'Les modifications du produit ont été enregistrées.');
+            ->route($this->productRoutes() . '.edit', $product)
+            ->with($checkoutBlocked ? 'warning' : 'success', $checkoutBlocked
+                ? 'Les modifications sont en ligne. Le checkout reste bloqué pour cette boutique tant que la logistique et le reversement ne sont pas conformes.'
+                : 'Les modifications ont été enregistrées et le produit est en ligne.');
     }
 
-    public function show(Request $request, Product $product, ProductCalculatorService $calculatorService)
+    public function show(Request $request, Product $product)
     {
+        $this->shareSpaceContext();
         $product->load([
             'images',
+            'variants',
             'category.parent',
             'shop.user',
             'masterProduct',
-            'reviews' => fn ($query) => $query->with('user:id,name')->latest()->limit(4),
         ]);
-
-        $product->loadCount('reviews')->loadAvg('reviews', 'rating');
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -552,12 +737,7 @@ class AdminProductController extends Controller
             ]);
         }
 
-        return view('products.show', [
-            'product' => $product,
-            'similarProducts' => collect(),
-            'calculatorProfile' => $calculatorService->profile($product),
-            'isFavorite' => false,
-        ]);
+        return view('admin.products.show', compact('product'));
     }
 
     /**
@@ -581,6 +761,9 @@ class AdminProductController extends Controller
      */
     public function destroy(Product $product)
     {
+        // Le Support ajoute et modifie, mais ne supprime jamais un produit.
+        abort_if($this->inSupportSpace(), 403, 'La suppression d’un produit est réservée à l’administration.');
+
         $hasOrderHistory = $product->orderItems()->exists();
 
         if ($hasOrderHistory) {

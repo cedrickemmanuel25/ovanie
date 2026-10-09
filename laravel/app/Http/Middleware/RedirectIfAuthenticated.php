@@ -18,6 +18,20 @@ class RedirectIfAuthenticated
 
             $user = Auth::guard($guard)->user();
 
+            if ($guard === 'pro') {
+                if ((string) ($user->status ?? '') !== 'active') {
+                    Auth::guard('pro')->logout();
+                    continue;
+                }
+
+                return redirect()->route('catalog.business');
+            }
+
+            // Un livreur déjà connecté retourne sur son propre espace, pas sur le tableau de bord client.
+            if ($guard === 'driver') {
+                return redirect()->route('driver.dashboard');
+            }
+
             if ((string) ($user->status ?? '') !== 'active') {
                 Auth::guard($guard)->logout();
                 continue;

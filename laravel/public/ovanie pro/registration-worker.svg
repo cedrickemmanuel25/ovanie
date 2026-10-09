@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 445 510" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#315D82"/><stop offset="1" stop-color="#8AA6B8"/></linearGradient>
+    <linearGradient id="vest" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#B6D936"/><stop offset="1" stop-color="#6C9D2B"/></linearGradient>
+    <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#A86739"/><stop offset="1" stop-color="#6F3C22"/></linearGradient>
+  </defs>
+  <rect width="445" height="510" fill="url(#sky)"/>
+  <g opacity=".42" stroke="#D6E0E8" stroke-width="5" fill="none">
+    <path d="M335 0v205M270 32h160M307 32l52-32M350 32l64 78M286 70h126M316 0l-40 110M379 0l38 110"/>
+    <path d="M40 355V170h82v185M58 355V210h48v145M30 355h105"/>
+  </g>
+  <g opacity=".22" fill="#EAF0F4"><rect x="10" y="315" width="155" height="110"/><rect x="145" y="285" width="115" height="140"/></g>
+  <!-- worker -->
+  <g transform="translate(218 72)">
+    <ellipse cx="113" cy="93" rx="56" ry="61" fill="url(#skin)"/>
+    <path d="M62 88c0-44 21-75 56-75 32 0 53 26 55 65-18-8-35-11-54-11-22 0-39 7-57 21Z" fill="#17304A"/>
+    <path d="M57 58c7-34 28-53 60-53 33 0 53 19 61 53l-17 6c-6-24-20-35-44-35-24 0-40 12-45 35Z" fill="#F4F4F0" stroke="#CFD5D8" stroke-width="4"/>
+    <path d="M49 63c23-9 46-13 70-13 27 0 50 5 70 14" fill="none" stroke="#E9E9E4" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="92" cy="96" r="3" fill="#162331"/><circle cx="136" cy="96" r="3" fill="#162331"/>
+    <path d="M109 102c1 9 0 15-4 19" fill="none" stroke="#5C311F" stroke-width="3" stroke-linecap="round"/>
+    <path d="M91 129c14 12 31 12 44 0" fill="none" stroke="#3B241A" stroke-width="4" stroke-linecap="round"/>
+    <path d="M76 117c2 23 17 41 39 41 23 0 38-18 41-42-8 19-20 28-40 28-19 0-32-9-40-27Z" fill="#1E2B32" opacity=".9"/>
+    <path d="M74 157c23 16 58 16 82 0l35 43 15 198H27l13-198Z" fill="#19314C"/>
+    <path d="M48 183 8 214l35 183h46L77 221Z" fill="url(#vest)"/>
+    <path d="M170 183 211 214l-35 183h-46l12-176Z" fill="url(#vest)"/>
+    <path d="M53 194 77 220M176 194l-34 27" stroke="#EAF8B1" stroke-width="7" opacity=".85"/>
+    <path d="M59 281h110" stroke="#EAF8B1" stroke-width="9" opacity=".85"/>
+    <path d="M15 285c9-28 27-43 51-45l15 59-32 41Z" fill="url(#skin)"/>
+    <path d="M197 283c-9-26-25-40-48-42l-12 62 31 36Z" fill="url(#skin)"/>
+    <g transform="translate(62 255) rotate(-5)">
+      <rect x="0" y="0" width="102" height="128" rx="9" fill="#253847" stroke="#8095A2" stroke-width="4"/>
+      <rect x="8" y="10" width="86" height="105" rx="4" fill="#B9CAD2"/>
+      <circle cx="51" cy="121" r="3" fill="#85949D"/>
+    </g>
+    <path d="M45 322c20-5 31 2 41 19M168 320c-22-4-31 4-41 20" fill="none" stroke="#7A4428" stroke-width="12" stroke-linecap="round"/>
+  </g>
+</svg>

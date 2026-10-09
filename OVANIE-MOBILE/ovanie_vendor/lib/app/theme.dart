@@ -50,6 +50,19 @@ class OvanieTheme {
           side: const BorderSide(color: OvanieColors.border),
         ),
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titleTextStyle: const TextStyle(color: OvanieColors.navy, fontSize: 19, fontWeight: FontWeight.w700),
+        contentTextStyle: const TextStyle(color: OvanieColors.muted, fontSize: 15, height: 1.4),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: OvanieColors.navy,
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,

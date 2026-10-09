@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Cart;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Services\LogisticsVehicleResolver;
 use App\Services\OvanieDeliveryPriceCalculator;
 use App\Services\PublicProductVisibilityService;
@@ -16,7 +17,7 @@ class CartController extends Controller
     protected function computeTotals(object $cart): array
     {
         if ($cart instanceof Cart) {
-            $cart->loadMissing('items.product');
+            $cart->loadMissing(['items.product', 'items.variant']);
         }
 
         $subtotal = (int) $cart->items->sum(function ($item) {
@@ -41,7 +42,7 @@ class CartController extends Controller
 
     protected function normalizeCartQuantities(Cart $cart, PublicProductVisibilityService $visibility): array
     {
-        $cart->load('items.product');
+        $cart->load(['items.product.variants', 'items.variant']);
 
         $messages = [];
         $eligibleProductIds = $visibility->query([], false)
@@ -59,7 +60,27 @@ class CartController extends Controller
                 continue;
             }
 
-            $stock = max((int) ($product->stock ?? 0), 0);
+            $activeVariants = $product->variants->where('is_active', true);
+            if ($activeVariants->isNotEmpty() && ! $item->variant) {
+                $item->delete();
+                $messages[] = "{$product->name} possède plusieurs modèles/couleurs. L'ancienne ligne a été retirée : choisissez le modèle exact sur la fiche produit.";
+                continue;
+            }
+
+            if ($item->variant) {
+                $variantImage = $item->variant->card_url ?: $item->variant->image_url;
+                $dirtySnapshot = $item->variant_label_snapshot !== $item->variant->label
+                    || (string) $item->variant_image_snapshot !== (string) $variantImage;
+
+                if ($dirtySnapshot) {
+                    $item->forceFill([
+                        'variant_label_snapshot' => $item->variant->label,
+                        'variant_image_snapshot' => $variantImage ?: null,
+                    ])->save();
+                }
+            }
+
+            $stock = max((int) ($item->variant?->stock ?? $product->stock ?? 0), 0);
             $minimum = max(1, (int) ($product->min_order_quantity ?? 1));
 
             if ($stock < $minimum) {
@@ -114,6 +135,7 @@ class CartController extends Controller
                 'items.product.category',
                 'items.product.shop',
                 'items.product.images',
+                'items.variant',
             ]);
         } else {
             $snapshot = $guestCart->snapshot($request);
@@ -203,12 +225,24 @@ class CartController extends Controller
     {
         $request->validate([
             'quantity' => 'nullable|integer|min:1|max:1000000',
+            'product_variant_id' => 'nullable|integer|exists:product_variants,id',
         ]);
 
         $user = $request->user();
         $product = Product::findOrFail($productId);
         $quantity = (int) $request->input('quantity', 1);
-        $stock = max((int) ($product->stock ?? 0), 0);
+        $variant = null;
+        $variantId = $request->integer('product_variant_id') ?: null;
+        if ($product->variants()->where('is_active', true)->exists()) {
+            if (! $variantId) {
+                return $this->stockErrorResponse($request, 'Choisissez un modèle ou une couleur avant d’ajouter ce produit au panier.');
+            }
+            $variant = $product->variants()->whereKey($variantId)->where('is_active', true)->first();
+            if (! $variant) {
+                return $this->stockErrorResponse($request, 'Le modèle sélectionné n’est plus disponible.');
+            }
+        }
+        $stock = max((int) ($variant?->stock ?? $product->stock ?? 0), 0);
         $minimum = max(1, (int) ($product->min_order_quantity ?? 1));
 
         $isPubliclyEligible = $visibility->query([], false)
@@ -234,11 +268,11 @@ class CartController extends Controller
         if (! $user) {
             /** @var GuestCartService $guestCart */
             $guestCart = app(GuestCartService::class);
-            $currentQuantity = $guestCart->quantityFor($request, (int) $product->id);
+            $currentQuantity = $guestCart->quantityFor($request, (int) $product->id, $variantId);
             $newQuantity = $currentQuantity + $quantity;
 
             if ($newQuantity > $stock) {
-                $guestCart->update($request, (int) $product->id, $stock);
+                $guestCart->update($request, (int) $product->id, $stock, $variantId);
                 $snapshot = $guestCart->snapshot($request);
 
                 return $this->stockErrorResponse(
@@ -248,7 +282,7 @@ class CartController extends Controller
                 );
             }
 
-            $guestCart->add($request, $product, $quantity);
+            $guestCart->add($request, $product, $quantity, $variant);
             $snapshot = $guestCart->snapshot($request);
             $cart = $snapshot['cart'];
 
@@ -275,8 +309,10 @@ class CartController extends Controller
         }
 
         $cart = Cart::firstOrCreate(['user_id' => $user->id]);
-        $item = $cart->items()->where('product_id', $product->id)->first();
-        $unitPrice = $product->final_price ?? $product->price ?? 0;
+        $item = $cart->items()->where('product_id', $product->id)
+            ->where('product_variant_id', $variantId)
+            ->first();
+        $unitPrice = $variant?->price_override ?? $product->final_price ?? $product->price ?? 0;
 
         if ($item) {
             $isNegotiated = $item->price_source === 'negotiated';
@@ -284,6 +320,11 @@ class CartController extends Controller
 
             if ($newQuantity > $stock) {
                 $item->quantity = $stock;
+                if ($variant) {
+                    $item->product_variant_id = $variant->id;
+                    $item->variant_label_snapshot = $variant->label;
+                    $item->variant_image_snapshot = $variant->card_url ?: $variant->image_url;
+                }
                 if (! $isNegotiated) {
                     $item->price = $unitPrice;
                     $item->price_source = 'catalog';
@@ -301,6 +342,11 @@ class CartController extends Controller
             }
 
             $item->quantity = $newQuantity;
+            if ($variant) {
+                $item->product_variant_id = $variant->id;
+                $item->variant_label_snapshot = $variant->label;
+                $item->variant_image_snapshot = $variant->card_url ?: $variant->image_url;
+            }
             if (! $isNegotiated) {
                 $item->price = $unitPrice;
                 $item->price_source = 'catalog';
@@ -310,6 +356,9 @@ class CartController extends Controller
         } else {
             $item = $cart->items()->create([
                 'product_id' => $product->id,
+                'product_variant_id' => $variant?->id,
+                'variant_label_snapshot' => $variant?->label,
+                'variant_image_snapshot' => $variant ? ($variant->card_url ?: $variant->image_url) : null,
                 'original_product_id' => $product->id,
                 'fulfillment_product_id' => $product->id,
                 'original_shop_id' => $product->shop_id,
@@ -352,16 +401,24 @@ class CartController extends Controller
     {
         $request->validate([
             'quantity' => 'required|integer|min:1|max:1000000',
+            'product_variant_id' => 'nullable|integer|exists:product_variants,id',
         ]);
 
         $product = Product::findOrFail($productId);
+        $variantId = $request->integer('product_variant_id') ?: null;
+        $variant = $variantId
+            ? $product->variants()->whereKey($variantId)->where('is_active', true)->first()
+            : null;
+        if ($product->variants()->where('is_active', true)->exists() && ! $variant) {
+            return $this->stockErrorResponse($request, 'Le modèle sélectionné n’est plus disponible.');
+        }
         $user = $request->user();
 
         if (! $user) {
             /** @var GuestCartService $guestCart */
             $guestCart = app(GuestCartService::class);
 
-            if ($guestCart->quantityFor($request, (int) $productId) <= 0) {
+            if ($guestCart->quantityFor($request, (int) $productId, $variantId) <= 0) {
                 abort(404);
             }
 
@@ -370,19 +427,19 @@ class CartController extends Controller
                 ->exists();
 
             if (! $isPubliclyEligible) {
-                $guestCart->remove($request, (int) $productId);
+                $guestCart->remove($request, (int) $productId, $variantId);
                 $snapshot = $guestCart->snapshot($request);
                 return $this->stockErrorResponse($request, 'Ce produit n’est plus disponible et a été retiré du panier.', $snapshot['cart']);
             }
 
-            $stock = max((int) ($product->stock ?? 0), 0);
+            $stock = max((int) ($variant?->stock ?? $product->stock ?? 0), 0);
             $minimum = max(1, (int) ($product->min_order_quantity ?? 1));
             $quantity = (int) $request->quantity;
 
             if ($stock < $minimum) {
-                $guestCart->remove($request, (int) $productId);
+                $guestCart->remove($request, (int) $productId, $variantId);
                 $snapshot = $guestCart->snapshot($request);
-                return $this->stockErrorResponse($request, 'Ce produit est en rupture de stock et a été retiré du panier.', $snapshot['cart']);
+                return $this->stockErrorResponse($request, 'Ce modèle est en rupture de stock et a été retiré du panier.', $snapshot['cart']);
             }
 
             if ($quantity < $minimum) {
@@ -391,14 +448,15 @@ class CartController extends Controller
             }
 
             $quantity = min($quantity, $stock);
-            $guestCart->update($request, (int) $productId, $quantity);
+            $guestCart->update($request, (int) $productId, $quantity, $variantId);
             $snapshot = $guestCart->snapshot($request);
             $cart = $snapshot['cart'];
+            $unitPrice = (float) ($variant?->price_override ?? $product->final_price ?? $product->price ?? 0);
 
             if ($request->expectsJson()) {
                 return $this->cartJson($cart, true, "Quantité mise à jour. Stock disponible : {$stock}.", [
                     'item_quantity' => $quantity,
-                    'line_total' => (float) ($product->final_price ?? $product->price ?? 0) * $quantity,
+                    'line_total' => $unitPrice * $quantity,
                 ]);
             }
 
@@ -406,7 +464,11 @@ class CartController extends Controller
         }
 
         $cart = Cart::firstOrCreate(['user_id' => $user->id]);
-        $item = $cart->items()->where('product_id', $productId)->firstOrFail();
+        $item = $cart->items()
+            ->where('product_id', $productId)
+            ->where('product_variant_id', $variantId)
+            ->firstOrFail();
+        $item->loadMissing('variant');
 
         $isPubliclyEligible = $visibility->query([], false)
             ->whereKey($product->getKey())
@@ -415,49 +477,31 @@ class CartController extends Controller
         if (! $isPubliclyEligible) {
             $item->delete();
             $this->persistCartTotals($cart);
-
             return $this->stockErrorResponse($request, 'Ce produit n’est plus disponible et a été retiré du panier.', $cart);
         }
 
-        $stock = max((int) ($product->stock ?? 0), 0);
+        $stock = max((int) ($item->variant?->stock ?? $product->stock ?? 0), 0);
         $minimum = max(1, (int) ($product->min_order_quantity ?? 1));
         $quantity = (int) $request->quantity;
 
         if ($stock < $minimum) {
             $item->delete();
             $this->persistCartTotals($cart);
-
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Ce produit est en rupture de stock et a été retiré du panier.',
-                ], 422);
-            }
-
-            return redirect()->route('cart.index')
-                ->with('error', 'Ce produit est en rupture de stock et a été retiré du panier.');
+            return $this->stockErrorResponse($request, 'Ce modèle est en rupture de stock et a été retiré du panier.', $cart);
         }
 
         if ($quantity < $minimum) {
-            return $this->stockErrorResponse(
-                $request,
-                "La quantité minimale de commande est de {$minimum} unité(s).",
-                $cart
-            );
+            return $this->stockErrorResponse($request, "La quantité minimale de commande est de {$minimum} unité(s).", $cart);
         }
 
-        if ($quantity > $stock) {
-            $quantity = $stock;
-        }
-
+        $quantity = min($quantity, $stock);
         $item->quantity = $quantity;
         if (($item->price_source ?? 'catalog') !== 'negotiated') {
-            $item->price = $product->final_price ?? $product->price ?? 0;
+            $item->price = $item->variant?->price_override ?? $product->final_price ?? $product->price ?? 0;
             $item->price_source = 'catalog';
             $item->negotiation_id = null;
         }
         $item->save();
-
         $this->persistCartTotals($cart);
 
         if ($request->expectsJson()) {
@@ -472,10 +516,17 @@ class CartController extends Controller
 
     public function remove(Request $request, $productId)
     {
+        // Pas de contrôle « le modèle existe » ici : un article dont le modèle a été retiré
+        // du catalogue doit pouvoir être supprimé du panier comme les autres.
+        $request->validate([
+            'product_variant_id' => 'nullable|integer',
+        ]);
+        $variantId = $request->integer('product_variant_id') ?: null;
+
         if (! $request->user()) {
             /** @var GuestCartService $guestCart */
             $guestCart = app(GuestCartService::class);
-            $guestCart->remove($request, (int) $productId);
+            $guestCart->remove($request, (int) $productId, $variantId);
             $snapshot = $guestCart->snapshot($request);
 
             if ($request->expectsJson()) {
@@ -486,9 +537,15 @@ class CartController extends Controller
         }
 
         $cart = Cart::where('user_id', $request->user()->id)->first();
-
         if ($cart) {
-            $cart->items()->where('product_id', $productId)->delete();
+            $removed = $cart->items()
+                ->where('product_id', $productId)
+                ->where('product_variant_id', $variantId)
+                ->delete();
+            // Ligne enregistrée avec un autre modèle que celui envoyé par la page : on retire le produit quand même.
+            if ($removed === 0) {
+                $cart->items()->where('product_id', $productId)->delete();
+            }
             $this->persistCartTotals($cart);
         }
 
@@ -528,6 +585,7 @@ class CartController extends Controller
 
         if ($cart) {
             $cart->items()->delete();
+            \App\Support\LiveSync::touchUser((int) $cart->user_id, 'cart');
             $cart->delivery_fee = 0;
             $cart->grand_total = 0;
             $cart->save();
@@ -591,7 +649,7 @@ class CartController extends Controller
         }
 
         if ($cart instanceof Cart) {
-            $cart->load('items.product');
+            $cart->load(['items.product', 'items.variant']);
         }
         $totals = $this->computeTotals($cart);
 

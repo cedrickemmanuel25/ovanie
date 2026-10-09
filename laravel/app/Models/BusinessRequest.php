@@ -8,6 +8,7 @@ class BusinessRequest extends Model
 {
     protected $fillable = [
         'user_id',
+        'pro_user_id',
         'title',
         'description',
         'sector',
@@ -24,6 +25,11 @@ class BusinessRequest extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function proUser()
+    {
+        return $this->belongsTo(ProUser::class, 'pro_user_id');
     }
 
     /**

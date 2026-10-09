@@ -157,17 +157,8 @@ class _MissionListScreenState extends State<MissionListScreen> {
         children: [
           MissionPageHeader(
             title: 'Mes missions',
-            subtitle: 'Missions disponibles, réservées et en cours',
+            subtitle: '',
             mainPage: true,
-            trailing: MissionNotificationButton(
-              count: data?.unreadNotifications ?? 0,
-              onTap: () => showMissionSnack(
-                context,
-                data?.unreadNotifications == 0
-                    ? 'Aucune nouvelle notification.'
-                    : '${data?.unreadNotifications ?? 0} notification(s) non lue(s).',
-              ),
-            ),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -217,7 +208,7 @@ class _MissionListScreenState extends State<MissionListScreen> {
                           onAccept: visible[i].isToAccept ? () => _accept(visible[i]) : null,
                           onReject: visible[i].isToAccept ? () => _reject(visible[i]) : null,
                         ),
-                        if (i != visible.length - 1) const SizedBox(height: 12),
+                        if (i != visible.length - 1) const SizedBox(height: 10),
                       ],
                     ],
                   if (_loading && data != null) ...[
@@ -466,188 +457,145 @@ class _MissionListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: mission.isToAccept ? const Color(0xFFF5E2BD) : MissionPalette.cardBorder,
-        ),
-        boxShadow: const [
-          BoxShadow(color: Color(0x0A0B3A25), blurRadius: 14, offset: Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Mission ${mission.missionNumber}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: MissionPalette.navy,
-                        fontSize: 17.2,
-                        height: 1.1,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -.25,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Commande ${mission.orderNumber ?? '—'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: MissionPalette.slate,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 9),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 155),
-                child: MissionStatusPill.forMission(mission),
-              ),
-            ],
-          ),
-          const SizedBox(height: 13),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 6,
-                child: Column(
-                  children: [
-                    if (mission.netAmount > 0)
-                      MissionInfoRow(
-                        icon: Icons.payments_rounded,
-                        label: 'Vous gagnez',
-                        labelWidth: 72,
-                        value: missionMoney(mission.netAmount),
-                      ),
-                    MissionInfoRow(
-                      icon: Icons.schedule_rounded,
-                      label: 'Heure prévue',
-                      labelWidth: 72,
-                      value: missionTime(mission.pickupScheduledAt),
-                    ),
-                    MissionInfoRow(
-                      icon: Icons.location_on_rounded,
-                      label: 'Destination',
-                      labelWidth: 72,
-                      value: mission.displayDestination,
-                    ),
-                    MissionInfoRow(
-                      icon: Icons.inventory_2_outlined,
-                      label: 'Collectes',
-                      labelWidth: 72,
-                      value: '${mission.pickupCount} point${mission.pickupCount > 1 ? 's' : ''} de collecte',
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 84,
-                margin: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                color: const Color(0xFFDDE4EC),
-              ),
-              Expanded(
-                flex: 4,
-                child: Column(
-                  children: [
-                    MissionInfoRow(
-                      icon: Icons.scale_outlined,
-                      label: 'Poids',
-                      labelWidth: 46,
-                      value: missionWeight(mission.totalWeightKg),
-                    ),
-                    MissionInfoRow(
-                      icon: Icons.local_shipping_rounded,
-                      label: 'Véhicule',
-                      labelWidth: 46,
-                      value: mission.vehicleLabel ?? '—',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          const Text(
-            'Préparation de la commande',
-            style: TextStyle(
-              color: MissionPalette.slate,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
+    final meta = <String>[
+      missionTime(mission.pickupScheduledAt),
+      '${mission.pickupCount} collecte${mission.pickupCount > 1 ? 's' : ''}',
+      '${mission.itemCount} article${mission.itemCount > 1 ? 's' : ''}',
+      missionWeight(mission.totalWeightKg),
+    ].where((e) => e.trim().isNotEmpty && e.trim() != '—').join(' · ');
+    final showPreparation = !mission.isDelivered && !mission.isInProgress && mission.preparationPercent < 100;
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: mission.isToAccept ? const Color(0xFFF1D9A8) : MissionPalette.cardBorder,
             ),
           ),
-          const SizedBox(height: 6),
-          MissionProgress(value: mission.preparationPercent),
-          const SizedBox(height: 11),
-          if (mission.isOffered)
-            const MissionTintMessage(
-              text: 'Vous pouvez réserver cette mission maintenant. La collecte restera bloquée tant que les vendeurs ne sont pas prêts.',
-              warning: true,
-              icon: Icons.info_outline_rounded,
-            )
-          else if (mission.isAccepted)
-            MissionTintMessage(
-              text: mission.canStart
-                  ? 'Tous les vendeurs sont prêts — la collecte peut démarrer.'
-                  : 'Mission réservée — ${mission.preparationLabel}. Attendez le signal de collecte.',
-              warning: !mission.canStart,
-              icon: mission.canStart ? Icons.check_circle_rounded : Icons.hourglass_top_rounded,
-            )
-          else if (mission.isCollecting || mission.isInProgress)
-            MissionTintMessage(
-              text: mission.statusLabel.trim().isEmpty ? 'Mission en cours' : mission.statusLabel,
-              icon: Icons.play_arrow_rounded,
-            ),
-          const SizedBox(height: 10),
-          if (mission.isToAccept)
-            Row(
-              children: [
-                Expanded(
-                  child: MissionOutlineButton(
-                    label: 'Refuser',
-                    danger: true,
-                    loading: busy,
-                    onPressed: onReject,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      mission.missionNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: MissionPalette.navy, fontSize: 15, fontWeight: FontWeight.w800),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: MissionPrimaryButton(
-                    label: 'Réserver',
-                    loading: busy,
-                    onPressed: onAccept,
+                  if (mission.netAmount > 0)
+                    Text(
+                      missionMoney(mission.netAmount),
+                      style: const TextStyle(color: OvanieColors.green, fontSize: 15, fontWeight: FontWeight.w800),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.place_outlined, size: 16, color: MissionPalette.slate),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      mission.displayDestination,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: MissionPalette.navy, fontSize: 13.5),
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                meta,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: MissionPalette.slate, fontSize: 12.5),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Flexible(child: MissionStatusPill.forMission(mission)),
+                  if (showPreparation) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: mission.preparationPercent.clamp(0, 100) / 100,
+                                minHeight: 4,
+                                color: OvanieColors.green,
+                                backgroundColor: const Color(0xFFE3EEE8),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${mission.preparationPercent.clamp(0, 100)} %',
+                            style: const TextStyle(color: MissionPalette.slate, fontSize: 11.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else
+                    const Spacer(),
+                  if (!mission.isToAccept) const Icon(Icons.chevron_right_rounded, color: MissionPalette.slate),
+                ],
+              ),
+              if (mission.isToAccept) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 40,
+                        child: OutlinedButton(
+                          onPressed: busy ? null : onReject,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFC62828),
+                            side: const BorderSide(color: Color(0xFFF0C4C4)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: const Text('Refuser', style: TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SizedBox(
+                        height: 40,
+                        child: FilledButton(
+                          onPressed: busy ? null : onAccept,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: OvanieColors.green,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: busy
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Text('Réserver', style: TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            )
-          else
-            mission.isInProgress
-                ? MissionPrimaryButton(
-                    label: 'Suivre la mission',
-                    onPressed: onOpen,
-                  )
-                : MissionOutlineButton(
-                    label: 'Voir la mission',
-                    onPressed: onOpen,
-                  ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

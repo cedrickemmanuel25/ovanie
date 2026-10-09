@@ -21,7 +21,7 @@ class SupportCallbackController extends Controller
     {
         $data = $request->validate([
             'status' => ['required', Rule::in(['pending', 'scheduled', 'completed', 'cancelled'])],
-            'assigned_to' => ['nullable', 'exists:users,id'],
+            'assigned_to' => ['nullable', Rule::exists('users', 'id')->whereIn('role', ['admin', 'support', 'logistique', 'commercial'])],
             'preferred_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:3000'],
         ]);

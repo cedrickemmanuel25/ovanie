@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
 import '../data/auth_repository.dart';
 import 'auth_branding.dart';
@@ -75,7 +74,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   void _support() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Support OVANIE : 01 61 78 18 18')),
+      const SnackBar(content: Text('Support client : 01 61 78 18 18')),
     );
   }
 
@@ -87,74 +86,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            OvanieAuthTitleBlock(
+            OvanieAuthHeader(
+              icon: Icons.lock_reset_rounded,
               title: 'Mot de passe oublié',
-              subtitle:
-                  'Recevez les instructions nécessaires pour\nrécupérer l’accès à votre compte.',
+              subtitle: 'Saisissez l’e-mail de votre compte : nous vous enverrons un lien de réinitialisation.',
               onBack: _openLogin,
             ),
-            const SizedBox(height: 16),
-            const Center(child: OvanieRecoveryHeroIcon(reset: false)),
-            const SizedBox(height: 12),
-            const Text(
-              'Récupérez votre compte',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: authNavy,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Nous vous enverrons un lien sécurisé à l’adresse e-mail\nassociée à votre compte.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: authMuted,
-                fontSize: 13,
-                height: 1.45,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 24),
             OvanieAuthCard(
-              padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Identifier votre compte',
-                    style: TextStyle(
-                      color: authNavy,
-                      fontSize: 18.5,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  const Text(
-                    'Utilisez l’adresse e-mail associée à votre compte OVANIE.',
-                    style: TextStyle(
-                      color: authMuted,
-                      fontSize: 12.4,
-                      height: 1.4,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
                   if (_error != null) ...[
-                    const SizedBox(height: 13),
                     OvanieAuthMessage(message: _error!),
+                    const SizedBox(height: 14),
                   ],
                   if (_success != null) ...[
-                    const SizedBox(height: 13),
                     OvanieAuthMessage(message: _success!, success: true),
+                    const SizedBox(height: 14),
                   ],
-                  const SizedBox(height: 18),
                   OvanieAuthField(
                     controller: _identifier,
                     hint: 'Adresse e-mail',
-                    icon: Icons.alternate_email_rounded,
+                    icon: Icons.mail_outline_rounded,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.email],
                     enabled: !_loading,
                     onSubmitted: (_) => _submit(),
                     validator: (value) {
@@ -164,23 +121,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   OvaniePrimaryButton(
-                    label: 'Envoyer les instructions',
+                    label: 'Envoyer le lien',
                     loading: _loading,
                     onPressed: _submit,
-                  ),
-                  const SizedBox(height: 14),
-                  OvanieOrangeOutlineButton(
-                    label: 'Retour à la connexion',
-                    leadingIcon: Icons.login_rounded,
-                    onPressed: _loading ? null : _openLogin,
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-            OvanieSupportCard(onTap: _support),
+            const SizedBox(height: 16),
+            OvanieAuthSwitchLink(
+              question: 'Vous vous en souvenez ?',
+              action: 'Retour à la connexion',
+              onTap: _loading ? null : _openLogin,
+            ),
+            const SizedBox(height: 4),
+            OvanieAuthSwitchLink(
+              question: 'Plus accès à votre e-mail ?',
+              action: 'Contacter le support',
+              onTap: _support,
+            ),
           ],
         ),
       ),

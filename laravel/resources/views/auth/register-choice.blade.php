@@ -14,7 +14,7 @@
 <div class="bg-white rounded-2xl shadow-lg p-5 lg:p-6 w-full">
     <div class="text-center mb-5">
         <a href="{{ route('home') }}">
-            <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE Logo" class="h-10 mx-auto mb-2">
+            <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE Logo" class="h-10 mx-auto mb-2">
         </a>
         <h1 class="font-bold text-2xl text-[#1E3A5F] mb-1 leading-tight">Rejoindre OVANIE</h1>
         <p class="text-gray-500 text-sm">Choisissez un identifiant Client ou un identifiant Vendeur. Les deux comptes restent séparés.</p>

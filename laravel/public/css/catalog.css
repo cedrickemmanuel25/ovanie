@@ -1620,3 +1620,11 @@ body.catalog-filter-open {
     .category-benefits > div { border-bottom: 1px solid var(--ovcat-border); }
     .category-shortcuts { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Cartes rendues par le serveur avant le chargement de catalog.js (référencement, connexions lentes). */
+.ovcat-ssr-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid #e5eaf2; border-radius: 9px; background: #fff; }
+.ovcat-ssr-card a { color: inherit; text-decoration: none; }
+.ovcat-ssr-card img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; border-radius: 6px; background: #f6f8fb; }
+.ovcat-ssr-card h3 { margin: 8px 0 0; font-size: 14px; font-weight: 600; line-height: 1.35; }
+.ovcat-ssr-card small, .ovcat-ssr-card span { color: #64748b; font-size: 12px; }
+.ovcat-ssr-card p { margin: 0; font-size: 13px; }

@@ -26,7 +26,7 @@
     <!-- Logo -->
     <div class="text-center mb-4">
         <a href="{{ route('home') }}">
-            <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE Logo" class="h-10 mx-auto mb-1">
+            <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE Logo" class="h-10 mx-auto mb-1">
         </a>
     </div>
 

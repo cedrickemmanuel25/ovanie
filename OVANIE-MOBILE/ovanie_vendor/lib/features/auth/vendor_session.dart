@@ -14,6 +14,9 @@ class VendorSession extends ChangeNotifier {
   static const _userKey = 'vendor_user';
   static const _onboardingStepPrefix = 'vendor_onboarding_step_';
 
+  /// Dernier index d'étape de l'assistant d'ouverture de boutique (8 étapes).
+  static const onboardingLastStep = 7;
+
   final _storage = DeviceStorage.instance;
   final _repo = VendorRepository.instance;
 
@@ -94,12 +97,12 @@ class VendorSession extends ChangeNotifier {
 
       if (newToken.isEmpty) {
         throw const VendorApiException(
-          'Le serveur OVANIE n’a pas renvoyé de jeton de connexion.',
+          'Connexion impossible pour le moment. Réessayez dans un instant.',
         );
       }
       if (loginUser == null) {
         throw const VendorApiException(
-          'Le serveur OVANIE n’a pas renvoyé le profil associé à cette connexion.',
+          'Votre profil n’a pas pu être chargé. Réessayez dans un instant.',
         );
       }
       if ('${loginUser['role'] ?? ''}'.trim().toLowerCase() != 'vendor') {
@@ -259,7 +262,7 @@ class VendorSession extends ChangeNotifier {
   }
 
   Future<void> saveOnboardingStep(int step) async {
-    onboardingStep = step.clamp(0, 4).toInt();
+    onboardingStep = step.clamp(0, onboardingLastStep).toInt();
     final id = userId;
     if (id != null && !hasShop) {
       await _storage.writeString(
@@ -277,7 +280,7 @@ class VendorSession extends ChangeNotifier {
       return;
     }
     final raw = await _storage.readString('$_onboardingStepPrefix$id');
-    onboardingStep = (int.tryParse(raw ?? '') ?? 0).clamp(0, 4).toInt();
+    onboardingStep = (int.tryParse(raw ?? '') ?? 0).clamp(0, onboardingLastStep).toInt();
   }
 
   Future<void> _clearOnboardingStep() async {

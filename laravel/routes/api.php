@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Commercial\CommercialMobileShopController;
 use App\Http\Controllers\Api\Commercial\CommercialMobileProductController;
 use App\Http\Controllers\Api\Commercial\CommercialMobileMenuController;
 use App\Http\Controllers\Api\Commercial\CommercialMobileProspectingController;
+use App\Http\Controllers\Api\Commercial\CommercialShopConfigurationMissionController;
 use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\ProductController;
@@ -86,6 +87,13 @@ use App\Http\Controllers\Webhooks\TwilioSupportVoiceController;
 | PUBLIC API — lecture seule
 |--------------------------------------------------------------------------
 */
+
+// Synchronisation web ↔ mobile : versions des sujets de l'appelant
+// (authentification Sanctum facultative).
+Route::get('/live-sync', \App\Http\Controllers\LiveSyncController::class)
+    // Compteur dédié (préfixe) : ne consomme pas le quota de connexion.
+    ->middleware('throttle:240,1,live-sync:')
+    ->name('api.live-sync');
 
 Route::middleware('throttle:120,1')->group(function () {
     // Produits publics
@@ -286,6 +294,8 @@ Route::prefix('mobile/v1/vendor')
         Route::patch('/profile', [VendorMobileController::class, 'updatePersonalProfile']);
         Route::post('/shop/presentation', [VendorMobileController::class, 'savePresentation']);
         Route::post('/shop/preparation-settings', [VendorMobileController::class, 'savePreparationSettings']);
+        Route::get('/shop/payment-settings', [VendorMobileController::class, 'paymentSettings']);
+        Route::post('/shop/payment-settings', [VendorMobileController::class, 'savePaymentSettings']);
 
         Route::get('/shop', [VendorMobileController::class, 'shop']);
         Route::match(['put', 'patch', 'post'], '/shop', [VendorMobileController::class, 'updateShop']);
@@ -321,6 +331,7 @@ Route::prefix('mobile/v1/vendor')
 
         Route::get('/finance', [VendorMobileController::class, 'finance']);
         Route::get('/payouts', [VendorMobileController::class, 'payouts']);
+        Route::post('/payouts/withdraw', [VendorMobileController::class, 'withdrawPayouts']);
         Route::get('/payouts/{payout}', [VendorMobileController::class, 'payout']);
         Route::post('/payouts/{payout}/follow-up', [VendorMobileController::class, 'requestPayoutFollowUp']);
         Route::get('/payouts/{payout}/receipt', [VendorMobileController::class, 'payoutReceipt']);
@@ -615,6 +626,8 @@ Route::prefix('driver')->name('api.driver.')->group(function () {
         Route::post('/missions/{missionNumber}/gps-unavailable', [DriverMissionController::class, 'gpsUnavailable'])->name('missions.gps-unavailable');
         Route::post('/missions/{missionNumber}/incident', [DriverMissionController::class, 'incident'])->name('missions.incident');
         Route::post('/missions/{missionNumber}/verify-otp', [DriverMissionController::class, 'verifyOtp'])->name('missions.verify-otp');
+        Route::get('/earnings', [\App\Http\Controllers\Api\Driver\DriverEarningsController::class, 'index'])->name('earnings');
+        Route::post('/earnings/account', [\App\Http\Controllers\Api\Driver\DriverEarningsController::class, 'updateAccount'])->name('earnings.account');
         Route::post('/presence', [DriverPresenceController::class, 'heartbeat'])
             ->middleware('throttle:120,1')
             ->name('presence');
@@ -667,6 +680,13 @@ Route::prefix('mobile/v1/commercial')->name('api.mobile.commercial.')->group(fun
         Route::get('/shops/{shop}', [CommercialMobileShopController::class, 'show'])
             ->whereNumber('shop')
             ->name('shops.show');
+        Route::get('/shop-configuration-missions', [CommercialShopConfigurationMissionController::class, 'index'])->name('configuration-missions.index');
+        Route::get('/shop-configuration-missions/{assignment}', [CommercialShopConfigurationMissionController::class, 'show'])->whereNumber('assignment')->name('configuration-missions.show');
+        Route::post('/shop-configuration-missions/{assignment}/start', [CommercialShopConfigurationMissionController::class, 'start'])->whereNumber('assignment')->name('configuration-missions.start');
+        Route::put('/shop-configuration-missions/{assignment}/logistics', [CommercialShopConfigurationMissionController::class, 'logistics'])->whereNumber('assignment')->name('configuration-missions.logistics');
+        Route::put('/shop-configuration-missions/{assignment}/payout', [CommercialShopConfigurationMissionController::class, 'payout'])->whereNumber('assignment')->name('configuration-missions.payout');
+        Route::post('/shop-configuration-missions/{assignment}/products-done', [CommercialShopConfigurationMissionController::class, 'productsDone'])->whereNumber('assignment')->name('configuration-missions.products-done');
+        Route::post('/shop-configuration-missions/{assignment}/complete', [CommercialShopConfigurationMissionController::class, 'complete'])->whereNumber('assignment')->name('configuration-missions.complete');
 
         Route::get('/prospecting/overview', [CommercialMobileProspectingController::class, 'overview'])->name('prospecting.overview');
         Route::get('/prospecting/mission', [CommercialMobileProspectingController::class, 'mission'])->name('prospecting.mission');
@@ -749,3 +769,9 @@ Route::middleware(['auth:sanctum', 'isAdmin', 'throttle:60,1'])->prefix('admin')
     Route::patch('/activity-sectors/{activity_sector}', [ActivitySectorController::class, 'update']);
     Route::delete('/activity-sectors/{activity_sector}', [ActivitySectorController::class, 'destroy']);
 });
+
+// Photos de retour affichées dans l'application vendeur : lien signé à durée limitée.
+Route::get('/vendor/returns/{return}/proof/{document}', [\App\Http\Controllers\SensitiveDocumentController::class, 'signedVendorReturn'])
+    ->whereNumber('document')
+    ->middleware(['signed', 'throttle:60,1'])
+    ->name('api.vendor.returns.proof');

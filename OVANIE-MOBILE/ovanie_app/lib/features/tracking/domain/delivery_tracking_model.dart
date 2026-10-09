@@ -330,7 +330,7 @@ class ClientShipmentTracking {
       otpRequired: security['otp_required'] == true,
       otpVisible: security['otp_visible'] == true,
       otpCode: cleanOvanieText((security['otp_code'] ?? '').toString()),
-      securityMessage: cleanOvanieText((security['message'] ?? '').toString()),
+      securityMessage: cleanMessageText((security['message'] ?? '').toString()),
       driverContactAllowed: driver['contact_allowed'] == true,
     );
   }

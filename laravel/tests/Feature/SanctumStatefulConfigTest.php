@@ -22,5 +22,8 @@ class SanctumStatefulConfigTest extends TestCase
         $this->assertContains('127.0.0.1:8000', $stateful);
         $this->assertContains('localhost', $stateful);
         $this->assertContains('localhost:8000', $stateful);
+        $this->assertContains('ovanie.com', $stateful);
+        $this->assertContains('www.ovanie.com', $stateful);
+        $this->assertContains('pro.ovanie.com', $stateful);
     }
 }

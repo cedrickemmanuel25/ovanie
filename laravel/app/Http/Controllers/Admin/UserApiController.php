@@ -33,7 +33,7 @@ class UserApiController extends Controller
             'phone' => $validated['phone'] ?? null,
             'role' => $validated['role'],
             'status' => $validated['status'],
-            'password' => isset($validated['password']) ? Hash::make($validated['password']) : Hash::make('password123'),
+            'password' => Hash::make($validated['password'] ?? \Illuminate\Support\Str::password(14)),
         ]);
 
         return response()->json(['success' => true, 'user' => $user]);

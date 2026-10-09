@@ -18,9 +18,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     showMoreThumbs?.addEventListener('click', () => {
         thumbsRail?.classList.add('is-expanded');
+        const firstExtra = thumbsRail?.querySelector('.ov-product-thumb.is-extra');
+        if (firstExtra && thumbsRail) {
+            requestAnimationFrame(() => {
+                thumbsRail.scrollTo({ top: Math.max(0, firstExtra.offsetTop - 8), behavior: 'smooth' });
+            });
+        }
     });
 
-    const showImage = index => {
+    const showImage = (index, syncVariant = true) => {
         if (!mainImage || !thumbs.length) return;
         imageIndex = (index + thumbs.length) % thumbs.length;
         const thumb = thumbs[imageIndex];
@@ -29,6 +35,13 @@ document.addEventListener('DOMContentLoaded', () => {
         thumbs.forEach(item => item.classList.remove('is-active'));
         thumb?.classList.add('is-active');
         thumb?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+
+        // Une miniature rattachée à une variante sélectionne aussi le modèle exact.
+        // Ainsi « cliquer la photo bleue puis Ajouter au panier » envoie bien Bleu.
+        if (syncVariant && thumb?.dataset.variantId) {
+            const matchingVariant = variantButtons.find(button => button.dataset.id === thumb.dataset.variantId);
+            if (matchingVariant) applyVariant(matchingVariant, false);
+        }
     };
 
     thumbs.forEach((button, index) => button.addEventListener('click', () => showImage(index)));
@@ -47,6 +60,38 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('[data-qty-minus]')?.addEventListener('click', () => setQty(number(qtyInput?.value) - 1));
     document.querySelector('[data-qty-plus]')?.addEventListener('click', () => setQty(number(qtyInput?.value) + 1));
     qtyInput?.addEventListener('change', () => setQty(qtyInput.value));
+
+
+    /* Variantes : la variante sélectionnée pilote l'image, le stock et la ligne panier. */
+    const variantInput = document.querySelector('[data-variant-input]');
+    const variantButtons = Array.from(document.querySelectorAll('[data-variant-option]'));
+    const selectedVariantLabel = document.querySelector('[data-selected-variant]');
+    const applyVariant = (button, syncGallery = true) => {
+        if (!button || button.disabled) return;
+        variantButtons.forEach(item => item.classList.toggle('is-active', item === button));
+        if (variantInput) variantInput.value = button.dataset.id || '';
+        if (selectedVariantLabel) selectedVariantLabel.textContent = button.dataset.label || button.textContent.trim();
+        const variantStock = Math.max(0, number(button.dataset.stock));
+        if (qtyInput) {
+            qtyInput.max = String(Math.max(variantStock, number(qtyInput.min) || 1));
+            if (number(qtyInput.value) > variantStock && variantStock > 0) qtyInput.value = String(variantStock);
+        }
+
+        const matchingThumbIndex = thumbs.findIndex(thumb => thumb.dataset.variantId === button.dataset.id);
+        if (syncGallery && matchingThumbIndex >= 0) {
+            showImage(matchingThumbIndex, false);
+        } else if (button.dataset.image && mainImage) {
+            mainImage.src = button.dataset.image;
+        }
+    };
+    variantButtons.forEach(button => button.addEventListener('click', () => applyVariant(button)));
+    document.querySelector('[data-product-form]')?.addEventListener('submit', event => {
+        if (variantButtons.length && (!variantInput || !variantInput.value)) {
+            event.preventDefault();
+            document.querySelector('[data-variant-selector]')?.scrollIntoView({behavior:'smooth', block:'center'});
+            alert('Choisissez une couleur ou un modèle avant d’ajouter ce produit au panier.');
+        }
+    });
 
     /* Onglets + accès directs depuis la zone produit. */
     const activateTab = key => {

@@ -47,7 +47,7 @@
         </div>
 
         @if(($mobileReturn ?? false) && filled($appReturnUrl ?? null))
-            <p class="hint">Touchez le bouton ci-dessus pour revenir dans OVANIE. L’application synchronisera automatiquement le paiement, le panier et le suivi de la commande.</p>
+            <p class="hint">Touchez le bouton ci-dessus pour revenir dans OVANIE et suivre votre commande.</p>
         @else
             <p class="hint">Votre commande reste enregistrée dans votre compte OVANIE et peut être consultée depuis Mes commandes.</p>
         @endif

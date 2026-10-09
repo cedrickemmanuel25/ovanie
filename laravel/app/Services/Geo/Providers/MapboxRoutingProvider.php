@@ -18,11 +18,17 @@ class MapboxRoutingProvider implements RoutingProviderInterface
         $profile = config('geo.mapbox.directions_profile', 'driving-traffic');
         $url = 'https://api.mapbox.com/directions/v5/mapbox/' . $profile . '/' . $coordinates;
 
+        // Service récemment injoignable : on passe directement au suivant.
+        if (\Illuminate\Support\Facades\Cache::has('geo.routing.down.mapbox')) {
+            return ['success' => false, 'provider' => 'mapbox', 'message' => 'Service momentanément indisponible.'];
+        }
+
         try {
             $response = Http::acceptJson()
+                ->connectTimeout(4)
                 ->withoutVerifying()
                 ->timeout((int) config('geo.routing_timeout_seconds', 15))
-                ->retry(1, 250)
+                ->retry(1, 250, fn ($e) => ! $e instanceof \Illuminate\Http\Client\ConnectionException)
                 ->get($url, [
                     'access_token' => $token,
                     'overview' => 'full',
@@ -32,7 +38,10 @@ class MapboxRoutingProvider implements RoutingProviderInterface
                     'continue_straight' => 'true',
                     'language' => 'fr',
                 ]);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Http\Client\ConnectionException) {
+                \Illuminate\Support\Facades\Cache::put('geo.routing.down.mapbox', true, now()->addMinutes(2));
+            }
             return ['success' => false, 'provider' => 'mapbox', 'message' => 'Service Mapbox indisponible.'];
         }
 

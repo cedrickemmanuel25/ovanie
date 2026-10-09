@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/network/api_runtime_state.dart';
 import '../core/platform/app_deep_link.dart';
@@ -180,6 +181,10 @@ class _OvanieAppState extends State<OvanieApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      // Textes système (compteurs, calendrier, boutons) en français.
+      locale: const Locale('fr', 'FR'),
+      supportedLocales: const [Locale('fr', 'FR')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       navigatorKey: _navigatorKey,
       title: 'OVANIE',
       debugShowCheckedModeBanner: false,

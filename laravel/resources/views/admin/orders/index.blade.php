@@ -282,7 +282,7 @@
                                 <span class="summary-subtext">{{ $referencesCount }} référence(s)</span>
                                 <div class="product-name-preview">
                                     @foreach($order->items->take(2) as $item)
-                                        <span>{{ $item->product?->name ?? 'Produit supprimé' }}</span>
+                                        <span>{{ $item->product?->name ?? 'Produit supprimé' }}@if($item->variant_label_snapshot)<small style="display:block">{{ $item->variant_label_snapshot }}</small>@endif</span>
                                     @endforeach
                                     @if($itemsCount > 2)
                                         <small>+ {{ $itemsCount - 2 }} autre(s)</small>

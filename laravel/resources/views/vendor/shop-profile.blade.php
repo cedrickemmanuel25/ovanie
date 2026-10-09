@@ -40,8 +40,9 @@
         'wave' => 'Wave',
     ];
 
-    $logisticsIsSeller = ($shop->logistics_type ?? 'ovanie') === 'seller';
-    $logisticsLabel = $logisticsIsSeller ? 'Logistique vendeur' : 'OVANIE Logistics';
+    $logisticsConfirmed = $shop->hasConfirmedLogistics();
+    $logisticsIsSeller = $logisticsConfirmed && $shop->usesSellerLogistics();
+    $logisticsLabel = $shop->logistics_mode_label;
 
     $shopLatitude = is_numeric($shop->latitude ?? null)
         ? (float) $shop->latitude
@@ -75,19 +76,10 @@
     $commercialActive = ($shop->status ?? null) === \App\Models\Shop::STATUS_APPROVED
         && (bool) ($shop->is_active ?? false);
 
-    $paymentConfigured = filled($shop->mm_operator)
-        && filled($shop->mm_number)
-        && filled($shop->mm_holder);
+    $paymentConfigured = $shop->hasConfiguredPayout();
 
-    $logisticsConfigured = in_array(
-        (string) ($shop->logistics_status ?? ''),
-        ['complete', 'configured', 'active'],
-        true
-    );
-
-    if (! $logisticsIsSeller) {
-        $logisticsConfigured = filled($shop->latitude) && filled($shop->longitude);
-    }
+    $logisticsConfigured = $logisticsConfirmed
+        && (bool) data_get($logisticsValidation ?? [], 'complete', false);
 
     $identityUploaded = (bool) (
         ($documents['identity_pdf']['uploaded'] ?? false)
@@ -1135,14 +1127,21 @@
                     <h3>Mode logistique</h3>
                     <span class="sp-status-pill blue">{{ $logisticsLabel }}</span>
                     <p class="sp-stat-desc" style="margin-top:8px;">
-                        {{ $logisticsIsSeller
-                            ? 'Vous gérez la livraison de vos commandes.'
-                            : 'OVANIE organise la livraison de vos commandes.' }}
+                        {{ ! $logisticsConfirmed
+                            ? 'Choisissez votre mode logistique pour les prochaines commandes.'
+                            : ($logisticsIsSeller
+                                ? 'Vous gérez la livraison de vos commandes.'
+                                : 'OVANIE organise la livraison de vos commandes.') }}
                     </p>
                 </div>
             </div>
 
-            @if($logisticsIsSeller)
+            @if(! $logisticsConfirmed)
+                <a class="sp-stat-link" href="{{ route('vendor.delivery.index') }}">
+                    Configurer
+                    <i data-lucide="arrow-right"></i>
+                </a>
+            @elseif($logisticsIsSeller)
                 <a class="sp-stat-link" href="{{ $deliverySettingsUrl }}">
                     Voir les paramètres
                     <i data-lucide="arrow-right"></i>
@@ -1303,7 +1302,7 @@
                         <div
                             id="shopProfileMap"
                             class="sp-real-map"
-                            aria-label="Carte de la position réelle de la boutique"
+                            aria-label="Carte de la position de la boutique"
                         ></div>
                     @else
                         <div class="sp-map-empty">
@@ -1320,7 +1319,7 @@
                     <div class="sp-map-footer">
                         <span class="sp-map-state">
                             <i data-lucide="{{ $hasShopCoordinates ? 'badge-check' : 'circle-alert' }}"></i>
-                            {{ $hasShopCoordinates ? 'Position réelle enregistrée' : 'Position à compléter' }}
+                            {{ $hasShopCoordinates ? 'Position enregistrée' : 'Position à compléter' }}
                         </span>
 
                         <a href="{{ route('vendor.shop.edit') }}" class="sp-inline-link sp-map-action">
@@ -1346,7 +1345,16 @@
                     <strong>{{ $logisticsLabel }}</strong>
                 </div>
 
-                @if($logisticsIsSeller)
+                @if(! $logisticsConfirmed)
+                    <div class="sp-detail-row">
+                        <span>État de la configuration</span>
+                        <strong><span class="sp-status-pill orange">À compléter</span></strong>
+                    </div>
+                    <a href="{{ route('vendor.delivery.index') }}" class="sp-inline-link">
+                        Choisir mon mode logistique
+                        <i data-lucide="arrow-right"></i>
+                    </a>
+                @elseif($logisticsIsSeller)
                     <div class="sp-detail-row">
                         <span>Zone de couverture</span>
                         <strong>{{ $deliveryZoneLabels[$shop->delivery_zone] ?? 'Non renseignée' }}</strong>
@@ -1519,9 +1527,9 @@
                 <p>Notre équipe est disponible pour vous accompagner sur la gestion de votre boutique.</p>
 
                 <div class="sp-help-actions">
-                    <a href="tel:0161780000" class="sp-btn">
+                    <a href="tel:{{ config('public_contact.phone_e164') }}" class="sp-btn">
                         <i data-lucide="phone"></i>
-                        01 61 78 00 00
+                        {{ config('public_contact.phone_display') }}
                     </a>
 
                     @if(filled($whatsapp) && $whatsapp !== 'Non renseigné')

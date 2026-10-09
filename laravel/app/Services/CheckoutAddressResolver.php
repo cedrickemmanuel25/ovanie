@@ -75,8 +75,8 @@ class CheckoutAddressResolver
             'delivery_zone' => $isAbidjan ? 'abidjan' : 'interieur',
             // La commune parente alimente la grille tarifaire.
             'delivery_commune' => ($locality['commune'] ?? null) ?: $commune,
-            // La localité conserve le niveau le plus fin reconnu.
-            'delivery_quartier' => ($locality['quarter'] ?? null) ?: $address->quartier,
+            // Le quartier enregistré par le client prime ; à défaut, la localité reconnue.
+            'delivery_quartier' => $address->quartier ?: ($locality['quarter'] ?? null),
             'delivery_locality_type' => $locality['locality_type'] ?? null,
             'delivery_city' => $isAbidjan ? null : $address->city,
             'delivery_latitude' => is_numeric($address->latitude) ? (float) $address->latitude : null,

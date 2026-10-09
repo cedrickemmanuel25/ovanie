@@ -27,7 +27,7 @@
                 <tr>
                     <td><a class="cs-link" href="{{ route('client.orders.show',$order) }}">#{{ $order->order_number }}</a></td>
                     <td>{{ $order->created_at?->format('d/m/Y') }}</td>
-                    <td><div class="cs-product-stack">@foreach($order->items->take(3) as $item)<img src="{{ $item->product?->main_image_url }}" alt="">@endforeach<span>{{ $order->items->count() }} article(s)</span></div></td>
+                    <td><div class="cs-product-stack">@foreach($order->items->take(3) as $item)<img src="{{ $item->product?->main_image_url }}" alt="">@endforeach<span>{{ $order->items->count() }} {{ ($order->items->count()) > 1 ? 'articles' : 'article' }}</span></div></td>
                     <td><strong>{{ number_format($order->total_amount,0,',',' ') }} FCFA</strong></td>
                     <td>@include('client.partials.status',['status'=>$order->status])</td>
                     <td>@if($clientOrderStatus->canTrack($order))<a class="cs-btn small outline" href="{{ route('client.orders.tracking',$order) }}">Suivre</a>@else<a class="cs-btn small outline" href="{{ route('client.orders.show',$order) }}">Détails</a>@endif</td>

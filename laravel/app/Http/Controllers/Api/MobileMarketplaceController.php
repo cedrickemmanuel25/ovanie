@@ -72,6 +72,22 @@ class MobileMarketplaceController extends Controller
                 'catalog_offer' => 'top',
                 'products' => $this->productPayloads(collect($payload['bestSellers'] ?? [])),
             ],
+            [
+                'key' => 'promotions',
+                'mode' => 'promotions',
+                'title' => 'OFFRES EN COURS',
+                'catalog_offer' => 'promo',
+                'products' => $this->productPayloads(collect($payload['promotionProducts'] ?? [])),
+            ],
+            [
+                'key' => 'selection',
+                'mode' => 'selection',
+                'title' => trim((string) ($payload['featuredCategoryTitle'] ?? '')) ?: 'Sélection OVANIE',
+                'description' => $payload['featuredCategoryDescription'] ?? null,
+                'catalog_offer' => null,
+                'category_slug' => $payload['featuredCategory']?->slug ?? null,
+                'products' => $this->productPayloads(collect($payload['featuredCategoryProducts'] ?? [])),
+            ],
         ])->filter(fn (array $section) => $section['products'] !== [])->values()->all();
 
         return response()->json([

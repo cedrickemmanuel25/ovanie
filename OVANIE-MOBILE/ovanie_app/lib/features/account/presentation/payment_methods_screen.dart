@@ -166,12 +166,6 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                   ),
                 ),
               ),
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(18, 14, 18, 0),
-                  child: _InfoBanner(),
-                ),
-              ),
               if (_loading)
                 const SliverFillRemaining(
                   hasScrollBody: false,
@@ -233,12 +227,6 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                       onMenu: _showMenu,
                     ),
                   ),
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(18, 20, 18, 18),
-                    child: _SecurityBanner(),
-                  ),
-                ),
               ],
             ],
           ),
@@ -313,39 +301,6 @@ class _Header extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _InfoBanner extends StatelessWidget {
-  const _InfoBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7FAFF),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: const Color(0xFFD3E1FA)),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.info_outline_rounded, color: Color(0xFF0A67FF), size: 22),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Le moyen de paiement par défaut sera sélectionné automatiquement\nlors de vos prochains achats.',
-              style: TextStyle(
-                color: Color(0xFF0B245F),
-                fontSize: 12.2,
-                height: 1.55,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -605,120 +560,72 @@ class _EmptyPaymentState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-      child: Column(
-        children: [
-          Image.asset(
-            'assets/images/payment_empty_illustration.png',
-            width: 245,
-            fit: BoxFit.contain,
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Aucun moyen de paiement enregistré',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF081D5A),
-              fontSize: 21,
-              height: 1.12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Vous n’avez pas encore ajouté de moyen de paiement.\nAjoutez-en un pour effectuer vos achats\nrapidement et en toute sécurité.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF43588C),
-              fontSize: 13.5,
-              height: 1.55,
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: 360,
-            height: 52,
-            child: FilledButton(
-              onPressed: () => onAdd(type: PaymentEntryType.mobileMoney),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFFF3D0A),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    Widget option(IconData icon, String title, String subtitle, PaymentEntryType type) => Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            onTap: () => onAdd(type: type),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE4EAF2)),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Row(
                 children: [
-                  Icon(Icons.add_rounded, size: 25),
-                  SizedBox(width: 18),
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        'Ajouter un moyen de paiement',
-                        maxLines: 1,
-                        style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
-                      ),
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: const BoxDecoration(color: Color(0xFFFFF1E8), shape: BoxShape.circle),
+                    child: Icon(icon, color: const Color(0xFFFF6500), size: 21),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: const TextStyle(color: Color(0xFF081D5A), fontSize: 15, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 2),
+                        Text(subtitle, style: const TextStyle(color: Color(0xFF6E7B90), fontSize: 13)),
+                      ],
                     ),
                   ),
+                  const Icon(Icons.add_rounded, color: Color(0xFFFF6500)),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 24),
-          const _SecurityBanner(),
-        ],
-      ),
-    );
-  }
-}
-
-class _SecurityBanner extends StatelessWidget {
-  const _SecurityBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF7F2),
-        borderRadius: BorderRadius.circular(13),
-      ),
-      child: Row(
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 28, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: const Icon(Icons.shield_outlined, color: Color(0xFFFF3D0A), size: 34),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Paiements 100% sécurisés',
-                  style: TextStyle(
-                    color: Color(0xFFFF3D0A),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: 7),
-                Text(
-                  'Vos informations sont protégées et sécurisées avec les meilleures normes de sécurité.',
-                  style: TextStyle(
-                    color: Color(0xFF0B245F),
-                    fontSize: 12.2,
-                    height: 1.45,
-                  ),
-                ),
-              ],
+          Center(
+            child: Container(
+              width: 76,
+              height: 76,
+              decoration: const BoxDecoration(color: Color(0xFFF1F4F9), shape: BoxShape.circle),
+              child: const Icon(Icons.account_balance_wallet_outlined, color: Color(0xFF6E7B90), size: 36),
             ),
           ),
-          const SizedBox(width: 8),
-          const Icon(Icons.lock_outline_rounded, color: Color(0xFFFF3D0A), size: 34),
+          const SizedBox(height: 16),
+          const Text(
+            'Aucun moyen de paiement',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF081D5A), fontSize: 19, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Enregistrez-en un pour payer plus vite.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF6E7B90), fontSize: 14.5),
+          ),
+          const SizedBox(height: 24),
+          option(Icons.phone_iphone_rounded, 'Mobile Money', 'Orange, MTN, Moov, Wave', PaymentEntryType.mobileMoney),
+          const SizedBox(height: 10),
+          option(Icons.credit_card_rounded, 'Carte bancaire', 'Visa, Mastercard', PaymentEntryType.card),
         ],
       ),
     );

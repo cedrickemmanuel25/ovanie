@@ -1,0 +1,231 @@
+/* Généré depuis public/admin/css/admin_base.css pour le catalogue produits du Support Center.
+ * Styles de page limités à .admin-scope ; la structure admin (sidebar, barre, body) est exclue.
+ * :where() conserve la spécificité d'origine. Régénérer : scope_css.py admin_base.css <ce fichier>. */
+:where(.admin-scope) *, :where(.admin-scope) *::before, :where(.admin-scope) *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:where(.admin-scope) { --navy:      #06112b;
+    --navy-2:    #0d1f55;
+    --navy-3:    #1a3a8f;
+    --orange:    #f97316;
+    --orange-d:  #ea6c0a;
+    --sidebar-w: 240px;
+    --topbar-h:  64px;
+    --white:     #ffffff;
+    --slate-50:  #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1;
+    --slate-400: #94a3b8;
+    --slate-500: #64748b;
+    --slate-700: #334155;
+    --slate-900: #0f172a;
+    --slate-950: #020617;
+    --green:     #10b981;
+    --amber:     #f59e0b;
+    --red:       #ef4444;
+    --radius:    14px;
+    --shadow:    0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 20px rgba(0,0,0,.1); }
+:where(.admin-scope) .space-y-6 { display: flex; flex-direction: column; gap: 24px; }
+:where(.admin-scope) .space-y-4 { display: flex; flex-direction: column; gap: 16px; }
+:where(.admin-scope) .space-y-2 { display: flex; flex-direction: column; gap: 8px; }
+:where(.admin-scope) .rounded-3xl.bg-slate-950, :where(.admin-scope) [class*="bg-slate-950"] { background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 60%, var(--navy-3) 100%) !important;
+    border-radius: var(--radius) !important;
+    color: #fff;
+    padding: 28px !important;
+    box-shadow: var(--shadow-md); }
+:where(.admin-scope) .grid { display: grid; }
+:where(.admin-scope) .gap-4 { gap: 16px; }
+:where(.admin-scope) .gap-6 { gap: 24px; }
+@media (min-width: 640px) {
+:where(.admin-scope) .sm\:grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 768px) {
+:where(.admin-scope) .md\:grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+}
+@media (min-width: 1280px) {
+:where(.admin-scope) .xl\:grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+:where(.admin-scope) .xl\:grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+}
+@media (min-width: 1024px) {
+:where(.admin-scope) .lg\:grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+:where(.admin-scope) .lg\:flex-row { flex-direction: row; }
+:where(.admin-scope) .lg\:items-center { align-items: center; }
+:where(.admin-scope) .lg\:justify-between { justify-content: space-between; }
+}
+:where(.admin-scope) .flex { display: flex; }
+:where(.admin-scope) .flex-col { flex-direction: column; }
+:where(.admin-scope) .items-center { align-items: center; }
+:where(.admin-scope) .items-start { align-items: flex-start; }
+:where(.admin-scope) .justify-between { justify-content: space-between; }
+:where(.admin-scope) .flex-wrap { flex-wrap: wrap; }
+:where(.admin-scope) .flex-1 { flex: 1; }
+:where(.admin-scope) .gap-2 { gap: 8px; }
+:where(.admin-scope) .gap-3 { gap: 12px; }
+:where(.admin-scope) .rounded-2xl.bg-white, :where(.admin-scope) [class*="rounded-2xl"][class*="bg-white"] { background: var(--white) !important;
+    border-radius: 12px !important;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--slate-200);
+    padding: 20px !important;
+    transition: box-shadow .2s, transform .2s; }
+:where(.admin-scope) .rounded-2xl.bg-white:hover { box-shadow: var(--shadow-md);
+    transform: translateY(-1px); }
+:where(.admin-scope) .text-sm { font-size: 13px; }
+:where(.admin-scope) .text-xs { font-size: 11.5px; }
+:where(.admin-scope) .text-2xl { font-size: 24px; }
+:where(.admin-scope) .text-3xl { font-size: 30px; }
+:where(.admin-scope) .text-lg { font-size: 17px; }
+:where(.admin-scope) .text-base { font-size: 14px; }
+:where(.admin-scope) .font-medium { font-weight: 500; }
+:where(.admin-scope) .font-semibold { font-weight: 600; }
+:where(.admin-scope) .font-bold { font-weight: 700; }
+:where(.admin-scope) .font-black { font-weight: 900; }
+:where(.admin-scope) .text-slate-950 { color: var(--slate-950); }
+:where(.admin-scope) .text-slate-900 { color: var(--slate-900); }
+:where(.admin-scope) .text-slate-700 { color: var(--slate-700); }
+:where(.admin-scope) .text-slate-500 { color: var(--slate-500); }
+:where(.admin-scope) .text-slate-400 { color: var(--slate-400); }
+:where(.admin-scope) .text-slate-300 { color: var(--slate-300); }
+:where(.admin-scope) .text-slate-200 { color: var(--slate-200); }
+:where(.admin-scope) .text-white { color: #fff; }
+:where(.admin-scope) .text-orange-300 { color: #fdba74; }
+:where(.admin-scope) .text-orange-400 { color: var(--orange); }
+:where(.admin-scope) .text-amber-600 { color: #d97706; }
+:where(.admin-scope) .text-green-600 { color: #059669; }
+:where(.admin-scope) .text-red-600 { color: #dc2626; }
+:where(.admin-scope) .text-green-700 { color: #047857; }
+:where(.admin-scope) .text-amber-700 { color: #b45309; }
+:where(.admin-scope) .text-red-700 { color: #b91c1c; }
+:where(.admin-scope) .text-blue-700 { color: #1d4ed8; }
+:where(.admin-scope) .mt-1 { margin-top: 4px; }
+:where(.admin-scope) .mt-2 { margin-top: 8px; }
+:where(.admin-scope) .mt-3 { margin-top: 12px; }
+:where(.admin-scope) .mt-4 { margin-top: 16px; }
+:where(.admin-scope) .mt-6 { margin-top: 24px; }
+:where(.admin-scope) .mb-1 { margin-bottom: 4px; }
+:where(.admin-scope) .mb-2 { margin-bottom: 8px; }
+:where(.admin-scope) .mb-4 { margin-bottom: 16px; }
+:where(.admin-scope) .p-5 { padding: 20px; }
+:where(.admin-scope) .p-6 { padding: 24px; }
+:where(.admin-scope) .px-3 { padding-left: 12px; padding-right: 12px; }
+:where(.admin-scope) .py-1 { padding-top: 4px; padding-bottom: 4px; }
+:where(.admin-scope) .px-5 { padding-left: 20px; padding-right: 20px; }
+:where(.admin-scope) .py-4 { padding-top: 16px; padding-bottom: 16px; }
+:where(.admin-scope) .uppercase { text-transform: uppercase; }
+:where(.admin-scope) .tracking-wider { letter-spacing: .08em; }
+:where(.admin-scope) .leading-6 { line-height: 1.5rem; }
+:where(.admin-scope) .max-w-3xl { max-width: 48rem; }
+:where(.admin-scope) .max-w-2xl { max-width: 42rem; }
+:where(.admin-scope) .w-full { width: 100%; }
+:where(.admin-scope) .h-2 { height: 8px; }
+:where(.admin-scope) .w-2 { width: 8px; }
+:where(.admin-scope) .h-3 { height: 12px; }
+:where(.admin-scope) .w-3 { width: 12px; }
+:where(.admin-scope) .h-8 { height: 32px; }
+:where(.admin-scope) .w-8 { width: 32px; }
+:where(.admin-scope) .h-10 { height: 40px; }
+:where(.admin-scope) .w-10 { width: 40px; }
+:where(.admin-scope) .shrink-0 { flex-shrink: 0; }
+:where(.admin-scope) .overflow-hidden { overflow: hidden; }
+:where(.admin-scope) .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:where(.admin-scope) .rounded-full { border-radius: 9999px; }
+:where(.admin-scope) .rounded-2xl { border-radius: 12px; }
+:where(.admin-scope) .rounded-3xl { border-radius: 20px; }
+:where(.admin-scope) .rounded-xl { border-radius: 10px; }
+:where(.admin-scope) .rounded-lg { border-radius: 8px; }
+:where(.admin-scope) .rounded { border-radius: 6px; }
+:where(.admin-scope) .shadow-sm { box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+:where(.admin-scope) .ring-1 { box-shadow: inset 0 0 0 1px; }
+:where(.admin-scope) .ring-slate-100 { --tw-ring-color: var(--slate-100); box-shadow: inset 0 0 0 1px var(--slate-100); }
+:where(.admin-scope) .ring-white\/15 { box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+:where(.admin-scope) .border { border: 1px solid; }
+:where(.admin-scope) .border-white\/10 { border-color: rgba(255,255,255,.1); }
+:where(.admin-scope) .border-slate-100 { border-color: var(--slate-100); }
+:where(.admin-scope) .border-slate-200 { border-color: var(--slate-200); }
+:where(.admin-scope) .border-b { border-bottom: 1px solid; }
+:where(.admin-scope) .border-slate-100.border-b { border-bottom-color: var(--slate-100); }
+:where(.admin-scope) .bg-white { background: var(--white); }
+:where(.admin-scope) .bg-slate-50 { background: var(--slate-50); }
+:where(.admin-scope) .bg-slate-100 { background: var(--slate-100); }
+:where(.admin-scope) .bg-white\/10 { background: rgba(255,255,255,.1); }
+:where(.admin-scope) .bg-green-100 { background: #d1fae5; }
+:where(.admin-scope) .bg-amber-100 { background: #fef3c7; }
+:where(.admin-scope) .bg-red-100 { background: #fee2e2; }
+:where(.admin-scope) .bg-slate-100 { background: var(--slate-100); }
+:where(.admin-scope) .bg-orange-500 { background: var(--orange); }
+:where(.admin-scope) .bg-blue-600 { background: #2563eb; }
+:where(.admin-scope) .bg-emerald-500 { background: #10b981; }
+:where(.admin-scope) .inline-flex { display: inline-flex; }
+:where(.admin-scope) .items-center { align-items: center; }
+:where(.admin-scope) .text-xs.font-semibold { font-size: 11px; font-weight: 700; }
+:where(.admin-scope) table { width: 100%; border-collapse: collapse; }
+:where(.admin-scope) thead { background: var(--slate-50); }
+:where(.admin-scope) th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--slate-500); border-bottom: 1px solid var(--slate-200); }
+:where(.admin-scope) td { padding: 12px 14px; font-size: 13px; color: var(--slate-700); border-bottom: 1px solid var(--slate-100); vertical-align: middle; }
+:where(.admin-scope) tr:last-child td { border-bottom: none; }
+:where(.admin-scope) tbody tr:hover { background: var(--slate-50); }
+:where(.admin-scope) .divide-y > * + * { border-top: 1px solid var(--slate-100); }
+:where(.admin-scope) section.grid .rounded-2xl { padding: 20px; }
+:where(.admin-scope) a.text-blue-700 { color: #1d4ed8; text-decoration: none; font-weight: 600; }
+:where(.admin-scope) a.text-blue-700:hover { text-decoration: underline; }
+:where(.admin-scope) button, :where(.admin-scope) .btn { display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 8px;
+    font-size: 13px; font-weight: 700; font-family: inherit;
+    border: none; cursor: pointer;
+    transition: filter .15s, transform .15s;
+    text-decoration: none; }
+:where(.admin-scope) button:hover, :where(.admin-scope) .btn:hover { filter: brightness(1.07); transform: translateY(-1px); }
+:where(.admin-scope) .bg-slate-200.rounded-full { background: var(--slate-200); border-radius: 9999px; overflow: hidden; }
+:where(.admin-scope) .bg-slate-200.rounded-full > div { height: 100%; border-radius: 9999px; background: var(--orange); }
+:where(.admin-scope) .bg-amber-50 { background: #fffbeb; }
+:where(.admin-scope) .bg-red-50 { background: #fef2f2; }
+:where(.admin-scope) .bg-green-50 { background: #ecfdf5; }
+:where(.admin-scope) .border-amber-200 { border-color: #fde68a; }
+:where(.admin-scope) .border-red-200 { border-color: #fca5a5; }
+:where(.admin-scope) .border-green-200 { border-color: #a7f3d0; }
+:where(.admin-scope) .text-amber-800 { color: #92400e; }
+:where(.admin-scope) .text-red-800 { color: #991b1b; }
+:where(.admin-scope) .text-green-800 { color: #065f46; }
+:where(.admin-scope) .min-w-0 { min-width: 0; }
+:where(.admin-scope) .object-cover { object-fit: cover; }
+:where(.admin-scope) .aspect-square { aspect-ratio: 1; }
+:where(.admin-scope) .opacity-50 { opacity: .5; }
+:where(.admin-scope) .relative { position: relative; }
+:where(.admin-scope) .absolute { position: absolute; }
+:where(.admin-scope) .inset-0 { inset: 0; }
+:where(.admin-scope) .hidden { display: none; }
+:where(.admin-scope) .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+:where(.admin-scope) { --sidebar-w: 276px;
+    --topbar-h: 76px;
+    --admin-navy-950: #041334;
+    --admin-navy-900: #071d4f;
+    --admin-navy-800: #0a2b70;
+    --admin-blue: #1463e6;
+    --admin-orange: #ff6b00;
+    --admin-bg: #f3f6fb;
+    --admin-border: #e1e8f2;
+    --admin-text: #10224a;
+    --admin-muted: #71809c; }
+:where(.admin-scope) .admin-alert { display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 18px;
+    padding: 13px 15px;
+    border-radius: 13px;
+    border: 1px solid;
+    font-size: 12.5px;
+    font-weight: 600; }
+:where(.admin-scope) .admin-alert > span { width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    font-weight: 900; }
+:where(.admin-scope) .admin-alert-success { color: #075d42;
+    background: #edfff7;
+    border-color: #b9efd9; }
+:where(.admin-scope) .admin-alert-success > span { background: #13a36f; color: #fff; }
+:where(.admin-scope) .admin-alert-error { color: #9f2432;
+    background: #fff1f2;
+    border-color: #ffcdd3; }
+:where(.admin-scope) .admin-alert-error > span { background: #e34d5c; color: #fff; }

@@ -1907,3 +1907,34 @@ body.mobile-select-open { overflow: hidden; }
 
 /* Marqueur de boutique utilisé par la vérification cartographique. */
 .open-shop-map-marker{width:48px;height:58px;padding:0;border:0;background:transparent;display:grid;place-items:start center;cursor:grab}.open-shop-map-marker:active{cursor:grabbing}.open-shop-map-marker__pin{width:42px;height:42px;border:3px solid #fff;border-radius:50% 50% 50% 10px;background:#087a63;color:#fff;display:grid;place-items:center;transform:rotate(-45deg);box-shadow:0 10px 24px rgba(15,23,42,.24),inset 0 0 0 1px rgba(255,255,255,.18)}.open-shop-map-marker__pin svg{width:27px;height:27px;transform:rotate(45deg)}
+
+/* Accessibilité : focus clavier visible sur le parcours. */
+.progress-step:focus-visible,
+.wizard-card button:focus-visible,
+.wizard-card input:focus-visible,
+.wizard-card select:focus-visible,
+.wizard-card textarea:focus-visible {
+    outline: 3px solid rgba(11, 79, 244, .28);
+    outline-offset: 2px;
+}
+
+/* Correctif responsive : le bouton « Précédent » masqué à l'étape 1 garde sa
+   colonne pour que le compteur reste centré et « Suivant » à droite. */
+.wizard-actions #previousStep[hidden] { display: inline-flex !important; visibility: hidden; pointer-events: none; }
+
+/* Correctif responsive : les champs fichier restent dans la carte sur mobile.
+   Les champs des blocs d'import gardent leur marge intérieure de 18px. */
+#openShopForm input[type=file] { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#openShopForm .field > input[type=file] { width: 100%; }
+#openShopForm .upload-panel .field > input[type=file] { width: calc(100% - 36px); max-width: calc(100% - 36px); }
+
+@media (max-width: 430px) {
+    .wizard-actions { padding: 10px 8px; gap: 6px; }
+    .button { padding: 0 10px; }
+    .button-primary { min-width: 0; }
+    .button-submit { min-width: 0; }
+    #openShopForm .upload-panel .field > label { padding: 12px 14px 0; }
+    #openShopForm .upload-panel .field > input[type=file] { margin: 8px 14px 12px; width: calc(100% - 28px); max-width: calc(100% - 28px); padding: 12px !important; }
+    #openShopForm .upload-panel .field > small { padding: 0 14px 12px; }
+    #openShopForm input[type=file]::file-selector-button { margin-right: 10px; padding: 0 12px; }
+}

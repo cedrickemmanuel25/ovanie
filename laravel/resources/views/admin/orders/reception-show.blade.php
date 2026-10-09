@@ -1,5 +1,6 @@
 @extends('admin.layouts.app')
 
+@section('page-title', 'Formulaire de réception')
 @section('title', 'Formulaire de réception')
 
 @section('content')

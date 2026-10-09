@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/sync/live_sync_service.dart';
 import '../../../core/utils/formatters.dart';
 import '../../cart/data/cart_api_repository.dart';
 import '../../payments/presentation/resume_payment_screen.dart';
@@ -24,7 +25,8 @@ class OrderDetailScreen extends StatefulWidget {
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
 }
 
-class _OrderDetailScreenState extends State<OrderDetailScreen> {
+class _OrderDetailScreenState extends State<OrderDetailScreen>
+    with LiveSyncListener<OrderDetailScreen> {
   final _repository = const OrdersRepository();
   MobileOrderDetail? _detail;
   bool _loading = true;
@@ -37,6 +39,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   void initState() {
     super.initState();
     _load();
+    listenLiveSync({'orders'}, () {
+      if (!_actionLoading) _load();
+    });
   }
 
   Future<void> _load() async {
@@ -70,7 +75,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Confirmer la réception ?'),
         content: const Text(
-          'Confirmez uniquement si tous les produits de cette commande ont réellement été reçus. Cette action met à jour le même suivi logistique que sur le Web.',
+          'Confirmez uniquement si tous les produits de cette commande ont réellement été reçus. Le vendeur est ensuite payé pour cette commande.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
@@ -176,7 +181,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   void _openTracking() {
     final order = _order;
-    if (order == null || !order.actions.canTrack) return;
+    if (order == null || !order.canTrackDelivery) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ClientDeliveryTrackingScreen(
@@ -222,7 +227,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         const SizedBox(height: 10),
                         _HorizontalOrderProgress(events: _detail!.timeline, order: order),
                       ],
-                      if (order.estimatedMinDate != null || order.estimatedMaxDate != null || order.actions.canTrack) ...[
+                      if (order.estimatedMinDate != null || order.estimatedMaxDate != null || order.canTrackDelivery) ...[
                         const SizedBox(height: 10),
                         _DeliveryStrip(order: order, onTrack: _openTracking),
                       ],
@@ -305,17 +310,9 @@ class _OrderOverview extends StatelessWidget {
           Row(children: [
             Expanded(child: _OverviewValue(label: 'Statut de la commande', child: _StatusPill(text: order.statusLabel))),
             Container(width: 1, height: 46, color: OvanieColors.border),
-            Expanded(child: _OverviewValue(label: 'Paiement', child: Text(order.isPaymentConfirmed ? '✓ Payé' : (order.paymentMethod.toLowerCase().contains('cash') || order.paymentMethodLabel.toLowerCase().contains('livraison') ? 'À payer à la livraison' : order.paymentStatusLabel), maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis, style: TextStyle(color: order.isPaymentConfirmed ? OvanieColors.success : OvanieColors.navy, fontSize: 10, fontWeight: FontWeight.w900)))),
+            Expanded(child: _OverviewValue(label: 'Paiement', child: Text(order.isPaymentConfirmed ? '✓ Payé' : (order.paymentMethod.toLowerCase().contains('cash') || order.paymentMethodLabel.toLowerCase().contains('livraison') ? 'À payer à la livraison' : order.paymentStatusLabel), maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis, style: TextStyle(color: order.isPaymentConfirmed ? OvanieColors.success : OvanieColors.navy, fontSize: 12, fontWeight: FontWeight.w900)))),
             Container(width: 1, height: 46, color: OvanieColors.border),
             Expanded(child: _OverviewValue(label: 'Montant', child: FittedBox(fit: BoxFit.scaleDown, child: Text(formatFcfa(order.total), style: const TextStyle(color: OvanieColors.orange, fontSize: 18, fontWeight: FontWeight.w900))))),
-          ]),
-          const Divider(height: 18),
-          Row(children: [
-            const Icon(Icons.location_on_outlined, color: OvanieColors.navy, size: 19),
-            const SizedBox(width: 7),
-            const Text('Livraison à :', style: TextStyle(color: OvanieColors.muted, fontSize: 10)),
-            const SizedBox(width: 7),
-            Expanded(child: Text(_OrderDetailScreenState._fullAddress(order), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.navy, fontSize: 10.8, fontWeight: FontWeight.w800))),
           ]),
         ]),
       );
@@ -326,7 +323,7 @@ class _OverviewValue extends StatelessWidget {
   final Widget child;
   const _OverviewValue({required this.label, required this.child});
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: Column(children: [Text(label, textAlign: TextAlign.center, style: const TextStyle(color: OvanieColors.muted, fontSize: 8.5)), const SizedBox(height: 7), child]));
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: Column(children: [Text(label, textAlign: TextAlign.center, style: const TextStyle(color: OvanieColors.muted, fontSize: 11)), const SizedBox(height: 7), child]));
 }
 
 class _HorizontalOrderProgress extends StatelessWidget {
@@ -383,7 +380,7 @@ class _HorizontalOrderProgress extends StatelessWidget {
                           : Text('${i + 1}', style: const TextStyle(fontWeight: FontWeight.w800)),
                 ),
                 const SizedBox(height: 5),
-                Text(labels[i], textAlign: TextAlign.center, style: TextStyle(color: waitingForDeliveryPayment ? OvanieColors.orange : OvanieColors.navy, fontSize: 8, height: 1.06, fontWeight: waitingForDeliveryPayment ? FontWeight.w700 : FontWeight.normal)),
+                Text(labels[i], textAlign: TextAlign.center, style: TextStyle(color: waitingForDeliveryPayment ? OvanieColors.orange : OvanieColors.navy, fontSize: 11, height: 1.06, fontWeight: waitingForDeliveryPayment ? FontWeight.w700 : FontWeight.normal)),
               ]));
           })),
         ]);
@@ -405,8 +402,8 @@ class _DeliveryStrip extends StatelessWidget {
       child: Row(children: [
         const CircleAvatar(backgroundColor: Color(0xFFE3EEFF), child: Icon(Icons.delivery_dining_outlined, color: OvanieColors.blue)),
         const SizedBox(width: 9),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Livraison estimée', style: TextStyle(color: OvanieColors.muted, fontSize: 9)), Text(estimate == null ? 'À confirmer' : _OrderDetailScreenState._date(estimate), style: const TextStyle(color: OvanieColors.blue, fontSize: 12, fontWeight: FontWeight.w900))])),
-        if (order.actions.canTrack) OutlinedButton.icon(onPressed: onTrack, icon: const Icon(Icons.local_shipping_outlined, size: 16), label: const Text('Suivre', style: TextStyle(fontSize: 10))),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(order.deliveredAt != null ? 'Livrée le' : 'Livraison estimée', style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5)), Text(order.deliveredAt != null ? _OrderDetailScreenState._date(order.deliveredAt!) : estimate == null ? 'À confirmer' : _OrderDetailScreenState._date(estimate), style: const TextStyle(color: OvanieColors.blue, fontSize: 12, fontWeight: FontWeight.w900))])),
+        if (order.canTrackDelivery) OutlinedButton.icon(onPressed: onTrack, icon: const Icon(Icons.local_shipping_outlined, size: 16), label: const Text('Suivre', style: TextStyle(fontSize: 12))),
       ]),
     );
   }
@@ -448,8 +445,8 @@ class _MiniInfo extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(width: 49, child: Text(label, style: const TextStyle(color: OvanieColors.muted, fontSize: 8.2))),
-          Expanded(child: Text(value.trim().isEmpty ? '—' : value, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: valueColor ?? OvanieColors.navy, fontSize: 8.8, height: 1.2, fontWeight: FontWeight.w700))),
+          SizedBox(width: 49, child: Text(label, style: const TextStyle(color: OvanieColors.muted, fontSize: 11))),
+          Expanded(child: Text(value.trim().isEmpty ? '—' : value, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: valueColor ?? OvanieColors.navy, fontSize: 11, height: 1.2, fontWeight: FontWeight.w700))),
         ]),
       );
 }
@@ -502,7 +499,7 @@ class _StatusPill extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 145),
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
         decoration: BoxDecoration(color: const Color(0xFFEAF2FF), borderRadius: BorderRadius.circular(30)),
-        child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.blue, fontSize: 10, fontWeight: FontWeight.w900)),
+        child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.blue, fontSize: 12, fontWeight: FontWeight.w900)),
       );
 }
 
@@ -555,10 +552,10 @@ class _ProductRow extends StatelessWidget {
               children: [
                 Text(item.productName, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.text, fontSize: 12, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 5),
-                Text('Qté : ${item.quantity} × ${formatFcfa(item.unitPrice)}', style: const TextStyle(color: OvanieColors.muted, fontSize: 10.5)),
+                Text('Qté : ${item.quantity} × ${formatFcfa(item.unitPrice)}', style: const TextStyle(color: OvanieColors.muted, fontSize: 12)),
                 if (item.deliveryStatusLabel.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(item.deliveryStatusLabel, style: const TextStyle(color: OvanieColors.blue, fontSize: 10, fontWeight: FontWeight.w800)),
+                  Text(item.deliveryStatusLabel, style: const TextStyle(color: OvanieColors.blue, fontSize: 12, fontWeight: FontWeight.w800)),
                 ],
               ],
             ),
@@ -674,11 +671,11 @@ class _TimelineRow extends StatelessWidget {
                   Text(event.label, style: const TextStyle(color: OvanieColors.text, fontSize: 11.5, fontWeight: FontWeight.w900)),
                   if (event.message.isNotEmpty) ...[
                     const SizedBox(height: 3),
-                    Text(event.message, style: const TextStyle(color: OvanieColors.muted, fontSize: 10.5, height: 1.3)),
+                    Text(event.message, style: const TextStyle(color: OvanieColors.muted, fontSize: 12, height: 1.3)),
                   ],
                   if (event.date != null) ...[
                     const SizedBox(height: 3),
-                    Text(_OrderDetailScreenState._date(event.date, withTime: true), style: const TextStyle(color: OvanieColors.muted, fontSize: 9.7)),
+                    Text(_OrderDetailScreenState._date(event.date, withTime: true), style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5)),
                   ],
                 ],
               ),
@@ -737,10 +734,10 @@ class _PaymentStateBanner extends StatelessWidget {
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 11.5)),
           const SizedBox(height: 2),
-          Text(message, style: const TextStyle(color: OvanieColors.muted, fontSize: 10.3, height: 1.35)),
+          Text(message, style: const TextStyle(color: OvanieColors.muted, fontSize: 12, height: 1.35)),
           if (order.paymentAttemptStatusLabel.isNotEmpty) ...[
             const SizedBox(height: 3),
-            Text('Dernière tentative : ${order.paymentAttemptStatusLabel}', style: const TextStyle(color: OvanieColors.muted, fontSize: 9.8)),
+            Text('Dernière tentative : ${order.paymentAttemptStatusLabel}', style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5)),
           ],
         ])),
       ]),
@@ -777,7 +774,7 @@ class _ActionsCard extends StatelessWidget {
     if (order.actions.canResumePayment) {
       actions.add(_ActionButton(icon: Icons.refresh_rounded, text: 'Reprendre le paiement', onPressed: busy ? null : onResumePayment, primary: true));
     }
-    if (order.actions.canTrack) {
+    if (order.canTrackDelivery) {
       actions.add(_ActionButton(icon: Icons.local_shipping_outlined, text: 'Suivre la livraison', onPressed: busy ? null : onTrack, primary: true));
     }
     if (order.actions.canConfirmReception) {
@@ -811,7 +808,7 @@ class _ActionsCard extends StatelessWidget {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: OvanieColors.border)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Besoin d’aide ou d’autres actions ?', style: TextStyle(color: OvanieColors.navy, fontSize: 10.5, fontWeight: FontWeight.w800)),
+            const Text('Actions', style: TextStyle(color: OvanieColors.navy, fontSize: 15, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             LayoutBuilder(builder: (context, c) {
               final width = (c.maxWidth - 8) / 2;
@@ -846,13 +843,13 @@ class _ActionButton extends StatelessWidget {
                 onPressed: onPressed,
                 style: FilledButton.styleFrom(backgroundColor: OvanieColors.orange, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
                 icon: Icon(icon, size: 17),
-                label: FittedBox(child: Text(text, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900))),
+                label: FittedBox(child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
               )
             : OutlinedButton.icon(
                 onPressed: onPressed,
                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 7), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
                 icon: Icon(icon, size: 17),
-                label: FittedBox(child: Text(text, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900))),
+                label: FittedBox(child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
               ),
       );
 }
@@ -870,7 +867,7 @@ class _InlineInfo extends StatelessWidget {
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(icon, color: color, size: 18),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: TextStyle(color: color, fontSize: 10.7, height: 1.35, fontWeight: FontWeight.w700))),
+          Expanded(child: Text(text, style: TextStyle(color: color, fontSize: 12, height: 1.35, fontWeight: FontWeight.w700))),
         ]),
       );
 }

@@ -9,6 +9,7 @@ use App\Models\Shop;
 use App\Rules\MarketplaceProductImage;
 use App\Services\PayDunyaService;
 use App\Services\ProductImageNormalizer;
+use App\Services\ProductVariantService;
 use App\Services\SellerLogisticsValidator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -264,6 +265,7 @@ class VendorProductController extends Controller
 
         $this->syncProductDeliveryZones($product, $request);
         $this->storeProductImages($product, $request);
+        app(ProductVariantService::class)->sync($product, $request);
 
         if ($request->expectsJson()) {
             // Les routes API mobiles centralisées dans routes/api.php n'utilisent pas
@@ -289,7 +291,7 @@ class VendorProductController extends Controller
     {
         $this->ensureOwnsProduct($product);
 
-        $product->load('images', 'category', 'deliveryZones');
+        $product->load('images', 'variants', 'category', 'deliveryZones');
         $categories = Category::orderBy('name')->get();
         $boostPrice = self::DEFAULT_BOOST_PRICE;
         $units = self::BTP_UNITS;
@@ -362,6 +364,8 @@ class VendorProductController extends Controller
 
             $this->syncProductGalleryColumn($product);
         }
+
+        app(ProductVariantService::class)->sync($product, $request);
 
         return redirect()
             ->route('vendor.products.edit', $product)
@@ -1103,6 +1107,13 @@ class VendorProductController extends Controller
             return [
                 'can_publish' => false,
                 'reason' => 'la boutique n’est pas actuellement ouverte à la publication.',
+            ];
+        }
+
+        if (! $shop->hasConfiguredPayout()) {
+            return [
+                'can_publish' => false,
+                'reason' => 'le calendrier et le compte de reversement vendeur doivent être confirmés.',
             ];
         }
 

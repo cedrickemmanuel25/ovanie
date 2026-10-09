@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/sync/live_sync_service.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/auth_required_view.dart';
 import '../../../shared/widgets/ovanie_bottom_navigation.dart';
@@ -11,6 +12,7 @@ import '../../cart/presentation/cart_screen.dart';
 import '../../tracking/presentation/client_delivery_tracking_screen.dart';
 import '../data/orders_repository.dart';
 import '../domain/order_model.dart';
+import 'invoice_screen.dart';
 import 'order_detail_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
@@ -29,7 +31,8 @@ class OrdersScreen extends StatefulWidget {
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen> {
+class _OrdersScreenState extends State<OrdersScreen>
+    with LiveSyncListener<OrdersScreen> {
   static const _apiBuckets = ['in_progress', 'delivered', 'cancelled', 'returned'];
   static const _tabs = <_OrdersTabData>[
     _OrdersTabData('all', 'Toutes'),
@@ -54,6 +57,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     super.initState();
     SessionStore.instance.addListener(_sessionChanged);
     _loadOrders();
+    listenLiveSync({'orders'}, () => _loadOrders(silent: true));
   }
 
   @override
@@ -76,16 +80,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
-  Future<void> _loadOrders() async {
+  Future<void> _loadOrders({bool silent = false}) async {
     if (!SessionStore.instance.isAuthenticated) {
       if (mounted) setState(() => _loading = false);
       return;
     }
 
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    // Rafraîchissement synchronisé : pas de loader si la liste est affichée.
+    if (!silent || _orders.isEmpty) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       final pages = await Future.wait(
@@ -163,8 +170,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
   bool _isShipping(MobileOrder order) {
     if (order.clientBucket != 'in_progress' || _isToPay(order)) return false;
     final delivery = order.deliveryStatus.toLowerCase();
-    return order.actions.canTrack ||
-        delivery.contains('transit') ||
+    // Le suivi est consultable dès la commande : seul l'état réel de la
+    // livraison indique que le colis est parti.
+    return delivery.contains('transit') ||
         delivery.contains('livraison') ||
         delivery.contains('delivery') ||
         delivery.contains('shipped') ||
@@ -385,15 +393,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 26),
         children: [
-          if (_selectedTab == 'all') ...[
-            _OrdersSummaryStrip(
-              total: _orders.length,
-              toPay: _countFor('to_pay'),
-              inProgress: _countFor('preparing') + _countFor('shipping'),
-              delivered: _countFor('delivered'),
-            ),
-            const SizedBox(height: 16),
-          ],
           if (_query.isNotEmpty) ...[
             _SearchResultChip(query: _query, onClear: () => setState(() => _query = '')),
             const SizedBox(height: 12),
@@ -406,11 +405,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 state: _stateOf(order),
                 onOpen: () => _openOrder(order),
                 onPrimary: () => _primaryAction(order),
+                onInvoice: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => InvoiceScreen(orderId: order.id, initialOrder: order)),
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 2),
-          _OrdersHelpCard(onContact: _showSupportMessage),
         ],
       ),
     );
@@ -418,14 +418,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   _OrderVisualState _stateOf(MobileOrder order) {
     if (order.clientBucket == 'cancelled') return _OrderVisualState.cancelled;
-    if (order.clientBucket == 'delivered') return _OrderVisualState.delivered;
+    if (order.clientBucket == 'delivered' ||
+        order.clientBucket == 'returned' ||
+        order.deliveredAt != null ||
+        order.deliveryStatus == 'delivered') {
+      return _OrderVisualState.delivered;
+    }
     if (_isToPay(order)) return _OrderVisualState.toPay;
     if (_isShipping(order)) return _OrderVisualState.shipping;
     return _OrderVisualState.preparing;
   }
 
   void _primaryAction(MobileOrder order) {
-    if (_isShipping(order) && order.actions.canTrack) {
+    if (_isShipping(order) && order.canTrackDelivery) {
       _openTracking(order);
       return;
     }
@@ -604,7 +609,7 @@ class _SummaryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('${item.value}', style: const TextStyle(color: OvanieColors.navy, fontSize: 18, fontWeight: FontWeight.w900)),
-                Text(item.label, style: const TextStyle(color: OvanieColors.navy, fontSize: 10.5, height: 1.15, fontWeight: FontWeight.w500)),
+                Text(item.label, style: const TextStyle(color: OvanieColors.navy, fontSize: 12, height: 1.15, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
@@ -621,125 +626,287 @@ class _OrderCard extends StatelessWidget {
   final _OrderVisualState state;
   final VoidCallback onOpen;
   final VoidCallback onPrimary;
+  final VoidCallback onInvoice;
 
-  const _OrderCard({required this.order, required this.state, required this.onOpen, required this.onPrimary});
+  const _OrderCard({
+    required this.order,
+    required this.state,
+    required this.onOpen,
+    required this.onPrimary,
+    required this.onInvoice,
+  });
+
+  String get _number => 'N° ${order.orderNumber.isEmpty ? order.id : order.orderNumber}';
+
+  int get _articles => order.items.fold<int>(0, (sum, item) => sum + item.quantity);
+
+  String get _destination =>
+      [order.quartier, order.commune].where((e) => e.trim().isNotEmpty).join(', ');
 
   @override
   Widget build(BuildContext context) {
-    final chip = _statusStyle(state);
-    // La variante horizontale est réservée aux tablettes. L'ancien seuil
-    // déclenchait cette mise en page trop large sur certains téléphones.
-    final compact = MediaQuery.sizeOf(context).width < 600;
+    return switch (state) {
+      _OrderVisualState.toPay => _toPay(),
+      _OrderVisualState.preparing => _preparing(),
+      _OrderVisualState.shipping => _shipping(),
+      _OrderVisualState.delivered => _delivered(),
+      _OrderVisualState.cancelled => _cancelled(),
+    };
+  }
 
-    return InkWell(
-      onTap: onOpen,
+  Widget _frame({required Widget child, Color border = const Color(0xFFE4E7ED), Color color = Colors.white}) {
+    return Material(
+      color: color,
       borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE4E7ED)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Commande n° ${order.orderNumber.isEmpty ? order.id : order.orderNumber}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: OvanieColors.navy, fontSize: 14.5, fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(_formatDateTime(order.createdAt), style: const TextStyle(color: OvanieColors.navy, fontSize: 11.2, fontWeight: FontWeight.w500)),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _StatusChip(label: chip.$1, color: chip.$2, background: chip.$3),
-                    const SizedBox(height: 8),
-                    Text(formatFcfa(order.total), style: const TextStyle(color: OvanieColors.orange, fontSize: 14.5, fontWeight: FontWeight.w900)),
-                  ],
-                ),
-                const SizedBox(width: 2),
-                const Icon(Icons.chevron_right_rounded, color: OvanieColors.navy, size: 22),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (compact)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 12,
-                    child: _OrderThumbs(
-                      items: order.items,
-                      maxItems: 2,
-                      itemSize: 38,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 10,
-                    child: _OrderMeta(order: order, state: state),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 10,
-                    child: Column(
-                      children: [
-                        _OrderActions(
-                          state: state,
-                          onPrimary: onPrimary,
-                          onOpen: onOpen,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              )
-            else
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  SizedBox(width: 265, child: _OrderThumbs(items: order.items)),
-                  const SizedBox(width: 14),
-                  Expanded(child: _OrderMeta(order: order, state: state)),
-                  const SizedBox(width: 12),
-                  SizedBox(width: 160, child: _OrderActions(state: state, onPrimary: onPrimary, onOpen: onOpen)),
-                ],
-              ),
-          ],
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: border),
+          ),
+          child: child,
         ),
       ),
     );
   }
 
-  (String, Color, Color) _statusStyle(_OrderVisualState state) {
-    switch (state) {
-      case _OrderVisualState.toPay:
-        return ('À payer', const Color(0xFFE97500), const Color(0xFFFFF0D9));
-      case _OrderVisualState.preparing:
-        return ('En préparation', const Color(0xFF288A45), const Color(0xFFE8F6E9));
-      case _OrderVisualState.shipping:
-        return ('En livraison', const Color(0xFF1664D9), const Color(0xFFEAF2FF));
-      case _OrderVisualState.delivered:
-        return ('Livrée', const Color(0xFF288A45), const Color(0xFFE8F6E9));
-      case _OrderVisualState.cancelled:
-        return ('Annulée', const Color(0xFF6E7480), const Color(0xFFF0F1F3));
-    }
+  Widget _title(String trailing, {Color trailingColor = OvanieColors.muted}) => Row(
+        children: [
+          Expanded(
+            child: Text(_number, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.navy, fontSize: 15, fontWeight: FontWeight.w700)),
+          ),
+          Text(trailing, style: TextStyle(color: trailingColor, fontSize: 13, fontWeight: FontWeight.w600)),
+        ],
+      );
+
+  Widget _button(String label, IconData icon, VoidCallback onPressed, {bool filled = true, Color color = OvanieColors.orange}) => SizedBox(
+        height: 44,
+        width: double.infinity,
+        child: filled
+            ? FilledButton.icon(
+                onPressed: onPressed,
+                style: FilledButton.styleFrom(backgroundColor: color, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                icon: Icon(icon, size: 18),
+                label: Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+              )
+            : OutlinedButton.icon(
+                onPressed: onPressed,
+                style: OutlinedButton.styleFrom(foregroundColor: color, side: BorderSide(color: color.withValues(alpha: .5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                icon: Icon(icon, size: 18),
+                label: Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+              ),
+      );
+
+  /// À payer : le montant dû et l'action de paiement priment.
+  Widget _toPay() {
+    final due = order.outstandingAmount > 0 ? order.outstandingAmount : order.total;
+    return _frame(
+      border: const Color(0xFFFFD9B8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _title(_dateOrEmpty(order.createdAt)),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Montant à régler', style: TextStyle(color: OvanieColors.muted, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text(formatFcfa(due), style: const TextStyle(color: OvanieColors.orange, fontSize: 22, fontWeight: FontWeight.w800)),
+                  ],
+                ),
+              ),
+              _OrderThumbs(items: order.items, maxItems: 2, itemSize: 40),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _button('Payer maintenant', Icons.lock_outline_rounded, onPrimary),
+        ],
+      ),
+    );
+  }
+
+  /// À préparer : où en est la commande (confirmée, préparation, expédition).
+  Widget _preparing() {
+    const steps = ['Confirmée', 'Préparation', 'Expédition'];
+    const current = 1;
+    return _frame(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _title(formatFcfa(order.total), trailingColor: OvanieColors.navy),
+          const SizedBox(height: 4),
+          Text(
+            '$_articles article${_articles > 1 ? 's' : ''} · commandé le ${_dateOrEmpty(order.createdAt)}',
+            style: const TextStyle(color: OvanieColors.muted, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              for (var i = 0; i < steps.length; i++) ...[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: i <= current ? const Color(0xFF288A45) : const Color(0xFFE4E7ED),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        steps[i],
+                        style: TextStyle(
+                          color: i <= current ? const Color(0xFF288A45) : OvanieColors.muted,
+                          fontSize: 12.5,
+                          fontWeight: i == current ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (i != steps.length - 1) const SizedBox(width: 6),
+              ],
+            ],
+          ),
+          if (order.deliveryStatusLabel.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(order.deliveryStatusLabel, style: const TextStyle(color: OvanieColors.navy, fontSize: 13.5)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// En livraison : date prévue, destination et suivi.
+  Widget _shipping() {
+    final date = order.estimatedMaxDate ?? order.estimatedMinDate;
+    return _frame(
+      border: const Color(0xFFC9DCFA),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _title(formatFcfa(order.total), trailingColor: OvanieColors.navy),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(color: Color(0xFFEAF2FF), shape: BoxShape.circle),
+                child: const Icon(Icons.local_shipping_outlined, color: Color(0xFF1664D9), size: 21),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      date == null ? 'En route vers vous' : 'Arrivée prévue le ${_dateOrEmpty(date)}',
+                      style: const TextStyle(color: OvanieColors.navy, fontSize: 14.5, fontWeight: FontWeight.w700),
+                    ),
+                    if (_destination.isNotEmpty)
+                      Text(_destination, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.muted, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (order.canTrackDelivery) ...[
+            const SizedBox(height: 12),
+            _button('Suivre la livraison', Icons.near_me_outlined, onPrimary, color: const Color(0xFF1664D9)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Livrée : récapitulatif sobre avec accès à la facture.
+  Widget _delivered() {
+    return _frame(
+      child: Row(
+        children: [
+          if (order.items.isNotEmpty) _OrderThumb(item: order.items.first, size: 48),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_number, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.navy, fontSize: 15, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, size: 15, color: Color(0xFF288A45)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        order.deliveredAt == null ? 'Livrée' : 'Livrée le ${_dateOrEmpty(order.deliveredAt)}',
+                        style: const TextStyle(color: Color(0xFF288A45), fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(formatFcfa(order.total), style: const TextStyle(color: OvanieColors.navy, fontSize: 14, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onInvoice,
+            icon: const Icon(Icons.description_outlined, size: 18),
+            label: const Text('Facture', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Annulée : ligne grisée, sans action.
+  Widget _cancelled() {
+    return _frame(
+      color: const Color(0xFFF8F9FB),
+      child: Row(
+        children: [
+          const Icon(Icons.block_rounded, color: Color(0xFF9AA3B2), size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_number, style: const TextStyle(color: Color(0xFF6E7480), fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  order.updatedAt == null ? 'Annulée' : 'Annulée le ${_dateOrEmpty(order.updatedAt)}',
+                  style: const TextStyle(color: Color(0xFF9AA3B2), fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            formatFcfa(order.total),
+            style: const TextStyle(
+              color: Color(0xFF9AA3B2),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.lineThrough,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
+
+String _dateOrEmpty(DateTime? value) => value == null ? '' : _formatDate(value);
 
 class _OrderThumbs extends StatelessWidget {
   final List<MobileOrderItem> items;
@@ -806,105 +973,6 @@ class _OrderThumb extends StatelessWidget {
   }
 }
 
-class _OrderMeta extends StatelessWidget {
-  final MobileOrder order;
-  final _OrderVisualState state;
-  const _OrderMeta({required this.order, required this.state});
-
-  @override
-  Widget build(BuildContext context) {
-    final info = _infoLine(order, state);
-    final destination = [order.quartier, order.commune, order.city].where((e) => e.trim().isNotEmpty).take(2).join(', ');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(info.$1, size: 17, color: info.$2),
-            const SizedBox(width: 8),
-            Expanded(child: Text(info.$3, style: const TextStyle(color: OvanieColors.navy, fontSize: 11.2, height: 1.3, fontWeight: FontWeight.w500))),
-          ],
-        ),
-        if (destination.isNotEmpty) ...[
-          const SizedBox(height: 9),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.location_on_outlined, size: 17, color: OvanieColors.navy),
-              const SizedBox(width: 8),
-              Expanded(child: Text(destination, style: const TextStyle(color: OvanieColors.navy, fontSize: 11.2, height: 1.3))),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-
-  (IconData, Color, String) _infoLine(MobileOrder order, _OrderVisualState state) {
-    switch (state) {
-      case _OrderVisualState.toPay:
-        return (Icons.calendar_month_outlined, OvanieColors.navy, 'Paiement en attente\nFinalisez votre règlement pour poursuivre la commande.');
-      case _OrderVisualState.preparing:
-        return (Icons.calendar_month_outlined, OvanieColors.navy, 'Préparation en cours\nVotre commande est en cours de traitement.');
-      case _OrderVisualState.shipping:
-        final date = order.estimatedMaxDate ?? order.estimatedMinDate;
-        return (Icons.local_shipping_outlined, OvanieColors.navy, date == null ? 'Livraison en cours' : 'Livraison estimée\n${_formatDate(date)}');
-      case _OrderVisualState.delivered:
-        return (Icons.check_circle_outline_rounded, const Color(0xFF2A9A4F), order.deliveredAt == null ? 'Commande livrée' : 'Livrée le\n${_formatDateTime(order.deliveredAt)}');
-      case _OrderVisualState.cancelled:
-        return (Icons.cancel_outlined, OvanieColors.orange, order.updatedAt == null ? 'Commande annulée' : 'Annulée le\n${_formatDateTime(order.updatedAt)}');
-    }
-  }
-}
-
-class _OrderActions extends StatelessWidget {
-  final _OrderVisualState state;
-  final VoidCallback onPrimary;
-  final VoidCallback onOpen;
-
-  const _OrderActions({required this.state, required this.onPrimary, required this.onOpen});
-
-  @override
-  Widget build(BuildContext context) {
-    final showPrimary = state == _OrderVisualState.toPay || state == _OrderVisualState.shipping;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (showPrimary) ...[
-          SizedBox(
-            height: 38,
-            child: FilledButton.icon(
-              onPressed: onPrimary,
-              style: FilledButton.styleFrom(
-                backgroundColor: OvanieColors.orange,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-              ),
-              icon: state == _OrderVisualState.shipping ? const Icon(Icons.local_shipping_outlined, size: 16) : const SizedBox.shrink(),
-              label: FittedBox(child: Text(state == _OrderVisualState.shipping ? 'Suivre la livraison' : 'Payer maintenant', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700))),
-            ),
-          ),
-          const SizedBox(height: 7),
-        ],
-        SizedBox(
-          height: 38,
-          child: OutlinedButton(
-            onPressed: onOpen,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: OvanieColors.navy,
-              side: const BorderSide(color: OvanieColors.navy),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            ),
-            child: const FittedBox(child: Text('Voir détails', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700))),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _StatusChip extends StatelessWidget {
   final String label;
   final Color color;
@@ -916,7 +984,7 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(7)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700)),
+      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -1009,41 +1077,7 @@ class _OrdersHelpCard extends StatelessWidget {
   const _OrdersHelpCard({required this.onContact});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF6EF),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.headset_mic_outlined, color: OvanieColors.orange, size: 34),
-          const SizedBox(width: 13),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Besoin d’aide avec une commande ?', style: TextStyle(color: OvanieColors.navy, fontSize: 13.5, fontWeight: FontWeight.w800)),
-                SizedBox(height: 3),
-                Text('Notre équipe est disponible pour vous accompagner.', style: TextStyle(color: OvanieColors.navy, fontSize: 11.2, height: 1.25)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          OutlinedButton(
-            onPressed: onContact,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: OvanieColors.orange,
-              side: const BorderSide(color: OvanieColors.orange),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            ),
-            child: const Text('Nous contacter', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _SearchResultChip extends StatelessWidget {

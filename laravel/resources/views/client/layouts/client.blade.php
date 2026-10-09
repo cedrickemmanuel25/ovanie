@@ -25,7 +25,7 @@
                 <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
             </button>
             <a href="{{ Route::has('home') ? route('home') : url('/') }}" class="cs-logo" aria-label="Retour à l’accueil">
-                <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE" class="cs-logo-img">
+                <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE" class="cs-logo-img">
             </a>
         </div>
         <form class="cs-search" action="{{ Route::has('search') ? route('search') : route('catalog.index') }}" method="GET">
@@ -140,5 +140,6 @@
 </div>
 <script src="{{ asset('js/client-space.js') }}?v={{ @filemtime(public_path('js/client-space.js')) }}"></script>
 @stack('scripts')
+@include('layouts.partials.live-sync')
 </body>
 </html>

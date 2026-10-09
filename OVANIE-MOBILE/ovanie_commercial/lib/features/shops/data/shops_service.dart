@@ -3,11 +3,13 @@ import 'package:dio/dio.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_exception.dart';
 import '../models/shop_data.dart';
+import '../models/configuration_mission.dart';
 
 class ShopsService {
   ShopsService(this._api);
 
   final ApiClient _api;
+  ApiClient get api => _api;
 
   Future<CommercialShopsData> fetch({
     String query = '',
@@ -58,6 +60,39 @@ class ShopsService {
       'delivery_zones': data['delivery_zones'],
       'seller_types': data['seller_types'],
     });
+  }
+
+
+  Future<ShopConfigurationMissionData> configurationMissions() async {
+    final json = await _api.getJson('/mobile/v1/commercial/shop-configuration-missions');
+    return ShopConfigurationMissionData.fromJson(json);
+  }
+
+  Future<Map<String, dynamic>> configurationMission(int id) =>
+      _api.getJson('/mobile/v1/commercial/shop-configuration-missions/$id');
+
+  Future<ShopConfigurationMission> startConfigurationMission(int id) async {
+    final json = await _api.postJson('/mobile/v1/commercial/shop-configuration-missions/$id/start');
+    return ShopConfigurationMission.fromJson(Map<String, dynamic>.from(json['mission'] as Map));
+  }
+
+  Future<ShopConfigurationMission> saveMissionLogistics(int id, Map<String, dynamic> body) async {
+    final json = await _api.putJson('/mobile/v1/commercial/shop-configuration-missions/$id/logistics', body: body);
+    return ShopConfigurationMission.fromJson(Map<String, dynamic>.from(json['mission'] as Map));
+  }
+
+  Future<ShopConfigurationMission> saveMissionPayout(int id, Map<String, dynamic> body) async {
+    final json = await _api.putJson('/mobile/v1/commercial/shop-configuration-missions/$id/payout', body: body);
+    return ShopConfigurationMission.fromJson(Map<String, dynamic>.from(json['mission'] as Map));
+  }
+
+  Future<ShopConfigurationMission> markMissionProductsDone(int id) async {
+    final json = await _api.postJson('/mobile/v1/commercial/shop-configuration-missions/$id/products-done');
+    return ShopConfigurationMission.fromJson(Map<String, dynamic>.from(json['mission'] as Map));
+  }
+
+  Future<void> completeConfigurationMission(int id) async {
+    await _api.postJson('/mobile/v1/commercial/shop-configuration-missions/$id/complete');
   }
 
   Future<ReverseGeocodeResult> reverseGeocode({required double latitude, required double longitude}) async {

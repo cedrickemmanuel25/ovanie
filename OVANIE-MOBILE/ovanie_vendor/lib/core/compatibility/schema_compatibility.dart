@@ -136,7 +136,7 @@ class OvanieSchemaIncompatibleApp extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      'Cette version de l’application ne peut pas utiliser en toute sécurité le contrat de données actuellement déployé par OVANIE. Mettez à jour l’application avant de continuer.',
+                      'Une nouvelle version de l’application est disponible. Mettez-la à jour pour continuer à utiliser OVANIE.',
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 22),
@@ -151,14 +151,12 @@ class OvanieSchemaIncompatibleApp extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Application : ${OvanieSchemaContract.appLabel}'),
-                          Text('Contrat APK : ${OvanieSchemaContract.supportedSchemaVersion}'),
-                          Text('Contrat serveur : ${result.serverSchemaVersion ?? 'inconnu'}'),
-                        ],
+                                                                            ],
                       ),
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Aucune donnée n’a été modifiée. Fermez cette application et installez la version OVANIE la plus récente.',
+                      'Vos données sont conservées. Installez la dernière version puis reconnectez-vous.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: const Color(0xffff6b00), fontWeight: FontWeight.w700),
                     ),

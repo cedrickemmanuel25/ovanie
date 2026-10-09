@@ -58,6 +58,104 @@ document.addEventListener('DOMContentLoaded', () => {
         scrollToBottom();
     };
 
+    const formatPrice = (value) => `${Math.round(Number(value) || 0).toLocaleString('fr-FR')} FCFA`;
+
+    const updateCartBadges = (count) => {
+        if (count === undefined || count === null) return;
+        document.querySelectorAll('#cart-count, #cartCount, [data-cart-count], .cart-count').forEach((el) => {
+            el.textContent = String(count);
+            if (el.dataset) el.dataset.count = String(count);
+        });
+    };
+
+    /** Ajoute un produit au panier du site, comme le ferait le bouton de la fiche produit. */
+    const addToCart = async (product, quantity, button) => {
+        if (button) { button.disabled = true; button.textContent = 'Ajout en cours…'; }
+        try {
+            const data = await json(`/cart/add/${product.id}`, {
+                method: 'POST',
+                body: JSON.stringify({ quantity }),
+            });
+            updateCartBadges(data.cart_count);
+            if (button) { button.textContent = 'Ajouté au panier'; button.classList.add('is-done'); }
+            const note = document.createElement('div');
+            note.className = 'ovai-bubble system ovai-cart-note';
+            note.innerHTML = '';
+            note.append(`${quantity} × « ${product.name} » est dans votre panier. `);
+            const link = document.createElement('a');
+            link.href = '/cart';
+            link.textContent = 'Voir mon panier';
+            note.appendChild(link);
+            messages.appendChild(note);
+            scrollToBottom();
+        } catch (error) {
+            if (button) { button.disabled = false; button.textContent = 'Ajouter au panier'; }
+            addBubble(`Je n’ai pas pu l’ajouter au panier : ${error.message}`, 'system');
+        }
+    };
+
+    /** Fiches produits renvoyées par l'assistante sous sa réponse. */
+    const renderProducts = (products) => {
+        if (!Array.isArray(products) || !products.length) return;
+        const list = document.createElement('div');
+        list.className = 'ovai-products';
+        products.forEach((product) => {
+            const card = document.createElement('article');
+            card.className = 'ovai-product';
+
+            const image = document.createElement('img');
+            image.src = product.image_url || '';
+            image.alt = product.name;
+            image.loading = 'lazy';
+
+            const info = document.createElement('div');
+            info.className = 'ovai-product__info';
+            const name = document.createElement('a');
+            name.className = 'ovai-product__name';
+            name.href = product.url;
+            name.textContent = product.name;
+            const meta = document.createElement('span');
+            meta.className = 'ovai-product__meta';
+            meta.textContent = [product.brand, product.category].filter(Boolean).join(' · ');
+            const price = document.createElement('strong');
+            price.className = 'ovai-product__price';
+            price.textContent = product.price_label || formatPrice(product.price);
+            info.append(name, meta, price);
+
+            const actions = document.createElement('div');
+            actions.className = 'ovai-product__actions';
+            const view = document.createElement('a');
+            view.className = 'ovai-btn ovai-btn--ghost';
+            view.href = product.url;
+            view.textContent = 'Voir la fiche';
+            actions.appendChild(view);
+            if (product.needs_variant) {
+                const choose = document.createElement('a');
+                choose.className = 'ovai-btn ovai-btn--primary';
+                choose.href = product.url;
+                choose.textContent = 'Choisir un modèle';
+                actions.appendChild(choose);
+            } else if (product.in_stock) {
+                const add = document.createElement('button');
+                add.type = 'button';
+                add.className = 'ovai-btn ovai-btn--primary';
+                add.textContent = 'Ajouter au panier';
+                add.addEventListener('click', () => addToCart(product, product.min_quantity || 1, add));
+                actions.appendChild(add);
+            } else {
+                const out = document.createElement('span');
+                out.className = 'ovai-product__out';
+                out.textContent = 'Indisponible';
+                actions.appendChild(out);
+            }
+
+            card.append(image, info, actions);
+            list.appendChild(card);
+        });
+        messages.appendChild(list);
+        scrollToBottom();
+    };
+
     const showTyping = () => {
         const node = document.createElement('div');
         node.className = 'ovai-typing';
@@ -124,7 +222,11 @@ document.addEventListener('DOMContentLoaded', () => {
             welcome.hidden = true;
             resumeChoice.hidden = true;
             if (data.messages?.length) {
-                data.messages.forEach((item) => addBubble(item.body, item.sender === 'customer' ? 'user' : 'ai'));
+                data.messages.forEach((item) => {
+                    addBubble(item.body, item.sender === 'customer' ? 'user' : 'ai');
+                    // Les fiches produits proposées restent visibles quand on rouvre la conversation.
+                    renderProducts(item.products);
+                });
             }
         } catch (_) {
             sessionStorage.removeItem(storageKey);
@@ -181,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sending = true;
         sendButton.disabled = true;
         showTyping();
-        setStatus('N’Nan rédige une réponse…');
+        setStatus('Miss N’Nan rédige une réponse…');
 
         try {
             let data;
@@ -201,6 +303,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             hideTyping();
             addBubble(data.reply, 'ai');
+            // Une demande « ajoute au panier » comprise par l'assistante est exécutée tout de suite.
+            if (data.cart_action && data.cart_action.type === 'add_to_cart') {
+                await addToCart({ id: data.cart_action.product_id, name: data.cart_action.name }, data.cart_action.quantity, null);
+            } else {
+                renderProducts(data.products);
+            }
             if (data.requires_human) {
                 addBubble('Votre dossier est en attente de prise en charge par un conseiller.', 'system');
             }
@@ -217,6 +325,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     triggers.forEach((trigger) => trigger.addEventListener('click', (event) => {
         event.preventDefault();
+        // Depuis le menu mobile : on referme d'abord le menu, puis on ouvre l'assistante.
+        if (trigger.closest('.ov-category-drawer')) {
+            document.getElementById('closeMobileMenu')?.click();
+            setTimeout(openPanel, 180);
+            return;
+        }
         openPanel();
     }));
 

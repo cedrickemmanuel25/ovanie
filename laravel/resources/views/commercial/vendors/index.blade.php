@@ -35,6 +35,7 @@
         <p class="page-subtitle">Gérez les boutiques de votre portefeuille, leur localisation, leur préparation logistique et leurs produits.</p>
     </div>
     <div class="page-actions">
+        <a class="btn" href="{{ route('commercial.configuration-missions.index') }}"><i data-lucide="clipboard-list"></i>Missions boutiques</a>
         <a class="btn btn-orange" href="{{ route('commercial.vendors.create') }}"><i data-lucide="store"></i>Créer un vendeur et sa boutique</a>
     </div>
 </div>
@@ -121,7 +122,7 @@
                         @if($shop->landmark)<div class="shop-secondary">Repère : {{ $shop->landmark }}</div>@endif
                         <div class="status-row">
                             <span class="status-chip {{ $locationReady ? 'success' : 'danger' }}"><i data-lucide="map-pin-check"></i>{{ $locationReady ? 'GPS enregistré' : 'GPS manquant' }}</span>
-                            <span class="status-chip {{ $shop->kyc_status === 'verified' ? 'success' : 'warning' }}"><i data-lucide="shield-check"></i>{{ $shop->kyc_status === 'verified' ? 'Identité vérifiée' : 'Identité en attente' }}</span>
+                            <span class="status-chip {{ in_array($shop->kyc_status, ['verified', 'automated_checked'], true) ? 'success' : 'warning' }}"><i data-lucide="shield-check"></i>{{ $shop->kyc_status === 'verified' ? 'Identité vérifiée' : ($shop->kyc_status === 'automated_checked' ? 'Fichiers contrôlés' : 'Dossier à compléter') }}</span>
                         </div>
                     </section>
 

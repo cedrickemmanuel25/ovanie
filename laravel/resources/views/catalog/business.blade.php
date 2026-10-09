@@ -13,6 +13,9 @@
 </head>
 <body>
 @php
+    $mainDomain = preg_replace('/^www\./', '', strtolower(trim((string) config('ovanie.main_domain', 'ovanie.com')))) ?: 'ovanie.com';
+    $mainCatalogUrl = rtrim((string) config('app.url', 'https://' . $mainDomain), '/') . '/catalog';
+    $professionalProfiles = (array) config('ovanie_pro.professional_profiles', []);
     $icon = function (string $name, string $class = '') {
         $paths = [
             'user' => '<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>',
@@ -29,6 +32,11 @@
             'building' => '<path d="M4 21V8l8-5 8 5v13M2 21h20M8 11h2M14 11h2M8 15h2M14 15h2"/>',
             'pin' => '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2"/>',
             'truck' => '<path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/>',
+            'factory' => '<path d="M4 21V10l5 3V8l5 3V4h6v17M2 21h20M17 8h1M17 12h1M7 17h1M12 17h1"/>',
+            'store' => '<path d="M3 9l2-5h14l2 5M4 9h16v11H4z"/><path d="M8 13h8M8 17h5"/>',
+            'hardhat' => '<path d="M4 18h16M7 18v-4a5 5 0 0 1 10 0v4M9 9V6h6v3M12 3v3"/>',
+            'home' => '<path d="M3 11 12 4l9 7v10H3z"/><path d="M9 21v-6h6v6"/>',
+            'wrench' => '<path d="m14.7 6.3 3-3 3 3-3 3M17.7 6.3 10 14l-3-3-4 4 6 6 4-4-3-3"/>',
         ];
         return '<svg class="'.$class.'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'.($paths[$name] ?? '').'</svg>';
     };
@@ -36,20 +44,22 @@
 
 <header class="business-header">
     <div class="shell header-row">
-        <a class="business-logo" href="{{ route('home') }}" aria-label="Accueil OVANIE">
-            <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE">
+        <a class="business-logo" href="{{ route('catalog.business') }}" aria-label="Accueil OVANIE Pro">
+            <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE">
         </a>
         <nav class="desktop-nav" aria-label="Navigation principale">
             <a class="active" href="{{ route('catalog.business') }}">OVANIE Pro</a>
-            <a href="{{ route('catalog.index') }}">Catalogue OVANIE</a>
+            <a href="{{ $mainCatalogUrl }}">Catalogue OVANIE</a>
             <a href="{{ route('appel.offre') }}">Publier un appel d’offres</a>
+            <a href="#profils-pro">Profils professionnels</a>
             <a href="{{ route('devis.create') }}">Demander un devis</a>
         </nav>
         <div class="header-actions">
-            @auth
-                <a class="login-link" href="{{ route('dashboard') }}">{!! $icon('user') !!}<span>Mon espace</span></a>
+            @auth('pro')
+                <a class="login-link" href="{{ route('pro.account') }}">{!! $icon('user') !!}<span>Mon espace</span></a>
             @else
-                <a class="login-link" href="{{ route('login') }}">{!! $icon('user') !!}<span>Se connecter</span></a>
+                <a class="login-link" href="{{ route('pro.login') }}">{!! $icon('user') !!}<span>Se connecter</span></a>
+                <a class="header-register" href="{{ route('pro.register.choice') }}">Créer un compte</a>
             @endauth
             <a class="header-cta" href="{{ route('appel.offre') }}">Publier un besoin</a>
         </div>
@@ -61,11 +71,15 @@
         <div class="shell hero-layout">
             <div class="hero-copy">
                 <span class="kicker">OVANIE Pro</span>
-                <h1>Des conditions<br>professionnelles<br>pour vos chantiers</h1>
+                <h1>Des conditions professionnelles pour vos chantiers</h1>
                 <p>Achetez en volume, au meilleur prix et dans les délais de vos projets. OVANIE Pro connecte les entreprises BTP à des offres professionnelles publiées.</p>
                 <div class="hero-buttons">
                     <a class="button button-orange" href="#offres">Voir les offres disponibles {!! $icon('arrow') !!}</a>
-                    <a class="button button-outline" href="{{ route('appel.offre') }}">Publier une demande</a>
+                    @guest('pro')
+                        <a class="button button-outline" href="{{ route('pro.register.choice') }}">Créer mon compte PRO</a>
+                    @else
+                        <a class="button button-outline" href="{{ route('appel.offre') }}">Publier une demande</a>
+                    @endguest
                 </div>
                 <div class="hero-proof">{!! $icon('shield') !!}<span>Plateforme B2B dédiée aux professionnels du BTP</span></div>
             </div>
@@ -86,6 +100,55 @@
             <label><span>Type d’offre</span><select name="offer_type"><option value="">Tous les types</option><option value="catalogue" @selected(($filters['offer_type'] ?? '') === 'catalogue')>Offre catalogue</option><option value="sur_demande" @selected(($filters['offer_type'] ?? '') === 'sur_demande')>Offre sur demande</option></select></label>
             <div class="search-submit"><button type="submit">Rechercher {!! $icon('search') !!}</button>@if(array_filter($filters))<a href="{{ route('catalog.business') }}">Réinitialiser les filtres</a>@endif</div>
         </form>
+    </section>
+
+    <section id="annonces" class="offers-section announcements-section">
+        <div class="shell">
+            <div class="section-heading">
+                <div><h2>Offres et besoins des membres</h2><span>{{ $announcements->count() }} {{ Str::plural('annonce', $announcements->count()) }}</span></div>
+                <nav class="announcement-tabs" aria-label="Filtrer les annonces">
+                    <a class="{{ $announcementKind === null ? 'is-active' : '' }}" href="{{ route('catalog.business') }}#annonces">Toutes</a>
+                    <a class="{{ $announcementKind === 'offer' ? 'is-active' : '' }}" href="{{ route('catalog.business', ['annonces' => 'offres']) }}#annonces">Offres ({{ (int) ($announcementCounts['offer'] ?? 0) }})</a>
+                    <a class="{{ $announcementKind === 'need' ? 'is-active' : '' }}" href="{{ route('catalog.business', ['annonces' => 'besoins']) }}#annonces">Besoins ({{ (int) ($announcementCounts['need'] ?? 0) }})</a>
+                </nav>
+            </div>
+
+            @if($announcements->isNotEmpty())
+                <div class="offer-grid">
+                    @foreach($announcements as $announcement)
+                        @php $announcementUrl = route('pro.announcements.show', $announcement->id); @endphp
+                        <article class="offer-card">
+                            <a class="offer-image" href="{{ $announcementUrl }}" aria-label="Voir {{ $announcement->title }}">
+                                @if($announcement->main_photo_url)
+                                    <img src="{{ $announcement->main_photo_url }}" alt="{{ $announcement->title }}" loading="lazy">
+                                @else
+                                    <span class="offer-image-empty">{!! $icon('boxes') !!}</span>
+                                @endif
+                                <span class="category-pill announcement-kind is-{{ $announcement->kind }}">{{ $announcement->kind === 'need' ? 'Besoin' : 'Offre' }}</span>
+                            </a>
+                            <div class="offer-body">
+                                <h3>{{ $announcement->title }}</h3>
+                                @if($announcement->category)<p class="brand-name">{{ $announcement->category->name }}</p>@endif
+                                <dl>
+                                    <div><dt>{{ $announcement->kind === 'need' ? 'Quantité recherchée' : 'Quantité disponible' }}</dt><dd>{{ $announcement->quantity_label }}</dd></div>
+                                    <div><dt>{{ $announcement->kind === 'need' ? 'Budget' : 'Prix' }}</dt><dd>{{ $announcement->amount_label }}</dd></div>
+                                    <div><dt>Publiée le</dt><dd>{{ optional($announcement->published_at)->format('d/m/Y') }}</dd></div>
+                                </dl>
+                                @if($announcement->city || $announcement->country)<p class="offer-location">{!! $icon('pin') !!}<span>{{ collect([$announcement->city, $announcement->country])->filter()->implode(', ') }}</span></p>@endif
+                                <a class="offer-link" href="{{ $announcementUrl }}">{{ $announcement->kind === 'need' ? 'Voir le besoin' : 'Voir l’offre' }}</a>
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+            @else
+                <div class="business-empty-state" role="status">
+                    <span>{!! $icon('boxes') !!}</span>
+                    <h3>Aucune annonce pour le moment</h3>
+                    <p>Les offres et besoins publiés par les membres apparaîtront ici.</p>
+                    <a class="button button-orange" href="{{ route('pro.publish.start') }}">Publier une offre ou un besoin</a>
+                </div>
+            @endif
+        </div>
     </section>
 
     <section id="offres" class="offers-section">
@@ -153,8 +216,42 @@
         </div>
     </section>
 
-    <section class="professionals shell">
-        <div class="professionals-copy"><h2>Conçue pour les professionnels du BTP</h2><div class="professional-types"><span>{!! $icon('building') !!}Entreprises de construction</span><span>{!! $icon('building') !!}Promoteurs immobiliers</span><span>{!! $icon('user') !!}Maîtres d’œuvre et bureaux d’études</span><span>{!! $icon('boxes') !!}Collectivités et projets publics</span><span>{!! $icon('tag') !!}Distributeurs et négociants</span></div></div>
+    <section id="profils-pro" class="pro-join-section">
+        <div class="shell">
+            <div class="pro-join-heading">
+                <div>
+                    <span>INSCRIPTION OVANIE PRO</span>
+                    <h2>Choisissez votre profil professionnel</h2>
+                    <p>Chaque professionnel crée son propre compte OVANIE Pro. À la connexion, vous utilisez simplement votre email ou téléphone et votre mot de passe : votre profil et vos rôles sont déjà enregistrés.</p>
+                </div>
+                @guest('pro')
+                    <a class="button button-orange" href="{{ route('pro.register.choice') }}">Voir tous les profils {!! $icon('arrow') !!}</a>
+                @else
+                    <a class="button button-outline-dark" href="{{ route('pro.account') }}">Voir mon compte</a>
+                @endguest
+            </div>
+
+            <div class="pro-profile-grid">
+                @foreach($professionalProfiles as $key => $profile)
+                    <a class="pro-profile-card-home" href="{{ auth('pro')->check() ? route('pro.register.qualification', ['profile' => $key]) : route('pro.register.form', ['accountType' => 'pro', 'profile' => $key]) }}">
+                        <span class="pro-profile-icon">{!! $icon($profile['icon'] ?? 'building') !!}</span>
+                        <div>
+                            <h3>{{ $profile['label'] }}</h3>
+                            <p>{{ $profile['description'] }}</p>
+                            <strong>S’inscrire comme {{ Str::lower($profile['label']) }} {!! $icon('arrow') !!}</strong>
+                        </div>
+                    </a>
+                @endforeach
+            </div>
+
+            <div class="simple-account-strip">
+                <div>
+                    <strong>Vous souhaitez seulement publier un besoin ou une demande ?</strong>
+                    <span>Créez un compte simple OVANIE Pro. Vous pourrez activer un profil professionnel plus tard.</span>
+                </div>
+                @guest('pro')<a href="{{ route('pro.register.form', ['accountType' => 'simple']) }}">Créer un compte simple {!! $icon('arrow') !!}</a>@endguest
+            </div>
+        </div>
     </section>
 
     <section class="why-section shell">
@@ -163,18 +260,18 @@
             <article>{!! $icon('tag') !!}<div><h3>Tarifs professionnels publiés</h3><p>Les prix affichés proviennent directement des offres actives.</p></div></article>
             <article>{!! $icon('truck') !!}<div><h3>Délais visibles</h3><p>Chaque offre indique son délai communiqué par le fournisseur.</p></div></article>
             <article>{!! $icon('headset') !!}<div><h3>Accompagnement commercial</h3><p>Les demandes sont suivies depuis l’espace OVANIE Pro.</p></div></article>
-            <article>{!! $icon('shield') !!}<div><h3>Plateforme sécurisée</h3><p>Les coordonnées privées ne sont jamais exposées dans le catalogue.</p></div></article>
+            <article>{!! $icon('shield') !!}<div><h3>Plateforme sécurisée</h3><p>Vos informations restent confidentielles.</p></div></article>
         </div>
     </section>
 </main>
 
 <footer class="business-footer">
     <div class="shell footer-grid">
-        <div class="footer-brand"><img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE"><p>La place de marché B2B dédiée aux professionnels du BTP.</p></div>
+        <div class="footer-brand"><img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE"><p>La place de marché B2B dédiée aux professionnels du BTP.</p></div>
         <div><h3>OVANIE Pro</h3><a href="#offres">Offres disponibles</a><a href="{{ route('appel.offre') }}">Publier un besoin</a><a href="{{ route('devis.create') }}">Demander un devis</a></div>
-        <div><h3>Catalogue</h3><a href="{{ route('catalog.index') }}">Catalogue OVANIE</a><a href="{{ route('catalog.business') }}">Offres professionnelles</a></div>
+        <div><h3>Catalogue</h3><a href="{{ $mainCatalogUrl }}">Catalogue OVANIE</a><a href="{{ route('catalog.business') }}">Offres professionnelles</a></div>
         <div><h3>Support</h3><a href="{{ route('contact.index') }}">Contactez-nous</a><a href="{{ route('faq') }}">FAQ</a><a href="{{ route('cgu') }}">Conditions d’utilisation</a></div>
-        <div><h3>Entreprise</h3><a href="{{ route('open-shop') }}">Devenir fournisseur</a><a href="{{ route('home') }}">À propos d’OVANIE</a></div>
+        <div><h3>Entreprise</h3><a href="{{ route('pro.register.choice') }}">Créer un compte OVANIE Pro</a><a href="#profils-pro">Choisir mon profil</a><a href="{{ route('home') }}">À propos d’OVANIE</a></div>
     </div>
     <div class="shell footer-bottom"><span>© {{ date('Y') }} OVANIE Pro. Tous droits réservés.</span><a href="{{ route('cgu') }}">Mentions légales</a></div>
 </footer>

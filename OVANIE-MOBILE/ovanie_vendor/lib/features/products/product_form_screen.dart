@@ -6,8 +6,9 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/ui/vendor_design.dart';
+import '../../core/ui/vendor_mockup_ui.dart';
+import '../../core/ui/vendor_select.dart';
 import '../../data/vendor_repository.dart';
-import 'product_ui.dart';
 
 class ProductFormScreen extends StatefulWidget {
   const ProductFormScreen({super.key, this.productId});
@@ -43,6 +44,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   File? _technicalSheet;
   File? _video;
   String? _error;
+  bool _hasVariants = false;
+  final List<_VariantDraft> _variants = <_VariantDraft>[];
 
   Map<String, String> _optionMap(String key) {
     final raw = _meta[key];
@@ -117,6 +120,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     for (final controller in _controllers.values) {
       controller.dispose();
     }
+    for (final variant in _variants) {
+      variant.dispose();
+    }
     super.dispose();
   }
 
@@ -147,6 +153,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         'stock',
         'unit_label',
         'min_order_quantity',
+        'price_p1',
+        'price_p2',
+        'price_p3',
         'technical_details',
         'weight_kg',
         'length_cm',
@@ -155,6 +164,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         'unloading_instructions',
       ]) {
         ctrl(key, _existing[key]);
+      }
+      // Libellé d'unité tel que saisi : `unit_label` ne renvoie que l'unité normalisée.
+      if (_existing.containsKey('seller_unit_label')) {
+        ctrl('unit_label').text = '${_existing['seller_unit_label'] ?? ''}'.trim();
       }
       ctrl('keywords', _existingKeyword());
 
@@ -216,6 +229,25 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       _negotiable =
           _existing['is_negotiable'] == true ||
           '${_existing['is_negotiable']}' == '1';
+      if (widget.productId == null) {
+        // Valeurs les plus courantes pré-remplies : le vendeur ne les change que si besoin.
+        if (_unit == null && _units.contains('piece')) _unit = 'piece';
+        if (_saleType == null && _saleTypes.isNotEmpty) {
+          _saleType = _saleTypes.containsKey('standard')
+              ? 'standard'
+              : _saleTypes.keys.first;
+        }
+        if (ctrl('min_order_quantity').text.trim().isEmpty) {
+          ctrl('min_order_quantity').text = '1';
+        }
+      }
+      final rawVariants = _existing['variants'];
+      if (rawVariants is List && rawVariants.isNotEmpty) {
+        _hasVariants = true;
+        for (final raw in rawVariants.whereType<Map>()) {
+          _variants.add(_VariantDraft.fromMap(Map<String, dynamic>.from(raw)));
+        }
+      }
     } catch (e) {
       _error = ApiClient.friendlyError(e);
     } finally {
@@ -307,31 +339,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   }
 
   bool _pickingImages = false;
-  Future<void> _pickImages() async {
-    if (_pickingImages || _images.length >= 10) return;
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Prendre une photo'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choisir dans la galerie'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source != null && mounted) await _addImages(source);
-  }
-
   Future<void> _addImages(ImageSource source) async {
     if (_pickingImages || _images.length >= 10) return;
     setState(() => _pickingImages = true);
@@ -354,11 +361,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         );
       }
       if (!mounted) return;
-      setState(
-        () => _images.addAll(
+      setState(() {
+        _images.addAll(
           picked.take(10 - _images.length).map((item) => File(item.path)),
-        ),
-      );
+        );
+        if (_images.isNotEmpty) _error = null;
+      });
     } catch (_) {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
@@ -421,6 +429,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         return _showValidation('Sélectionnez l’unité de vente.');
       if (_saleType == null)
         return _showValidation('Sélectionnez le mode de vente.');
+      if (_negotiable) {
+        double read(String key) => double.tryParse(ctrl(key).text.trim().replaceAll(' ', '').replaceAll(',', '.')) ?? 0;
+        final price = read('price');
+        final p1 = read('price_p1'), p2 = read('price_p2'), p3 = read('price_p3');
+        if (!(p1 > 0 && p2 > 0 && p3 > 0 && p1 < price && p2 <= p1 && p3 <= p2)) {
+          return _showValidation('Les offres doivent être inférieures au prix et décroissantes.');
+        }
+      }
     }
     if (_step == 3 &&
         !draft &&
@@ -451,11 +467,43 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       });
   }
 
-  void _previous() {
+  void _prefillNegotiation() {
+    final price = double.tryParse(ctrl('price').text.trim().replaceAll(' ', '').replaceAll(',', '.'));
+    if (price == null || price <= 0) return;
+    for (final entry in {'price_p1': .95, 'price_p2': .90, 'price_p3': .85}.entries) {
+      if (ctrl(entry.key).text.trim().isEmpty) {
+        ctrl(entry.key).text = (price * entry.value).round().toString();
+      }
+    }
+  }
+
+  Future<void> _previous() async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (_saving) return;
     if (_step == 0) {
-      Navigator.maybePop(context);
+      final dirty = _controllers.values.any((c) => c.text.trim().isNotEmpty) ||
+          _images.isNotEmpty;
+      if (dirty && widget.productId == null) {
+        final leave = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Quitter sans enregistrer ?'),
+            content: const Text('Les informations saisies seront perdues.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Continuer'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Quitter'),
+              ),
+            ],
+          ),
+        );
+        if (leave != true || !mounted) return;
+      }
+      if (mounted) Navigator.of(context).pop();
       return;
     }
     setState(() {
@@ -529,6 +577,22 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         'save_as_draft': draft ? 1 : 0,
       };
 
+      values['has_variants'] = _hasVariants ? 1 : 0;
+      final variantImages = <int, File>{};
+      if (_hasVariants) {
+        for (var i = 0; i < _variants.length; i++) {
+          final variant = _variants[i];
+          values['variants[$i][id]'] = variant.id ?? '';
+          values['variants[$i][type]'] = variant.type.text.trim().isEmpty ? 'Couleur' : variant.type.text.trim();
+          values['variants[$i][value]'] = variant.value.text.trim();
+          values['variants[$i][color_hex]'] = variant.colorHex.text.trim();
+          values['variants[$i][stock]'] = variant.stock.text.trim().isEmpty ? '0' : variant.stock.text.trim();
+          values['variants[$i][price_override]'] = variant.price.text.trim();
+          values['variants[$i][is_active]'] = 1;
+          if (variant.image != null) variantImages[i] = variant.image!;
+        }
+      }
+
       var attributeIndex = 0;
       final keywords = ctrl('keywords').text.trim();
       if (keywords.isNotEmpty) {
@@ -546,17 +610,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       }
 
       if (_negotiable) {
-        // Seuils calculés côté app, jamais saisis par le vendeur : toujours
-        // recalculés à partir du prix courant pour ne jamais rester figés à
-        // une valeur devenue >= au prix si celui-ci est baissé ensuite
-        // (price_p1 doit toujours rester strictement inférieur à price).
-        final price = double.tryParse(
-          ctrl('price').text.trim().replaceAll(',', '.'),
-        );
-        if (price != null && price > 0) {
-          values['price_p1'] = (price * 0.95).round();
-          values['price_p2'] = (price * 0.90).round();
-          values['price_p3'] = (price * 0.85).round();
+        for (final key in ['price_p1', 'price_p2', 'price_p3']) {
+          final value = double.tryParse(ctrl(key).text.trim().replaceAll(' ', '').replaceAll(',', '.'));
+          if (value != null && value > 0) values[key] = value.round();
         }
       }
 
@@ -566,6 +622,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         images: _images,
         technicalSheet: _technicalSheet,
         video: _video,
+        variantImages: variantImages,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -585,106 +642,113 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
   }
 
+  static const _stepTitles = <String>['Informations', 'Prix & unité', 'Détail technique', 'Logistique', 'Médias'];
+
+  /// Bandeau illustré de chaque étape : titre et phrase d'introduction.
+  static const _banners = <(String, String)>[
+    ('Informations du produit', 'Renseignez les informations générales de votre produit pour commencer.'),
+    ('Prix & unité', 'Définissez le prix, l’unité de vente et la quantité de votre produit.'),
+    ('Détail technique', 'Ajoutez les caractéristiques techniques de votre produit pour mieux informer vos clients.'),
+    ('Logistique', 'Renseignez les informations logistiques de votre produit pour le calcul de la livraison.'),
+    ('Médias du produit', 'Ajoutez des photos et une vidéo pour rendre votre produit plus attractif.'),
+  ];
+
+  /// Fermeture par la croix : demande confirmation si une saisie serait perdue.
+  Future<void> _close() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_saving) return;
+    final dirty = _controllers.values.any((c) => c.text.trim().isNotEmpty) || _images.isNotEmpty;
+    if (dirty && widget.productId == null) {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Quitter sans enregistrer ?'),
+          content: const Text('Les informations saisies seront perdues.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Continuer')),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Quitter')),
+          ],
+        ),
+      );
+      if (leave != true || !mounted) return;
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Deux champs côte à côte, empilés sur un écran étroit ou avec un texte agrandi.
+  bool _sideBySide(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= 350 && MediaQuery.textScalerOf(context).scale(10) <= 10.5;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
-      body: Column(
-        children: [
-          _WizardHeader(
-            title: widget.productId == null
-                ? 'Ajouter un produit'
-                : 'Modifier un produit',
-            subtitle:
-                'Mettez vos produits en ligne et\ntouchez plus de clients.',
-            onBack: _previous,
-          ),
-          Expanded(
-            child: _loading
-                ? const _FormLoading()
-                : ListView(
-                    padding: EdgeInsets.zero,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 22),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(24),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _previous();
+      },
+      child: MkTheme(
+        lightStatusBar: false,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF3F6FB),
+          body: Column(
+            children: [
+              _WizardHeader(
+                title: widget.productId == null ? 'Ajouter un produit' : 'Modifier le produit',
+                onClose: _close,
+              ),
+              Expanded(
+                child: _loading
+                    ? const _FormLoading()
+                    : ListView(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                        children: [
+                          _StepProgress(
+                            step: _step,
+                            titles: _stepTitles,
+                            onSelect: (index) {
+                              // Seules les étapes déjà validées sont accessibles directement.
+                              if (index < _step && !_saving) {
+                                setState(() {
+                                  _step = index;
+                                  _error = null;
+                                });
+                              }
+                            },
                           ),
-                        ),
-                        child: Column(
-                          children: [
-                            _StepProgress(currentStep: _step),
-                            const SizedBox(height: 12),
-                            Form(
-                              key: _forms[_step],
-                              child: _StepCard(
-                                icon: _stepIcon,
-                                title: _stepTitle,
-                                subtitle: _stepSubtitle,
-                                child: _currentStep(),
-                              ),
-                            ),
-                            if (_error != null) ...[
-                              const SizedBox(height: 12),
-                              VendorErrorBox(_error),
-                            ],
-                            if (_step == 2) ...[
-                              const SizedBox(height: 12),
-                              const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.shield_outlined,
-                                    color: vendorText,
-                                    size: 18,
-                                  ),
-                                  SizedBox(width: 7),
-                                  Flexible(
-                                    child: Text(
-                                      'Les informations fournies seront visibles sur votre fiche produit.',
-                                      style: TextStyle(
-                                        color: Color(0xFF536C98),
-                                        fontSize: 11.5,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                          const SizedBox(height: 12),
+                          _StepBanner(step: _step, title: _banners[_step].$1, subtitle: _banners[_step].$2),
+                          const SizedBox(height: 10),
+                          Form(key: _forms[_step], child: _currentStep()),
+                          if (_error != null) ...[
+                            const SizedBox(height: 10),
+                            MkNotice(_error!),
                           ],
-                        ),
+                          const SizedBox(height: 12),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: Row(
+                              children: [
+                                Icon(Icons.verified_user_outlined, color: Mk.icon, size: 20),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Les informations fournies seront visibles sur votre fiche produit.',
+                                    style: TextStyle(color: Mk.muted, fontSize: 12.5, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+              ),
+            ],
           ),
-        ],
+          bottomNavigationBar: _loading ? null : _bottomActions(),
+        ),
       ),
     );
   }
-
-  IconData get _stepIcon => const [
-    Icons.description_outlined,
-    Icons.monetization_on_outlined,
-    Icons.settings_outlined,
-    Icons.local_shipping_outlined,
-    Icons.image_outlined,
-  ][_step];
-  String get _stepTitle => const [
-    'Informations du produit',
-    'Prix & unité',
-    'Détail technique',
-    'Logistique',
-    'Médias du produit',
-  ][_step];
-  String get _stepSubtitle => const [
-    'Renseignez les informations générales de votre produit\npour commencer.',
-    'Définissez le prix, l’unité de vente et la quantité\nde votre produit.',
-    'Ajoutez les caractéristiques techniques de votre\nproduit pour mieux informer vos clients.',
-    'Renseignez les informations logistiques de votre\nproduit pour le calcul de la livraison.',
-    'Ajoutez des photos et une vidéo pour rendre votre produit\nplus attractif.',
-  ][_step];
 
   Widget _currentStep() {
     return switch (_step) {
@@ -696,968 +760,980 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     };
   }
 
+  static const _gap = SizedBox(height: 14);
+
   Widget _informationStep() {
     final roots = _categoryTree;
     final children = _childrenFor(_mainCategoryId);
+    final brand = _labeled('Marque', _textField('brand', 'Ex. CIMAF, Sika, Hilti…'), optional: true);
+    final type = _labeled(
+      'Type de produit',
+      _selector<String>(
+        title: 'Type de produit',
+        value: _productType,
+        items: _productTypes,
+        hint: 'Sélectionnez un type',
+        onChanged: (v) => setState(() => _productType = v),
+      ),
+      optional: true,
+    );
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _fieldTitle('Nom du produit', required: true),
-        _textField(
-          'name',
-          'Ex. Ciment CPA 42.5R',
-          Icons.inventory_2_outlined,
-          required: true,
+        _FormCard(
+          children: [
+            _labeled('Nom du produit', _textField('name', 'Ex. Ciment CPA 42.5R', required: true), required: true),
+            _gap,
+            _categorySelector(
+              label: 'Catégorie principale',
+              value: _mainCategoryId,
+              items: roots,
+              hint: 'Sélectionnez une catégorie',
+              onChanged: (id) => setState(() {
+                _mainCategoryId = id;
+                _subcategoryId = null;
+              }),
+            ),
+            _gap,
+            _categorySelector(
+              label: 'Sous-catégorie',
+              value: _subcategoryId,
+              items: children,
+              hint: 'Sélectionnez une sous-catégorie',
+              enabled: _mainCategoryId != null && children.isNotEmpty,
+              onChanged: (id) => setState(() => _subcategoryId = id),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
-        _categorySelector(
-          label: 'Catégorie principale',
-          value: _mainCategoryId,
-          items: roots,
-          hint: 'Sélectionnez une catégorie',
-          required: true,
-          onChanged: (id) {
-            setState(() {
-              _mainCategoryId = id;
-              _subcategoryId = null;
-            });
-          },
-        ),
-        const SizedBox(height: 10),
-        _categorySelector(
-          label: 'Sous-catégorie',
-          value: _subcategoryId,
-          items: children,
-          hint: 'Sélectionnez une sous-catégorie',
-          required: true,
-          enabled: _mainCategoryId != null && children.isNotEmpty,
-          onChanged: (id) {
-            setState(() => _subcategoryId = id);
-          },
-        ),
-        const SizedBox(height: 10),
-        _pair(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fieldTitle('Marque', suffix: '(optionnel)'),
-              _textField(
-                'brand',
-                'Ex. CIMAF, Sika, Hilti...',
-                Icons.sell_outlined,
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fieldTitle('Type de produit', suffix: '(optionnel)'),
+        _FormCard(
+          children: [
+            if (_sideBySide(context)) _twoColumns(brand, type) else ...[brand, _gap, type],
+            _gap,
+            _labeled(
+              'État du produit',
               _selector<String>(
-                value: _productType,
-                items: _productTypes,
-                hint: 'Sélectionnez un type',
-                icon: Icons.inventory_2_outlined,
-                onChanged: (v) => setState(() => _productType = v),
+                title: 'État du produit',
+                value: _productState,
+                items: _productStates,
+                hint: 'Sélectionnez l’état du produit',
+                onChanged: (v) => setState(() => _productState = v),
               ),
-            ],
-          ),
+              optional: true,
+            ),
+          ],
         ),
         const SizedBox(height: 10),
-        _fieldTitle('État du produit', suffix: '(optionnel)'),
-        _selector<String>(
-          value: _productState,
-          items: _productStates,
-          hint: 'Sélectionnez l’état du produit',
-          icon: Icons.verified_outlined,
-          onChanged: (v) => setState(() => _productState = v ?? 'new'),
+        _FormCard(
+          children: [
+            _labeled(
+              'Description courte',
+              _textField('short_description', 'Une brève description de votre produit', maxLength: 200),
+              optional: true,
+              counter: _counter('short_description', 200),
+            ),
+            _gap,
+            _labeled(
+              'Mots-clés',
+              _textField('keywords', 'Ex. ciment, construction, BTP, qualité…'),
+              optional: true,
+              help: 'Séparez les mots-clés par une virgule ( , )',
+            ),
+            _gap,
+            _labeled(
+              'Description détaillée',
+              _textField(
+                'description',
+                'Décrivez votre produit en détail : caractéristiques, avantages, conseils d’utilisation…',
+                required: true,
+                requiredMessage: 'La description est obligatoire',
+                maxLength: 1000,
+                minLines: 3,
+                maxLines: 8,
+              ),
+              required: true,
+              counter: _counter('description', 1000),
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        _fieldTitle('Description courte', suffix: '(optionnel)'),
-        _counterField(
-          'short_description',
-          'Une brève description de votre produit',
-          Icons.description_outlined,
-          160,
-          required: false,
-          maxLines: 1,
-        ),
-        const SizedBox(height: 10),
-        _fieldTitle('Mots-clés', suffix: '(optionnel)'),
-        _textField(
-          'keywords',
-          'Ex. ciment, construction, BTP, qualité...',
-          Icons.tag_rounded,
-        ),
-        const SizedBox(height: 4),
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Séparez les mots-clés par une virgule ( , )',
-            style: TextStyle(color: Color(0xFF536C98), fontSize: 11),
-          ),
-        ),
-        const SizedBox(height: 10),
-        _fieldTitle('Description détaillée', required: true),
-        _richDescription(),
-        const SizedBox(height: 16),
-        _wizardButtons(firstLabel: 'Annuler'),
       ],
     );
   }
 
   Widget _priceStep() {
-    return Column(
+    final price = _labeled(
+      'Prix normal',
+      _unitField('price', 'Ex. : 6 500', 'FCFA', required: true),
+      required: true,
+      help: 'Prix de vente habituel de votre produit.',
+    );
+    final promo = _labeled(
+      'Prix promo',
+      _unitField('promo_price', 'Ex. : 5 900', 'FCFA'),
+      optional: true,
+      help: 'Prix réduit pendant une période limitée.',
+    );
+    final offer1 = _labeled('1re offre', _unitField('price_p1', '', 'FCFA', required: true), required: true);
+    final offer2 = _labeled('2e offre', _unitField('price_p2', '', 'FCFA', required: true), required: true);
+
+    return _FormCard(
       children: [
-        _pair(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fieldTitle('Prix normal', required: true),
-              _moneyField(
-                'price',
-                'Ex. : 6 500',
-                Icons.monetization_on_outlined,
-                required: true,
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Prix de vente habituel de votre produit.',
-                style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fieldTitle('Prix promo', suffix: '(optionnel)'),
-              _moneyField('promo_price', 'Ex. : 5 900', Icons.sell_outlined),
-              const SizedBox(height: 4),
-              const Text(
-                'Prix réduit pendant une période limitée.',
-                style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
-              ),
-            ],
-          ),
+        if (_sideBySide(context)) _twoColumns(price, promo) else ...[price, _gap, promo],
+        _gap,
+        _labeled(
+          'Stock disponible',
+          _textField('stock', 'Ex. : 100', required: true, numeric: true),
+          required: true,
+          help: 'Nombre d’unités disponibles en stock.',
         ),
-        const SizedBox(height: 16),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: SizedBox(
-            width: MediaQuery.sizeOf(context).width * .48,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _fieldTitle('Stock disponible', required: true),
-                _textField(
-                  'stock',
-                  'Ex. : 100',
-                  Icons.inventory_2_outlined,
-                  required: true,
-                  numeric: true,
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Nombre d’unités disponibles en stock.',
-                  style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
-                ),
-              ],
-            ),
+        _gap,
+        _labeled(
+          'Unité de vente',
+          _selector<String>(
+            title: 'Unité de vente',
+            value: _unit,
+            items: {for (final unit in _units) unit: _unitLabel(unit)},
+            hint: 'Sélectionnez une unité',
+            onChanged: (v) => setState(() => _unit = v),
           ),
+          required: true,
+          help: 'Ex. : Pièce, Sac, Carton, Kg, Litre, m², etc.',
         ),
-        const SizedBox(height: 16),
-        _pair(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fieldTitle('Unité de vente', required: true),
-              ProductSheetSelector<String>(
-                value: _unit,
-                label: 'Unité de vente',
-                items: _units,
-                display: _unitLabel,
-                hint: 'Sélectionnez une unité',
-                icon: Icons.inventory_2_outlined,
-                onChanged: (v) => setState(() => _unit = v),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Ex. : Pièce, Sac, Carton, Kg, Litre, m², etc.',
-                style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
-              ),
-            ],
+        _gap,
+        _labeled(
+          'Libellé personnel',
+          _textField('unit_label', 'Ex. : Sac (50 kg)'),
+          optional: true,
+          help: 'Précision ajoutée à l’unité, entre parenthèses : « Sac (50 kg) ».',
+        ),
+        _gap,
+        _labeled(
+          'Quantité minimum',
+          _textField('min_order_quantity', 'Ex. : 1', required: true, numeric: true),
+          required: true,
+          help: 'Quantité minimale que le client peut commander.',
+        ),
+        _gap,
+        _labeled(
+          'Mode de vente',
+          _selector<String>(
+            title: 'Mode de vente',
+            value: _saleType,
+            items: _saleTypes,
+            hint: 'Sélectionnez un mode de vente',
+            onChanged: (v) => setState(() => _saleType = v),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fieldTitle('Libellé personnel', suffix: '(optionnel)'),
-              _textField(
-                'unit_label',
-                'Ex. : Sac de 50 kg',
-                Icons.sell_outlined,
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Nom personnalisé de l’unité de vente.',
-                style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
-              ),
-            ],
-          ),
+          required: true,
+          help: 'Ex. : Vente à l’unité, par lot, au poids, au mètre, etc.',
         ),
-        const SizedBox(height: 16),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: SizedBox(
-            width: MediaQuery.sizeOf(context).width * .48,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _fieldTitle('Quantité minimum', required: true),
-                _textField(
-                  'min_order_quantity',
-                  'Ex. : 1',
-                  Icons.shopping_cart_outlined,
-                  required: true,
-                  numeric: true,
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Quantité minimale que le client peut commander.',
-                  style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        _fieldTitle('Mode de vente', required: true),
-        _selector<String>(
-          value: _saleType,
-          items: _saleTypes,
-          hint: 'Sélectionnez un mode de vente',
-          icon: Icons.grid_view_rounded,
-          onChanged: (v) => setState(() => _saleType = v),
-        ),
-        const SizedBox(height: 4),
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Ex. : Vente à l’unité, par lot, au poids, au mètre, etc.',
-            style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
-          ),
-        ),
-        const SizedBox(height: 14),
-        _yesNo(
+        _gap,
+        _toggleRow(
           'Prix négociable',
           _negotiable,
-          Icons.handshake_outlined,
-          (v) => setState(() => _negotiable = v),
+          (v) => setState(() {
+            _negotiable = v;
+            if (v) _prefillNegotiation();
+          }),
+          subtitle: 'Le client pourra vous proposer un prix depuis la fiche produit.',
         ),
-        const SizedBox(height: 4),
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Le client pourra vous proposer un prix depuis la fiche produit.',
-            style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
+        if (_negotiable) ...[
+          _gap,
+          const Text(
+            'Vos contre-offres, de la plus proche du prix à la plus basse :',
+            style: TextStyle(color: Mk.muted, fontSize: 12.5, fontWeight: FontWeight.w500),
           ),
-        ),
-        const SizedBox(height: 22),
-        _wizardButtons(),
+          const SizedBox(height: 10),
+          if (_sideBySide(context)) _twoColumns(offer1, offer2) else ...[offer1, _gap, offer2],
+          _gap,
+          _labeled('Prix minimum accepté', _unitField('price_p3', '', 'FCFA', required: true), required: true),
+        ],
       ],
     );
   }
 
   Widget _technicalStep() {
-    return Column(
+    final sheetName = _technicalSheet?.path.split(Platform.pathSeparator).last;
+    return _FormCard(
       children: [
-        _fieldTitle('Usage recommandé', suffix: '(optionnel)'),
-        _selector<String>(
-          value: _usage,
-          items: _usages,
-          hint: 'Sélectionnez l’usage recommandé',
-          icon: Icons.inventory_2_outlined,
-          onChanged: (v) => setState(() => _usage = v),
-        ),
-        const SizedBox(height: 4),
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'À quoi sert ce produit ? Laissez vide si vous ne savez pas.',
-            style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
+        _cardHeading(Icons.settings_rounded, _banners[2].$1, _banners[2].$2),
+        _gap,
+        _labeled(
+          'Usage recommandé',
+          _selector<String>(
+            title: 'Usage recommandé',
+            value: _usage,
+            items: _usages,
+            hint: 'Sélectionnez l’usage recommandé',
+            onChanged: (v) => setState(() => _usage = v),
           ),
+          optional: true,
+          help: 'À quoi sert ce produit ? Laissez vide si vous ne savez pas.',
         ),
-        const SizedBox(height: 14),
-        _fieldTitle('Détails technique', suffix: '(optionnel)'),
-        _counterField(
-          'technical_details',
-          'Ex. Résiste à l\'humidité, couleur grise, sac de 50 kg...',
-          Icons.description_outlined,
-          1000,
-          required: false,
-          maxLines: 7,
-        ),
-        const SizedBox(height: 14),
-        _fieldTitle('Garantie', suffix: '(optionnel)'),
-        _selector<String>(
-          value: _warranty,
-          items: _warranties,
-          hint: 'Sélectionnez la durée de garantie',
-          icon: Icons.shield_outlined,
-          onChanged: (v) => setState(() => _warranty = v),
-        ),
-        const SizedBox(height: 4),
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Ex. : 6 mois, 1 an, 2 ans, etc.',
-            style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
+        _gap,
+        _labeled(
+          'Détails technique',
+          _textField(
+            'technical_details',
+            'Ex. Résiste à l’humidité, couleur grise, sac de 50 kg…',
+            maxLength: 1000,
+            minLines: 3,
+            maxLines: 6,
           ),
+          optional: true,
         ),
-        const SizedBox(height: 14),
-        _fieldTitle('Fiche technique PDF', suffix: '(optionnel)'),
-        _uploadBox(
-          icon: Icons.cloud_upload_outlined,
-          leadingIcon: Icons.picture_as_pdf_outlined,
-          title: _technicalSheet == null
-              ? 'Ajouter la fiche technique'
-              : _technicalSheet!.path.split(Platform.pathSeparator).last,
-          subtitle: 'Glissez-déposez votre fichier ici ou appuyez pour choisir',
-          details: 'Format : PDF uniquement • Taille maximale : 5 Mo',
-          onTap: _pickTechnicalSheet,
+        _gap,
+        _labeled(
+          'Garantie',
+          _selector<String>(
+            title: 'Garantie',
+            value: _warranty,
+            items: _warranties,
+            hint: 'Sélectionnez la durée de garantie',
+            onChanged: (v) => setState(() => _warranty = v),
+          ),
+          optional: true,
+          help: 'Ex. : 6 mois, 1 an, 2 ans, etc.',
         ),
-        const SizedBox(height: 22),
-        _wizardButtons(),
+        _gap,
+        _labeled(
+          'Fiche technique PDF',
+          _dropZone(
+            icon: Icons.picture_as_pdf_rounded,
+            title: sheetName ?? 'Ajouter la fiche technique',
+            line1: sheetName == null ? 'Appuyez pour choisir votre fichier' : 'Appuyez pour remplacer le fichier',
+            line2: 'Format : PDF uniquement • Taille maximale : 5 Mo',
+            done: sheetName != null,
+            onTap: _pickTechnicalSheet,
+          ),
+          optional: true,
+        ),
       ],
     );
   }
 
   Widget _logisticsStep() {
-    return Column(
-      children: [
-        _fieldTitle('Poids', required: true),
-        _unitField(
-          'weight_kg',
-          'Ex. : 2.5',
-          Icons.scale_outlined,
-          'kg',
+    Widget dim(String key, String label, String hint) => _labeled(
+          label,
+          _unitField(key, hint, 'cm', required: true, onChanged: (_) => setState(() {})),
           required: true,
-        ),
-        const SizedBox(height: 14),
-        _fieldColumns([
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        );
+    final length = dim('length_cm', 'Longueur', 'Ex. : 30');
+    final width = dim('width_cm', 'Largeur', 'Ex. : 20');
+    final height = dim('height_cm', 'Hauteur', 'Ex. : 15');
+
+    return _FormCard(
+      children: [
+        _cardHeading(Icons.local_shipping_rounded, _banners[3].$1, _banners[3].$2),
+        _gap,
+        _labeled('Poids', _unitField('weight_kg', 'Ex. : 2.5', 'kg', required: true), required: true),
+        _gap,
+        if (_sideBySide(context))
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _fieldTitle('Longueur', required: true),
-              _unitField(
-                'length_cm',
-                'Ex. : 30',
-                Icons.straighten_rounded,
-                'cm',
-                required: true,
-                onChanged: (_) => setState(() {}),
-              ),
+              Expanded(child: length),
+              const SizedBox(width: 8),
+              Expanded(child: width),
+              const SizedBox(width: 8),
+              Expanded(child: height),
             ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fieldTitle('Largeur', required: true),
-              _unitField(
-                'width_cm',
-                'Ex. : 20',
-                Icons.inventory_2_outlined,
-                'cm',
-                required: true,
-                onChanged: (_) => setState(() {}),
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fieldTitle('Hauteur', required: true),
-              _unitField(
-                'height_cm',
-                'Ex. : 15',
-                Icons.height_rounded,
-                'cm',
-                required: true,
-                onChanged: (_) => setState(() {}),
-              ),
-            ],
-          ),
-        ]),
-        const SizedBox(height: 14),
-        _fieldTitle('Volume', suffix: '(calculé auto)'),
-        Container(
-          height: 54,
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFD),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFC7D4E7)),
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.inventory_2_outlined,
-                color: Color(0xFF687B9D),
-                size: 22,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  _volumeM3.toStringAsFixed(3),
-                  style: const TextStyle(
-                    color: Color(0xFF7183A7),
-                    fontSize: 15,
+          )
+        else ...[length, _gap, width, _gap, height],
+        _gap,
+        _labeled(
+          'Volume',
+          Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE9EDF4),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _fieldBorder),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _volumeM3 > 0 ? _volumeM3.toStringAsFixed(4).replaceAll('.', ',') : '',
+                    style: const TextStyle(color: Mk.navy, fontSize: 14.5, fontWeight: FontWeight.w600),
                   ),
                 ),
-              ),
-              const Text(
-                'm³',
-                style: TextStyle(color: Color(0xFF536C98), fontSize: 14),
-              ),
-            ],
+                const Text('m³', style: TextStyle(color: Mk.muted, fontSize: 14, fontWeight: FontWeight.w500)),
+              ],
+            ),
           ),
+          note: '(calculé auto)',
+          help: 'Le volume est calculé automatiquement à partir des dimensions.',
         ),
-        const SizedBox(height: 4),
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Le volume est calculé automatiquement à partir des dimensions.',
-            style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
-          ),
-        ),
-        const SizedBox(height: 14),
-        _yesNo(
-          'Produit fragile',
-          _fragile,
-          Icons.wine_bar_outlined,
-          (v) => setState(() => _fragile = v),
-        ),
-        const SizedBox(height: 14),
-        _yesNo(
-          'Déchargement requis',
-          _unloading,
-          Icons.handyman_outlined,
-          (v) => setState(() => _unloading = v),
-        ),
+        _gap,
+        _toggleRow('Produit fragile', _fragile, (v) => setState(() => _fragile = v)),
+        const SizedBox(height: 10),
+        _toggleRow('Déchargement requis', _unloading, (v) => setState(() => _unloading = v)),
         if (_unloading) ...[
-          const SizedBox(height: 10),
-          _fieldTitle('Détails du déchargement', required: true),
-          _textField(
-            'unloading_instructions',
-            'Ex. : chariot ou aide au déchargement nécessaire',
-            Icons.local_shipping_outlined,
+          _gap,
+          _labeled(
+            'Détails du déchargement',
+            _textField(
+              'unloading_instructions',
+              'Ex. : chariot ou aide au déchargement nécessaire',
+              required: true,
+              maxLength: 255,
+              minLines: 2,
+              maxLines: 4,
+            ),
             required: true,
           ),
         ],
-        const SizedBox(height: 14),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEAF4FF),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFB9DBFF)),
-          ),
-          child: const Row(
+        _gap,
+        const MkInfoBox(
+          icon: Icons.info_rounded,
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.info_outline_rounded,
-                color: Color(0xFF0875E1),
-                size: 31,
+              Text(
+                'Ces informations nous permettent de :',
+                style: TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w800),
               ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Ces informations nous permettent de :',
-                      style: TextStyle(
-                        color: vendorText,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Calculer les frais de livraison et de sélectionner le mode logistique\nle plus adapté à votre produit.',
-                      style: TextStyle(
-                        color: Color(0xFF536C98),
-                        fontSize: 11.5,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              SizedBox(height: 3),
+              Text('Calculer les frais de livraison et de sélectionner le mode logistique le plus adapté à votre produit.'),
             ],
           ),
-        ),
-        const SizedBox(height: 20),
-        _wizardButtons(),
-      ],
-    );
-  }
-
-  Widget _mediaStep() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(child: _fieldTitle('Images produit', required: true)),
-            Text(
-              '${_images.length}/10 images',
-              style: const TextStyle(color: Color(0xFF536C98), fontSize: 11.5),
-            ),
-          ],
-        ),
-        _uploadBox(
-          icon: Icons.cloud_upload_outlined,
-          title: 'Ajouter des photos',
-          subtitle:
-              'Glissez-déposez vos images ici ou appuyez pour sélectionner',
-          details:
-              'Format : JPG, PNG • Taille max : 5 Mo • Format carré recommandé (1:1)',
-          onTap: _pickImages,
-        ),
-        const SizedBox(height: 10),
-        _imageSlots(),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: _pickingImages || _images.length >= 10
-              ? null
-              : () => _addImages(ImageSource.camera),
-          icon: const Icon(Icons.photo_camera_outlined),
-          label: const Text('Prendre une photo'),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEAF3FF),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_rounded, color: Color(0xFF0875E1), size: 31),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Conseils pour de belles photos',
-                      style: TextStyle(
-                        color: vendorText,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '•  Utilisez des images claires et de bonne qualité\n•  Montrez le produit sous plusieurs angles\n•  Évitez les photos floues ou avec du texte\n•  Le format carré (1:1) est fortement recommandé',
-                      style: TextStyle(
-                        color: Color(0xFF536C98),
-                        fontSize: 11.3,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        const Divider(color: productBorder),
-        const SizedBox(height: 10),
-        _fieldTitle('Vidéo produit', suffix: '(optionnelle)'),
-        _uploadBox(
-          icon: Icons.ondemand_video_outlined,
-          title: _video == null
-              ? 'Ajouter une vidéo'
-              : _video!.path.split(Platform.pathSeparator).last,
-          subtitle:
-              'Glissez-déposez votre vidéo ici ou appuyez pour sélectionner',
-          details:
-              'Format : MP4, MOV • Taille max : 50 Mo • Durée max : 2 minutes',
-          onTap: _pickVideo,
-        ),
-        const SizedBox(height: 10),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF0F5FC),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.videocam_rounded, color: Color(0xFF4E6497), size: 22),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Une vidéo permet de mieux présenter votre produit et d’augmenter vos ventes.',
-                  style: TextStyle(color: Color(0xFF536C98), fontSize: 10.8),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 64,
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : () => _save(draft: true),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFB8C6DC)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.description_outlined,
-                    color: vendorText,
-                    size: 25,
-                  ),
-                  label: const FittedBox(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Enregistrer en brouillon',
-                          style: TextStyle(
-                            color: vendorText,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        Text(
-                          'Sauvegardez et terminez plus tard',
-                          style: TextStyle(
-                            color: Color(0xFF536C98),
-                            fontSize: 9.7,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SizedBox(
-                height: 64,
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : () => _save(draft: false),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: productOrange,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  icon: _saving
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.send_rounded,
-                          color: Colors.white,
-                          size: 25,
-                        ),
-                  label: const FittedBox(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Publier le produit',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        Text(
-                          'Votre produit sera mis en ligne',
-                          style: TextStyle(color: Colors.white, fontSize: 9.7),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
         ),
       ],
     );
   }
 
-  Widget _fieldTitle(String label, {bool required = false, String? suffix}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
+  Future<void> _pickVariantImage(int index) async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 92,
+      maxWidth: 1800,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _variants[index].image = File(picked.path));
+  }
+
+  void _addVariant() {
+    setState(() {
+      _hasVariants = true;
+      _variants.add(_VariantDraft());
+    });
+  }
+
+  void _removeVariant(int index) {
+    final removed = _variants.removeAt(index);
+    removed.dispose();
+    if (_variants.isEmpty) _hasVariants = false;
+    setState(() {});
+  }
+
+  Widget _variantEditor() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: _fieldBorder, width: 1.2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: vendorText,
-              fontSize: 13.5,
-              fontWeight: FontWeight.w900,
-            ),
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Modèles / couleurs', style: TextStyle(color: vendorText, fontSize: 14, fontWeight: FontWeight.w900)),
+                    SizedBox(height: 3),
+                    Text('Ajoutez les couleurs ou modèles sans ressaisir le poids, les dimensions et la description.', style: TextStyle(color: Color(0xFF667896), fontSize: 11.5, height: 1.35)),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _hasVariants,
+                activeColor: vendorOrange,
+                onChanged: (value) => setState(() {
+                  _hasVariants = value;
+                  if (value && _variants.isEmpty) _variants.add(_VariantDraft());
+                }),
+              ),
+            ],
           ),
-          if (suffix != null) ...[
-            const SizedBox(width: 4),
-            Text(
-              suffix,
-              style: const TextStyle(
-                color: vendorText,
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
+          if (_hasVariants) ...[
+            const SizedBox(height: 12),
+            ...List.generate(_variants.length, (index) {
+              final variant = _variants[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFD),
+                  border: Border.all(color: const Color(0xFFDCE5F0)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Expanded(child: Text('Variante ${index + 1}', style: const TextStyle(fontWeight: FontWeight.w900, color: vendorText))),
+                      IconButton(onPressed: () => _removeVariant(index), icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFB42318))),
+                    ]),
+                    const SizedBox(height: 6),
+                    TextFormField(controller: variant.type, decoration: const InputDecoration(labelText: 'Type', hintText: 'Couleur, modèle, finition…')),
+                    const SizedBox(height: 10),
+                    TextFormField(controller: variant.value, decoration: const InputDecoration(labelText: 'Nom de la variante *', hintText: 'Ex. Bleu nuit')),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: TextFormField(controller: variant.stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock *'))),
+                      const SizedBox(width: 10),
+                      Expanded(child: TextFormField(controller: variant.price, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Prix différent', hintText: 'Optionnel'))),
+                    ]),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: TextFormField(controller: variant.colorHex, decoration: const InputDecoration(labelText: 'Couleur HEX', hintText: '#1E5EFF'))),
+                      const SizedBox(width: 10),
+                      OutlinedButton.icon(
+                        onPressed: () => _pickVariantImage(index),
+                        icon: const Icon(Icons.image_outlined),
+                        label: Text(variant.image != null || variant.imageUrl.isNotEmpty ? 'Changer photo' : 'Photo'),
+                      ),
+                    ]),
+                    if (variant.image != null || variant.imageUrl.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 72,
+                          height: 72,
+                          child: variant.image != null
+                              ? Image.file(variant.image!, fit: BoxFit.cover)
+                              : Image.network(variant.imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _addVariant,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Ajouter une couleur / un modèle'),
               ),
             ),
           ],
-          if (required)
-            const Text(
-              ' *',
-              style: TextStyle(
-                color: Colors.red,
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
         ],
       ),
     );
   }
 
-  Widget _textField(
-    String key,
-    String hint,
-    IconData icon, {
-    bool required = false,
-    bool numeric = false,
-    ValueChanged<String>? onChanged,
-  }) {
-    return TextFormField(
-      controller: ctrl(key),
-      keyboardType: numeric
-          ? const TextInputType.numberWithOptions(decimal: true)
-          : TextInputType.text,
-      onChanged: onChanged,
-      validator: required
-          ? (v) => (v ?? '').trim().isEmpty ? 'Champ obligatoire.' : null
-          : null,
-      style: const TextStyle(color: vendorText, fontSize: 14),
-      decoration: _inputDecoration(hint, icon),
+  Widget _mediaStep() {
+    final videoName = _video?.path.split(Platform.pathSeparator).last;
+    final canAdd = _images.length < 10;
+    return _FormCard(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            const Expanded(child: MkLabel('Images produit', required: true)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '${_images.length}/10 images',
+                style: const TextStyle(color: Mk.muted, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        _dropZone(
+          icon: Icons.add_photo_alternate_rounded,
+          title: 'Ajouter des photos',
+          line1: canAdd ? 'Appuyez pour sélectionner vos images' : 'Vous avez atteint la limite de 10 images',
+          line2: 'Format : JPG, PNG • Taille max : 5 Mo • Format carré recommandé (1:1)',
+          orange: true,
+          busy: _pickingImages,
+          onTap: canAdd && !_pickingImages ? () => _addImages(ImageSource.gallery) : null,
+        ),
+        const SizedBox(height: 10),
+        _OutlineAction(
+          icon: Icons.photo_camera_rounded,
+          label: 'Prendre une photo',
+          onTap: canAdd && !_pickingImages ? () => _addImages(ImageSource.camera) : null,
+        ),
+        if (_images.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _imageGrid(),
+        ],
+        const SizedBox(height: 12),
+        const MkInfoBox(
+          icon: Icons.lightbulb_rounded,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Conseils pour de belles photos',
+                style: TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w800),
+              ),
+              SizedBox(height: 4),
+              _Tip('Utilisez des images claires et de bonne qualité'),
+              _Tip('Montrez le produit sous plusieurs angles'),
+              _Tip('Évitez les photos floues ou avec du texte'),
+              _Tip('Le format carré (1:1) est fortement recommandé'),
+            ],
+          ),
+        ),
+        _gap,
+        _labeled(
+          'Vidéo produit',
+          _dropZone(
+            icon: Icons.videocam_rounded,
+            title: videoName ?? 'Ajouter une vidéo',
+            line1: videoName == null ? 'Appuyez pour sélectionner votre vidéo' : 'Appuyez pour remplacer la vidéo',
+            line2: 'Format : MP4, MOV • Taille max : 50 Mo • Durée max : 2 minutes',
+            orange: true,
+            done: videoName != null,
+            onTap: _pickVideo,
+          ),
+          note: '(optionnelle)',
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: Mk.softBlue, borderRadius: BorderRadius.circular(10)),
+          child: const Row(
+            children: [
+              Icon(Icons.info_rounded, color: Mk.blue, size: 24),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Une vidéo permet de mieux présenter votre produit et d’augmenter vos ventes.',
+                  style: TextStyle(color: Mk.muted, fontSize: 12.5, height: 1.35, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+        _gap,
+        _variantEditor(),
+      ],
     );
   }
 
-  Widget _counterField(
-    String key,
-    String hint,
-    IconData icon,
-    int max, {
-    required bool required,
-    int maxLines = 1,
-  }) {
-    return StatefulBuilder(
-      builder: (context, localSet) {
-        return Stack(
+  /// Photos ajoutées, trois par ligne ; la première est l'image principale.
+  Widget _imageGrid() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 8.0;
+        final size = (constraints.maxWidth - gap * 2) / 3;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
           children: [
-            TextFormField(
-              controller: ctrl(key),
-              maxLines: maxLines,
-              maxLength: max,
-              onChanged: (_) => localSet(() {}),
-              validator: required
-                  ? (v) =>
-                        (v ?? '').trim().isEmpty ? 'Champ obligatoire.' : null
-                  : null,
-              style: const TextStyle(color: vendorText, fontSize: 14),
-              decoration: _inputDecoration(hint, icon).copyWith(
-                counterText: '',
-                contentPadding: EdgeInsets.fromLTRB(
-                  48,
-                  maxLines > 1 ? 14 : 15,
-                  46,
-                  maxLines > 1 ? 22 : 15,
+            for (var index = 0; index < _images.length; index++)
+              SizedBox(
+                width: size,
+                height: size,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.file(_images[index], fit: BoxFit.cover),
+                      ),
+                    ),
+                    if (index == 0)
+                      Positioned(
+                        left: 4,
+                        bottom: 6,
+                        right: 4,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(color: Mk.blue, borderRadius: BorderRadius.circular(99)),
+                            child: const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Image principale',
+                                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: IconButton(
+                        tooltip: 'Retirer cette photo',
+                        onPressed: () => setState(() => _images.removeAt(index)),
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                        icon: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [BoxShadow(color: Color(0x330A1B4F), blurRadius: 4)],
+                          ),
+                          child: const Icon(Icons.close_rounded, color: Mk.navy, size: 18),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            Positioned(
-              right: 10,
-              bottom: 7,
-              child: Text(
-                '${ctrl(key).text.length}/$max',
-                style: const TextStyle(
-                  color: Color(0xFF536C98),
-                  fontSize: 10.5,
-                ),
-              ),
-            ),
           ],
         );
       },
     );
   }
 
-  Widget _richDescription() {
+  Widget _bottomActions() {
+    final last = _step == 4;
+    final creating = widget.productId == null;
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFC7D4E7)),
+        border: Border(top: BorderSide(color: _cardBorder)),
       ),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 38,
-            child: Row(
-              children: [
-                _toolbarButton(Icons.format_bold_rounded),
-                _toolbarButton(Icons.format_italic_rounded),
-                _toolbarButton(Icons.format_list_bulleted_rounded),
-                _toolbarButton(Icons.format_list_numbered_rounded),
-                const VerticalDivider(width: 10, indent: 7, endIndent: 7),
-                _toolbarButton(Icons.format_indent_increase_rounded),
-                _toolbarButton(Icons.link_rounded),
-              ],
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: last
+                    ? _BottomButton(
+                        icon: Icons.description_outlined,
+                        label: 'Enregistrer en brouillon',
+                        caption: 'Sauvegardez et terminez plus tard',
+                        onTap: _saving ? null : () => _save(draft: true),
+                      )
+                    : _BottomButton(
+                        label: _step == 0 ? 'Annuler' : 'Précédent',
+                        orangeOutline: true,
+                        onTap: _saving ? null : _previous,
+                      ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: last
+                    ? _BottomButton(
+                        icon: Icons.send_outlined,
+                        label: creating ? 'Publier le produit' : 'Enregistrer',
+                        caption: creating ? 'Votre produit sera mis en ligne' : 'Vos modifications seront appliquées',
+                        filled: true,
+                        loading: _saving,
+                        onTap: _saving ? null : () => _save(draft: false),
+                      )
+                    : _BottomButton(label: 'Suivant', filled: true, onTap: _saving ? null : _next),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Champs
+  // ---------------------------------------------------------------------------
+
+  /// Libellé (avec astérisque, mention « optionnel » ou compteur), champ et aide.
+  Widget _labeled(
+    String label,
+    Widget field, {
+    bool required = false,
+    bool optional = false,
+    String? note,
+    String? help,
+    Widget? counter,
+  }) {
+    final suffix = note ?? (optional ? '(optionnel)' : null);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    text: label,
+                    children: [
+                      if (required)
+                        const TextSpan(text: ' *', style: TextStyle(color: Mk.orange, fontWeight: FontWeight.w800)),
+                      if (suffix != null)
+                        TextSpan(
+                          text: ' $suffix',
+                          style: const TextStyle(color: Mk.muted, fontWeight: FontWeight.w500),
+                        ),
+                    ],
+                  ),
+                  style: const TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (counter != null) counter,
+            ],
+          ),
+        ),
+        field,
+        if (help != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Text(help, style: const TextStyle(color: Mk.muted, fontSize: 12, fontWeight: FontWeight.w500)),
+          ),
+      ],
+    );
+  }
+
+  /// Compteur « 12/200 » mis à jour pendant la saisie.
+  Widget _counter(String key, int max) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: ctrl(key),
+      builder: (context, value, _) => Text(
+        '${value.text.characters.length}/$max',
+        style: const TextStyle(color: Mk.muted, fontSize: 12, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+
+  /// En-tête interne d'une carte : pictogramme, titre et phrase d'introduction.
+  Widget _cardHeading(IconData icon, String title, String subtitle) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(color: Mk.softBlue, borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: Mk.blue, size: 24),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Mk.navy, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: const TextStyle(color: Mk.muted, fontSize: 13, height: 1.35, fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Choix Oui / Non en deux segments.
+  Widget _toggleRow(String title, bool value, ValueChanged<bool> onChanged, {String? subtitle}) {
+    Widget segment(String label, bool selected, bool yes) => Expanded(
+          child: Semantics(
+            button: true,
+            selected: selected,
+            label: '$title : $label',
+            excludeSemantics: true,
+            child: InkWell(
+              onTap: () => onChanged(yes),
+              borderRadius: BorderRadius.circular(9),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: selected && yes ? Mk.orangeGradient : null,
+                  color: selected && !yes ? const Color(0xFF8E9BBD) : null,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : Mk.muted,
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ),
             ),
           ),
-          const Divider(height: 1, color: Color(0xFFC7D4E7)),
-          StatefulBuilder(
-            builder: (context, localSet) {
-              return Stack(
-                children: [
-                  TextFormField(
-                    controller: ctrl('description'),
-                    maxLength: 1000,
-                    maxLines: 5,
-                    onChanged: (_) => localSet(() {}),
-                    validator: (v) => (v ?? '').trim().isEmpty
-                        ? 'La description détaillée est obligatoire.'
-                        : null,
-                    decoration: const InputDecoration(
-                      hintText:
-                          'Décrivez votre produit en détail : caractéristiques, avantages, conseils d’utilisation...',
-                      hintStyle: TextStyle(
-                        color: Color(0xFF91A0BC),
-                        fontSize: 12,
-                      ),
-                      border: InputBorder.none,
-                      counterText: '',
-                      contentPadding: EdgeInsets.fromLTRB(12, 12, 12, 24),
-                    ),
-                  ),
-                  Positioned(
-                    right: 10,
-                    bottom: 6,
-                    child: Text(
-                      '${ctrl('description').text.length}/1000',
-                      style: const TextStyle(
-                        color: Color(0xFF536C98),
-                        fontSize: 10.5,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
+        );
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Mk.navy, fontSize: 14, fontWeight: FontWeight.w700)),
+              if (subtitle != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(subtitle, style: const TextStyle(color: Mk.muted, fontSize: 12, fontWeight: FontWeight.w500)),
+                ),
+            ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 10),
+        Container(
+          width: 136,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _fieldBorder, width: 1.2),
+          ),
+          child: Row(children: [segment('Oui', value, true), segment('Non', !value, false)]),
+        ),
+      ],
     );
   }
 
-  Widget _toolbarButton(IconData icon) => IconButton(
-    onPressed: () {},
-    padding: EdgeInsets.zero,
-    constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-    icon: Icon(icon, color: vendorText, size: 19),
-  );
-
-  InputDecoration _inputDecoration(String hint, IconData icon) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFF91A0BC), fontSize: 13.2),
-      prefixIcon: Icon(icon, color: vendorText, size: 23),
-      prefixIconConstraints: const BoxConstraints(minWidth: 48),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 15),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFC7D4E7)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFC7D4E7)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: vendorBlue, width: 1.3),
-      ),
-    );
-  }
-
-  Widget _moneyField(
+  Widget _textField(
     String key,
-    String hint,
-    IconData icon, {
+    String hint, {
     bool required = false,
-  }) => _unitField(key, hint, icon, 'FCFA', required: required);
+    String requiredMessage = 'Obligatoire',
+    bool numeric = false,
+    int? maxLength,
+    int minLines = 1,
+    int maxLines = 1,
+  }) {
+    return TextFormField(
+      controller: ctrl(key),
+      keyboardType: numeric
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : (maxLines > 1 ? TextInputType.multiline : TextInputType.text),
+      textCapitalization: numeric ? TextCapitalization.none : TextCapitalization.sentences,
+      maxLength: maxLength,
+      minLines: minLines,
+      maxLines: maxLines,
+      validator: required ? (v) => (v ?? '').trim().isEmpty ? requiredMessage : null : null,
+      style: _fieldText,
+      // Un champ d'une ligne garde son exemple sur une ligne, quitte à le tronquer.
+      decoration: _inputDecoration(hint).copyWith(hintMaxLines: maxLines > 1 ? 3 : 1),
+    );
+  }
 
+  /// Champ numérique suivi de son unité (FCFA, kg, cm).
   Widget _unitField(
     String key,
     String hint,
-    IconData icon,
     String unit, {
     bool required = false,
     ValueChanged<String>? onChanged,
-  }) => TextFormField(
-    controller: ctrl(key),
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-    onChanged: onChanged,
-    validator: required
-        ? (v) => (v ?? '').trim().isEmpty ? 'Obligatoire.' : null
-        : null,
-    decoration: _inputDecoration(hint, icon).copyWith(
-      suffixText: unit,
-      suffixStyle: const TextStyle(color: Color(0xFF536C98), fontSize: 12),
-      errorMaxLines: 2,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-    ),
-  );
+  }) {
+    return TextFormField(
+      controller: ctrl(key),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: onChanged,
+      validator: required ? (v) => (v ?? '').trim().isEmpty ? 'Obligatoire' : null : null,
+      style: _fieldText,
+      decoration: _inputDecoration(hint).copyWith(
+        suffixIcon: Padding(
+          padding: const EdgeInsets.only(right: 12, left: 4),
+          child: Text(unit, style: const TextStyle(color: Mk.icon, fontSize: 13.5, fontWeight: FontWeight.w500)),
+        ),
+        suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+      ),
+    );
+  }
 
+  static const _fieldText = TextStyle(fontFamily: Mk.font, color: Mk.navy, fontSize: 14.5, fontWeight: FontWeight.w600, letterSpacing: 0);
+
+  InputDecoration _inputDecoration(String hint) {
+    OutlineInputBorder border(Color color, [double width = 1.2]) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: color, width: width),
+        );
+    return InputDecoration(
+      hintText: hint,
+      hintMaxLines: 3,
+      hintStyle: const TextStyle(fontFamily: Mk.font, color: Mk.hint, fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0),
+      filled: true,
+      fillColor: _fieldFill,
+      isDense: true,
+      counterText: '',
+      errorMaxLines: 2,
+      errorStyle: const TextStyle(fontFamily: Mk.font, color: Mk.danger, fontSize: 12, fontWeight: FontWeight.w600),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: border(_fieldBorder),
+      enabledBorder: border(_fieldBorder),
+      focusedBorder: border(Mk.blue, 1.6),
+      errorBorder: border(Mk.danger),
+      focusedErrorBorder: border(Mk.danger, 1.6),
+    );
+  }
+
+  /// Champ qui ouvre une liste de choix.
   Widget _selector<T>({
+    required String title,
     required T? value,
     required Map<T, String> items,
     required String hint,
-    required IconData icon,
     required ValueChanged<T> onChanged,
+    bool enabled = true,
   }) {
-    return ProductSheetSelector<T>(
-      value: value,
-      label: hint,
-      items: items.keys.toList(),
-      display: (v) => items[v] ?? '$v',
-      hint: hint,
-      icon: icon,
-      onChanged: onChanged,
+    final label = value == null ? null : items[value];
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: '$title : ${label ?? hint}',
+      excludeSemantics: true,
+      child: Opacity(
+        opacity: enabled ? 1 : .55,
+        child: Material(
+          color: _fieldFill,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: _fieldBorder, width: 1.2),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            focusColor: Colors.transparent,
+            onTap: !enabled
+                ? null
+                : () async {
+                    final picked = await showVendorSelect<T>(
+                      context,
+                      title: title,
+                      items: items.keys.toList(),
+                      label: (v) => items[v] ?? '$v',
+                      selected: value,
+                    );
+                    if (picked != null) onChanged(picked);
+                  },
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label ?? hint,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: label != null
+                            ? _fieldText
+                            : const TextStyle(color: Mk.hint, fontSize: 14, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const Icon(Icons.keyboard_arrow_down_rounded, color: Mk.navy, size: 24),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1666,476 +1742,328 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     required int? value,
     required List<Map<String, dynamic>> items,
     required String hint,
-    required bool required,
     required ValueChanged<int> onChanged,
     bool enabled = true,
   }) {
-    final ids = items
-        .map((item) => int.tryParse('${item['id']}'))
-        .whereType<int>()
-        .toList();
-    String display(int id) {
-      for (final item in items) {
-        if (int.tryParse('${item['id']}') == id)
-          return '${item['name'] ?? 'Catégorie'}';
-      }
-      return 'Catégorie';
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _fieldTitle(label, required: required),
-        Opacity(
-          opacity: enabled ? 1 : .55,
-          child: IgnorePointer(
-            ignoring: !enabled,
-            child: ProductSheetSelector<int>(
-              value: value,
-              label: label,
-              items: ids,
-              display: display,
-              hint: hint,
-              icon: Icons.grid_view_rounded,
-              onChanged: onChanged,
-            ),
-          ),
-        ),
-      ],
+    final options = <int, String>{
+      for (final item in items)
+        if (int.tryParse('${item['id']}') != null) int.parse('${item['id']}'): '${item['name'] ?? 'Catégorie'}',
+    };
+    return _labeled(
+      label,
+      _selector<int>(title: label, value: value, items: options, hint: hint, onChanged: onChanged, enabled: enabled),
+      required: true,
     );
   }
 
-  Widget _yesNo(
-    String label,
-    bool value,
-    IconData yesIcon,
-    ValueChanged<bool> onChanged,
-  ) {
-    Widget choice(bool yes) {
-      final selected = value == yes;
-      return Expanded(
-        child: InkWell(
-          onTap: () => onChanged(yes),
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFC7D4E7)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: selected ? productOrange : const Color(0xFFA7B3C6),
-                      width: 2,
-                    ),
-                  ),
-                  child: selected
-                      ? Center(
-                          child: Container(
-                            width: 13,
-                            height: 13,
-                            decoration: const BoxDecoration(
-                              color: productOrange,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                if (yes) ...[
-                  Icon(yesIcon, color: vendorText, size: 21),
-                  const SizedBox(width: 10),
-                ],
-                Text(
-                  yes ? 'Oui' : 'Non',
-                  style: const TextStyle(
-                    color: vendorText,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _fieldTitle(label, required: true),
-        Row(children: [choice(true), const SizedBox(width: 12), choice(false)]),
-      ],
-    );
-  }
-
-  Widget _uploadBox({
+  /// Zone d'ajout en pointillés (photos, vidéo, fiche technique).
+  Widget _dropZone({
     required IconData icon,
-    IconData? leadingIcon,
     required String title,
-    required String subtitle,
-    required String details,
-    required VoidCallback onTap,
+    required String line1,
+    required String line2,
+    required VoidCallback? onTap,
+    bool orange = false,
+    bool done = false,
+    bool busy = false,
   }) {
-    return InkWell(
-      onTap: onTap,
+    final accent = done ? Mk.success : (orange ? Mk.orange : Mk.icon);
+    return Semantics(
+      button: true,
+      label: title,
       child: CustomPaint(
-        painter: _DashedBorderPainter(
-          color: const Color(0xFF82B6FF),
-          radius: 8,
+        foregroundPainter: _DashedBorderPainter(
+          color: done ? Mk.success : (orange ? Mk.orange : const Color(0xFFB4C0D8)),
+          radius: 12,
         ),
-        child: Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(minHeight: 96),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-          child: Row(
-            children: [
-              if (leadingIcon != null) ...[
-                Icon(leadingIcon, color: vendorText, size: 27),
-                const SizedBox(width: 18),
-              ],
-              Icon(
-                icon,
-                color: icon == Icons.ondemand_video_outlined
-                    ? const Color(0xFF4E6497)
-                    : const Color(0xFF0875E1),
-                size: 52,
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: vendorText,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: Color(0xFF536C98),
-                        fontSize: 10.7,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      details,
-                      style: const TextStyle(
-                        color: Color(0xFF536C98),
-                        fontSize: 10.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _imageSlots() {
-    return SizedBox(
-      height: 100,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: (_images.length + 1).clamp(5, 10),
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          if (index < _images.length) {
-            return Stack(
-              children: [
-                Container(
-                  width: 92,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(
-                      color: index == 0
-                          ? const Color(0xFF0875E1)
-                          : const Color(0xFFC7D4E7),
-                      width: index == 0 ? 1.5 : 1,
-                    ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.file(
-                      _images[index],
-                      width: 92,
-                      height: 100,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-                if (index == 0)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 5),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF0875E1),
-                        borderRadius: BorderRadius.vertical(
-                          bottom: Radius.circular(6),
-                        ),
-                      ),
-                      child: const Text(
-                        'Image principale',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontSize: 9),
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  top: 3,
-                  right: 3,
-                  child: InkWell(
-                    onTap: () => setState(() => _images.removeAt(index)),
-                    child: const CircleAvatar(
-                      radius: 10,
-                      backgroundColor: Colors.white,
-                      child: Icon(
-                        Icons.close_rounded,
-                        color: Colors.red,
-                        size: 13,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
-          return InkWell(
-            onTap: _images.length >= 10 ? null : _pickImages,
-            child: CustomPaint(
-              painter: _DashedBorderPainter(
-                color: const Color(0xFFB7CBE7),
-                radius: 7,
-              ),
-              child: const SizedBox(
-                width: 92,
-                height: 100,
-                child: Center(
-                  child: Icon(
-                    Icons.add_rounded,
-                    color: Color(0xFF4E6497),
-                    size: 30,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _wizardButtons({String firstLabel = 'Précédent'}) {
-    return Row(
-      children: [
-        Expanded(
-          flex: 5,
-          child: SizedBox(
-            height: 58,
-            child: OutlinedButton.icon(
-              onPressed: _previous,
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFB8C6DC)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              icon: const Icon(
-                Icons.arrow_back_rounded,
-                color: vendorText,
-                size: 28,
-              ),
-              label: FittedBox(
-                child: Text(
-                  firstLabel,
-                  style: const TextStyle(
-                    color: vendorText,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 24),
-        Expanded(
-          flex: 7,
-          child: SizedBox(
-            height: 58,
-            child: FilledButton(
-              onPressed: _next,
-              style: FilledButton.styleFrom(
-                backgroundColor: productOrange,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+        child: Material(
+          color: done ? Mk.successSoft : (orange ? Mk.softOrange : Colors.white),
+          borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+              child: Column(
                 children: [
+                  if (busy)
+                    const SizedBox.square(
+                      dimension: 30,
+                      child: CircularProgressIndicator(strokeWidth: 2.6, color: Mk.orange),
+                    )
+                  else
+                    Icon(done ? Icons.check_circle_rounded : icon, color: orange && !done ? Mk.orange : accent, size: 34),
+                  const SizedBox(height: 6),
                   Text(
-                    'Suivant',
+                    title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w900,
+                      color: orange && !done ? Mk.orange : Mk.navy,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  SizedBox(width: 15),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    color: Colors.white,
-                    size: 28,
+                  const SizedBox(height: 3),
+                  Text(
+                    line1,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Mk.muted, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    line2,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Mk.muted, fontSize: 11.5, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _pair(Widget left, Widget right) => _fieldColumns([left, right]);
-
-  Widget _fieldColumns(List<Widget> fields) => LayoutBuilder(
-    builder: (context, constraints) {
-      final minimum = MediaQuery.textScalerOf(context).scale(240);
-      if (constraints.maxWidth <
-          fields.length * minimum + (fields.length - 1) * 16) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < fields.length; i++) ...[
-              fields[i],
-              if (i < fields.length - 1) const SizedBox(height: 16),
-            ],
-          ],
-        );
-      }
-      return Row(
+  Widget _twoColumns(Widget left, Widget right) => Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var i = 0; i < fields.length; i++) ...[
-            Expanded(child: fields[i]),
-            if (i < fields.length - 1) const SizedBox(width: 16),
-          ],
+          Expanded(child: left),
+          const SizedBox(width: 10),
+          Expanded(child: right),
         ],
       );
-    },
-  );
 }
 
+const _cardBorder = Color(0xFFE4E9F1);
+const _fieldBorder = Color(0xFFD9E0EC);
+const _fieldFill = Color(0xFFF3F6FB);
+
+/// En-tête blanc : croix de fermeture, titre centré et logo.
 class _WizardHeader extends StatelessWidget {
-  const _WizardHeader({
-    required this.title,
-    required this.subtitle,
-    required this.onBack,
-  });
+  const _WizardHeader({required this.title, required this.onClose});
+
   final String title;
-  final String subtitle;
-  final VoidCallback onBack;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF052B61), Color(0xFF0B4F92)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: _cardBorder)),
       ),
       child: SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 18, 10),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 88),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+        child: SizedBox(
+          height: 56,
+          child: Row(
+            children: [
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: onClose,
+                tooltip: 'Fermer',
+                icon: const Icon(Icons.close_rounded, color: Mk.navy, size: 28),
+              ),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: const TextStyle(color: Mk.navy, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 6, right: 14),
+                child: Image.asset('assets/images/mockups/logo_navy.png', height: 26, semanticLabel: 'OVANIE Vendeur'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Barres de progression, « Étape X sur 5 » et noms des étapes.
+class _StepProgress extends StatelessWidget {
+  const _StepProgress({required this.step, required this.titles, required this.onSelect});
+
+  final int step;
+  final List<String> titles;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            for (var index = 0; index < titles.length; index++) ...[
+              if (index > 0) const SizedBox(width: 6),
+              Expanded(
+                child: Container(
+                  height: 12,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    gradient: index <= step ? Mk.orangeGradient : null,
+                    color: index <= step ? null : const Color(0xFFDDE2EB),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: index < step ? const Icon(Icons.check_rounded, color: Colors.white, size: 12) : null,
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Étape ${step + 1} sur ${titles.length} · ${titles[step]}',
+          style: const TextStyle(color: Mk.muted, fontSize: 13.5, fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 4),
+        LayoutBuilder(
+          builder: (context, box) {
+            final labels = Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                InkWell(
-                  onTap: onBack,
-                  borderRadius: BorderRadius.circular(40),
-                  child: Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: .08),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: .16),
-                      ),
+                for (var index = 0; index < titles.length; index++) ...[
+                  if (index > 0)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 7),
+                      child: Text('·', style: TextStyle(color: Mk.muted, fontSize: 16, fontWeight: FontWeight.w800)),
                     ),
-                    child: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(flex: 6, child: ProductBrandLockup()),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 5,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          height: 1.05,
-                          fontWeight: FontWeight.w900,
+                  Semantics(
+                    button: index < step,
+                    selected: index == step,
+                    child: InkWell(
+                      onTap: index < step ? () => onSelect(index) : null,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                        child: Text(
+                          titles[index],
+                          style: TextStyle(
+                            color: index == step ? Mk.orange : (index < step ? Mk.blueDeep : Mk.muted),
+                            fontSize: 13.5,
+                            fontWeight: index == step ? FontWeight.w700 : FontWeight.w500,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10.8,
-                          height: 1.18,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
+                ],
+              ],
+            );
+            // Téléphone courant : les cinq noms tiennent sur la ligne, légèrement réduits.
+            if (box.maxWidth >= 370) {
+              return FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: labels);
+            }
+            // Écran étroit : la ligne défile et montre la fin à partir de l'étape 4.
+            return SingleChildScrollView(scrollDirection: Axis.horizontal, reverse: step >= 3, child: labels);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Bandeau illustré en tête de chaque étape.
+class _StepBanner extends StatelessWidget {
+  const _StepBanner({required this.step, required this.title, required this.subtitle});
+
+  final int step;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 10,
+            child: Image.asset(
+              'assets/images/mockups/form_step${step + 1}.jpg',
+              height: 92,
+              fit: BoxFit.contain,
+              excludeFromSemantics: true,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 14,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(color: Mk.navy, fontSize: 18, height: 1.15, fontWeight: FontWeight.w800, letterSpacing: -.3),
                 ),
+                const SizedBox(height: 4),
+                Text(subtitle, style: const TextStyle(color: Mk.muted, fontSize: 12.5, height: 1.35, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Carte blanche qui regroupe des champs.
+class _FormCard extends StatelessWidget {
+  const _FormCard({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    );
+  }
+}
+
+/// Bouton à contour orange sur toute la largeur (« Prendre une photo »).
+class _OutlineAction extends StatelessWidget {
+  const _OutlineAction({required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: onTap == null ? .5 : 1,
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: Mk.orange, width: 1.4),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            height: 46,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Mk.orange, size: 24),
+                const SizedBox(width: 10),
+                Text(label, style: const TextStyle(color: Mk.orange, fontSize: 15, fontWeight: FontWeight.w700)),
               ],
             ),
           ),
@@ -2145,166 +2073,122 @@ class _WizardHeader extends StatelessWidget {
   }
 }
 
-class _StepProgress extends StatelessWidget {
-  const _StepProgress({required this.currentStep});
-  final int currentStep;
+/// Bouton de la barre du bas : contour ou plein, avec légende facultative.
+class _BottomButton extends StatelessWidget {
+  const _BottomButton({
+    required this.label,
+    required this.onTap,
+    this.icon,
+    this.caption,
+    this.filled = false,
+    this.orangeOutline = false,
+    this.loading = false,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  final String? caption;
+  final bool filled;
+  final bool orangeOutline;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
-    const labels = [
-      'Informations',
-      'Prix & unité',
-      'Détail technique',
-      'Logistique',
-      'Médias',
-    ];
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: List.generate(labels.length, (index) {
-        final current = index == currentStep;
-        final completed = index < currentStep;
-        final color = current
-            ? productOrange
-            : completed
-            ? const Color(0xFF087AF0)
-            : const Color(0xFFC5CDD9);
-        return Expanded(
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              if (index > 0)
-                Positioned(
-                  left: -MediaQuery.sizeOf(context).width / 12,
-                  top: 14,
-                  child: Container(
-                    width: MediaQuery.sizeOf(context).width / 6,
-                    height: 2,
-                    color: completed || current
-                        ? const Color(0xFF1680F0)
-                        : const Color(0xFFC5CDD9),
-                  ),
-                ),
-              Column(
-                children: [
-                  Container(
-                    width: 30,
-                    height: 30,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        labels[index],
-                        style: TextStyle(
-                          color: current
-                              ? productOrange
-                              : completed
-                              ? const Color(0xFF087AF0)
-                              : const Color(0xFF536C98),
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+    final foreground = filled ? Colors.white : (orangeOutline ? const Color(0xFFE85400) : Mk.navy);
+    final texts = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: caption == null ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          style: TextStyle(fontFamily: Mk.font, color: foreground, fontSize: caption == null ? 15.5 : 13.5, fontWeight: FontWeight.w700),
+        ),
+        if (caption != null)
+          Text(
+            caption!,
+            maxLines: 1,
+            style: TextStyle(
+              fontFamily: Mk.font,
+              color: filled ? Colors.white : Mk.muted,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        );
-      }),
+      ],
+    );
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: label,
+      excludeSemantics: true,
+      child: Opacity(
+        opacity: onTap == null && !loading ? .55 : 1,
+        child: Container(
+          height: 50,
+          decoration: BoxDecoration(
+            gradient: filled ? Mk.orangeGradient : null,
+            color: filled ? null : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: filled ? null : Border.all(color: orangeOutline ? Mk.orange : Mk.icon, width: 1.3),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Center(
+                  child: loading
+                      ? const SizedBox.square(
+                          dimension: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                        )
+                      : FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (icon != null) ...[
+                                Icon(icon, color: foreground, size: 24),
+                                const SizedBox(width: 8),
+                              ],
+                              texts,
+                            ],
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _StepCard extends StatelessWidget {
-  const _StepCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.child,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Widget child;
+/// Ligne à puce d'un encadré de conseils.
+class _Tip extends StatelessWidget {
+  const _Tip(this.text);
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 15, 14, 18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE1E8F1)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A0A2A63),
-            blurRadius: 18,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF0E7),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: productOrange, size: 38),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: vendorText,
-                        fontSize: 27,
-                        height: 1.05,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: Color(0xFF536C98),
-                        fontSize: 15,
-                        height: 1.25,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Container(
+            width: 5,
+            height: 5,
+            margin: const EdgeInsets.only(top: 7, right: 10, left: 2),
+            decoration: const BoxDecoration(color: Mk.blue, shape: BoxShape.circle),
           ),
-          const SizedBox(height: 16),
-          child,
+          Expanded(child: Text(text)),
         ],
       ),
     );
@@ -2321,10 +2205,10 @@ class _DashedBorderPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeWidth = 1.3;
     final path = Path()
       ..addRRect(
-        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+        RRect.fromRectAndRadius((Offset.zero & size).deflate(.6), Radius.circular(radius)),
       );
     for (final metric in path.computeMetrics()) {
       double distance = 0;
@@ -2345,6 +2229,50 @@ class _FormLoading extends StatelessWidget {
   const _FormLoading();
   @override
   Widget build(BuildContext context) {
-    return const Center(child: CircularProgressIndicator(color: productOrange));
+    return const Center(child: CircularProgressIndicator(color: Mk.orange));
+  }
+}
+
+class _VariantDraft {
+  final int? id;
+  final TextEditingController type;
+  final TextEditingController value;
+  final TextEditingController stock;
+  final TextEditingController price;
+  final TextEditingController colorHex;
+  String imageUrl;
+  File? image;
+
+  _VariantDraft({
+    this.id,
+    String type = 'Couleur',
+    String value = '',
+    String stock = '0',
+    String price = '',
+    String colorHex = '',
+    this.imageUrl = '',
+    this.image,
+  })  : type = TextEditingController(text: type),
+        value = TextEditingController(text: value),
+        stock = TextEditingController(text: stock),
+        price = TextEditingController(text: price),
+        colorHex = TextEditingController(text: colorHex);
+
+  factory _VariantDraft.fromMap(Map<String, dynamic> map) => _VariantDraft(
+        id: int.tryParse('${map['id'] ?? ''}'),
+        type: '${map['type'] ?? 'Couleur'}',
+        value: '${map['value'] ?? ''}',
+        stock: '${map['stock'] ?? '0'}',
+        price: map['price_override'] == null ? '' : '${map['price_override']}',
+        colorHex: '${map['color_hex'] ?? ''}',
+        imageUrl: '${map['image_url'] ?? map['card_url'] ?? ''}',
+      );
+
+  void dispose() {
+    type.dispose();
+    value.dispose();
+    stock.dispose();
+    price.dispose();
+    colorHex.dispose();
   }
 }

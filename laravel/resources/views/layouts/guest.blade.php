@@ -18,7 +18,7 @@
         ));
         $seoImage = trim($__env->yieldContent(
             'meta_image',
-            asset('storage/logos/officiel site.png')
+            asset('images/home/logo-ovanie.png')
         ));
         $seoUrl = trim($__env->yieldContent('canonical', url()->current()));
     @endphp
@@ -648,5 +648,6 @@
     </script>
 
     @stack('scripts')
+@include('layouts.partials.live-sync')
 </body>
 </html>

@@ -15,7 +15,7 @@
 
     <div class="cs-order-count-box">
         <strong>{{ $counts['all'] }}</strong>
-        <span>commande(s)</span>
+        <span>{{ $counts['all'] > 1 ? 'commandes' : 'commande' }}</span>
     </div>
 </section>
 
@@ -124,8 +124,8 @@
                             </div>
 
                             <div>
-                                <strong>{{ $quantityTotal }} article(s)</strong>
-                                <small>{{ $order->items->count() }} référence(s)</small>
+                                <strong>{{ $quantityTotal }} {{ ($quantityTotal) > 1 ? 'articles' : 'article' }}</strong>
+                                <small>{{ $order->items->count() }} {{ ($order->items->count()) > 1 ? 'références' : 'référence' }}</small>
                             </div>
                         </a>
                     </td>

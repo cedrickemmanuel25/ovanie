@@ -65,7 +65,7 @@ class BusinessController extends Controller
             'request_type' => ['required', 'string', 'in:devis,appel_offre'],
         ]);
 
-        $user = Auth::user();
+        $user = Auth::guard('pro')->user();
         $businessRequest = $validated['request_type'] === 'devis'
             ? Devis::query()->find($validated['request_id'])
             : AppelOffre::query()->find($validated['request_id']);
@@ -97,18 +97,15 @@ class BusinessController extends Controller
             $businessContext = [
                 'business_request_type' => $validated['request_type'],
                 'business_request_id' => $businessRequest->getKey(),
-                'user_id' => $user->id,
+                'pro_user_id' => $user->id,
                 'server_price' => $amount,
                 'expected_amount' => $amount,
             ];
 
-            if ($companyId = $user->getAttribute('company_id')) {
-                $businessContext['company_id'] = $companyId;
-            }
-
             Payment::create([
                 'order_id' => null,
-                'user_id' => $user->id,
+                'user_id' => null,
+                'pro_user_id' => $user->id,
                 'amount' => $amount,
                 'method' => 'paydunya',
                 'status' => 'pending',
@@ -141,7 +138,7 @@ class BusinessController extends Controller
         $token = (string) $request->query('token', '');
         $payment = Payment::query()
             ->where('type', 'business_contact')
-            ->where('user_id', $request->user()->id)
+            ->where('pro_user_id', Auth::guard('pro')->id())
             ->where('reference', $token)
             ->first();
 

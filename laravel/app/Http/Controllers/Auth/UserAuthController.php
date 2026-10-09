@@ -21,7 +21,7 @@ class UserAuthController extends Controller
         $data = $accounts->validateClientRegistration($request);
         $user = $accounts->createClient($data);
 
-        Auth::guard('web')->login($user);
+        Auth::guard('web')->login($user, true);
         if ($request->hasSession()) {
             $request->session()->regenerate();
             app(GuestCartService::class)->mergeIntoUserCart($request, $user);
@@ -63,7 +63,7 @@ class UserAuthController extends Controller
                 ->withInput($request->except('password'));
         }
 
-        Auth::guard('web')->login($user, $request->boolean('remember'));
+        Auth::guard('web')->login($user, $request->boolean('remember', true));
         $request->session()->regenerate();
         app(GuestCartService::class)->mergeIntoUserCart($request, $user);
 
@@ -111,7 +111,7 @@ class UserAuthController extends Controller
                 ->withInput($request->except('password'));
         }
 
-        Auth::guard('web')->login($user, $request->boolean('remember'));
+        Auth::guard('web')->login($user, $request->boolean('remember', true));
         $request->session()->regenerate();
         app(GuestCartService::class)->mergeIntoUserCart($request, $user);
 
@@ -143,7 +143,7 @@ class UserAuthController extends Controller
         $data = $accounts->validateClientRegistration($request);
         $user = $accounts->createClient($data);
 
-        Auth::guard('web')->login($user);
+        Auth::guard('web')->login($user, true);
         $request->session()->regenerate();
         app(GuestCartService::class)->mergeIntoUserCart($request, $user);
 

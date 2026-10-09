@@ -1,5 +1,6 @@
 @extends('admin.layouts.app')
 
+@section('page-title', 'Rapports')
 @section('title', 'Rapports - Admin IMOo')
 
 @section('content')

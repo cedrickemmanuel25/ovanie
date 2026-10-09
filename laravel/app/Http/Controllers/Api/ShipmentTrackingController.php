@@ -357,6 +357,27 @@ class ShipmentTrackingController extends Controller
             'sort_order' => (int) $groupItems->min('id'),
         ];
 
+        // Même règle que pour OVANIE Logistics : le code de sécurité n'est
+        // révélé au client qu'une fois le chauffeur arrivé chez lui.
+        $arrivedAtCustomer = $missionStatus === 'arrived' && $publicStatus !== 'delivered';
+        if ($arrivedAtCustomer) {
+            $payload['delivery_status'] = 'arrived';
+            $payload['tracking_phase'] = 'arrived_customer';
+        }
+        $otpCodes = $groupItems->pluck('delivery_otp_code')->filter()->map(fn ($code) => trim((string) $code))->unique()->values();
+        $otpVisible = ! $forLogistics && $arrivedAtCustomer && $otpCodes->count() === 1;
+        $payload['delivery_security'] = [
+            'otp_required' => $arrivedAtCustomer || $publicStatus === 'in_transit',
+            'otp_visible' => $otpVisible,
+            'otp_code' => $otpVisible ? (string) $otpCodes->first() : null,
+            'message' => match (true) {
+                $arrivedAtCustomer => 'Vérifiez tous vos articles puis communiquez le code au livreur.',
+                $publicStatus === 'in_transit' => 'Gardez votre code confidentiel jusqu’à la remise complète des articles.',
+                $publicStatus === 'delivered' => 'Livraison confirmée avec votre code de sécurité.',
+                default => 'Le code de sécurité sera utilisé au moment de la remise au client.',
+            },
+        ];
+
         if ($forLogistics) {
             $payload['internal_delivery_provider'] = $item->delivery_provider;
             $payload['internal_shop_id'] = $item->shop_id;

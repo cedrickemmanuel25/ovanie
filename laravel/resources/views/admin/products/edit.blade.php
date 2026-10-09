@@ -1,6 +1,7 @@
-@extends('admin.layouts.app')
+@extends($catalogueLayout ?? 'admin.layouts.app')
+@includeWhen(! ($isAdminSpace ?? true), 'support.partials.catalogue-scope')
 
-@section('title', 'Modifier un produit | Administration OVANIE')
+@section('title', 'Modifier un produit | ' . ($spaceLabel ?? 'Administration OVANIE'))
 @section('page-title', 'Modifier un produit')
 
 @push('styles')
@@ -35,17 +36,14 @@
         <div>
             <span class="page-kicker">Catalogue produits</span>
             <h2>Modifier le produit</h2>
-            <p>
-                Mettez à jour les informations commerciales, logistiques et les médias de cette offre.
-            </p>
         </div>
 
         <div class="product-edit-heading-actions">
-            <a href="{{ route('admin.products.index') }}" class="secondary-action">
+            <a href="{{ route(($productRoutes ?? 'admin.products') . '.index') }}" class="secondary-action">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg>
                 Retour aux produits
             </a>
-            <a href="{{ url('/admin/products/' . $product->getRouteKey()) }}" class="secondary-action" target="_blank" rel="noopener">
+            <a href="{{ route(($productRoutes ?? 'admin.products') . '.show', $product) }}" class="secondary-action" target="_blank" rel="noopener">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                 Voir la fiche
             </a>
@@ -90,7 +88,7 @@
     <div class="product-edit-layout">
         <form
             method="POST"
-            action="{{ route('admin.products.update', $product) }}"
+            action="{{ route(($productRoutes ?? 'admin.products') . '.update', $product) }}"
             enctype="multipart/form-data"
             class="product-edit-form"
             id="productEditForm"
@@ -103,7 +101,6 @@
                     <span class="panel-number">1</span>
                     <div>
                         <h3>Identification du produit</h3>
-                        <p>Nom, marque, classement et descriptions visibles dans le catalogue.</p>
                     </div>
                 </div>
 
@@ -115,15 +112,33 @@
                     </div>
 
                     <div class="form-field">
-                        <label for="category_id">Catégorie <span>*</span></label>
-                        <select id="category_id" name="category_id" required>
-                            <option value="">Sélectionner une catégorie</option>
-                            @foreach($categories as $category)
-                                <option value="{{ $category->id }}" @selected((int) old('category_id', $product->category_id) === (int) $category->id)>
+                        <label for="main_category_id">Catégorie principale <span>*</span></label>
+                        <select id="main_category_id" name="main_category_id" required>
+                            <option value="">Sélectionner une catégorie principale</option>
+                            @foreach($mainCategories as $category)
+                                <option value="{{ $category->id }}" @selected((int) $selectedMainCategoryId === (int) $category->id)>
                                     {{ $category->name }}
                                 </option>
                             @endforeach
                         </select>
+                        @error('main_category_id')<small class="field-error">{{ $message }}</small>@enderror
+                    </div>
+
+                    <div class="form-field">
+                        <label for="category_id">Sous-catégorie <span>*</span></label>
+                        <select id="category_id" name="category_id" required>
+                            <option value="">Sélectionner une sous-catégorie</option>
+                            @foreach($subCategories as $category)
+                                <option
+                                    value="{{ $category->id }}"
+                                    data-parent-id="{{ $category->parent_id }}"
+                                    @selected((int) $selectedSubCategoryId === (int) $category->id)
+                                >
+                                    {{ $category->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <small class="field-help">Les sous-catégories affichées dépendent de la catégorie principale choisie.</small>
                         @error('category_id')<small class="field-error">{{ $message }}</small>@enderror
                     </div>
 
@@ -131,13 +146,7 @@
                         <label for="brand">Marque</label>
                         <input id="brand" name="brand" type="text" value="{{ old('brand', $product->brand) }}" maxlength="120">
                     </div>
-
-                    <div class="form-field">
-                        <label for="sku">SKU ou référence interne</label>
-                        <input id="sku" name="sku" type="text" value="{{ old('sku', $product->sku) }}" maxlength="120">
-                    </div>
-
-                    <div class="form-field">
+<div class="form-field">
                         <label for="type">Type de produit</label>
                         <input id="type" name="type" type="text" value="{{ old('type', $product->type) }}" maxlength="120">
                     </div>
@@ -165,7 +174,6 @@
                     <div class="form-field form-field-wide">
                         <label for="short_description">Description courte</label>
                         <textarea id="short_description" name="short_description" rows="3" maxlength="500">{{ old('short_description', $product->short_description) }}</textarea>
-                        <small class="field-help">Résumé affiché sur les cartes et dans les résultats de recherche.</small>
                     </div>
 
                     <div class="form-field form-field-wide">
@@ -186,7 +194,6 @@
                     <span class="panel-number">2</span>
                     <div>
                         <h3>Prix, stock et conditionnement</h3>
-                        <p>Informations propres à cette boutique et à cette offre commerciale.</p>
                     </div>
                 </div>
 
@@ -226,13 +233,7 @@
                             @endforeach
                         </select>
                     </div>
-
-                    <div class="form-field">
-                        <label for="unit_label">Libellé personnalisé</label>
-                        <input id="unit_label" name="unit_label" type="text" value="{{ old('unit_label', $product->unit_label) }}" placeholder="Ex. sac de 50 kg">
-                    </div>
-
-                    <div class="form-field">
+<div class="form-field">
                         <label for="min_order_quantity">Quantité minimale <span>*</span></label>
                         <input id="min_order_quantity" name="min_order_quantity" type="number" min="1" step="1" value="{{ old('min_order_quantity', $product->min_order_quantity ?: 1) }}" required>
                     </div>
@@ -249,7 +250,6 @@
                     <span class="panel-number">3</span>
                     <div>
                         <h3>Données logistiques</h3>
-                        <p>Ces données déterminent le véhicule, les frais de livraison et les besoins de manutention.</p>
                     </div>
                     <span class="logistics-state {{ $logisticsComplete ? 'is-ready' : 'is-incomplete' }}">
                         {{ $logisticsComplete ? 'Données complètes' : 'À compléter' }}
@@ -276,7 +276,6 @@
                     <div class="form-field volume-field">
                         <label for="volumePreview">Volume calculé</label>
                         <div class="calculated-value"><strong id="volumePreview">{{ number_format((float) $product->volume_m3, 6, ',', ' ') }}</strong> m³</div>
-                        <small class="field-help">Recalculé automatiquement lors de l’enregistrement.</small>
                     </div>
                 </div>
 
@@ -318,30 +317,16 @@
                     <span class="panel-number">4</span>
                     <div>
                         <h3>Publication et opérations commerciales</h3>
-                        <p>Contrôlez la visibilité de l’offre sans modifier les informations privées du vendeur.</p>
+                        <p>Quand l’administration enregistre une fiche complète avec au moins une image, le produit est automatiquement remis en ligne.</p>
                     </div>
                 </div>
 
+                <div class="publication-auto-notice" style="grid-column:1/-1;margin-bottom:16px;padding:14px 16px;border:1px solid #cfe1f7;border-radius:12px;background:#f4f9ff;color:#294868;line-height:1.5;">
+                    <strong style="display:block;color:#0b4f9c;margin-bottom:3px;">Publication automatique par l’administration</strong>
+                    <span style="font-size:13px;">Le bouton « Enregistrer les modifications » publie le produit. Si la boutique n’a pas encore sa logistique ou son reversement conforme, le produit reste visible mais le checkout est bloqué jusqu’à régularisation.</span>
+                </div>
+
                 <div class="form-grid">
-                    <div class="form-field">
-                        <label for="status">État de l’offre <span>*</span></label>
-                        <select id="status" name="status" required>
-                            @foreach($statusLabels as $value => $label)
-                                <option value="{{ $value }}" @selected($currentStatus === $value)>{{ $label }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="form-field">
-                        <label>Visibilité publique</label>
-                        <input type="hidden" name="is_active" value="0">
-                        <label class="switch-line">
-                            <input type="checkbox" name="is_active" value="1" @checked((bool) old('is_active', $product->is_active))>
-                            <span class="switch-control"></span>
-                            <span><strong>Produit visible</strong><small>Disponible dans le catalogue public si les autres règles sont respectées.</small></span>
-                        </label>
-                    </div>
-
                     <div class="form-field">
                         <label>Livraison rapide</label>
                         <input type="hidden" name="fast_delivery" value="0">
@@ -395,8 +380,10 @@
                 <div class="panel-heading">
                     <span class="panel-number">5</span>
                     <div>
+                        @include('components.product-variants-editor', ['product' => $product])
+
                         <h3>Images du produit</h3>
-                        <p>Choisissez l’image principale, retirez les images obsolètes ou ajoutez de nouvelles photos.</p>
+                        <p style="margin:4px 0 0;color:#64748b;font-size:13px;">Si une photo vendeur n’est pas assez professionnelle, vous pouvez la retirer, envoyer une meilleure image et choisir la nouvelle image principale. Les nouveaux fichiers sont normalisés automatiquement par OVANIE.</p>
                     </div>
                     <span class="media-counter">{{ $product->images->count() }} image(s)</span>
                 </div>
@@ -450,10 +437,10 @@
                     </div>
                 </div>
                 <div class="product-form-actions-buttons">
-                    <a href="{{ route('admin.products.index') }}" class="secondary-action">Annuler</a>
+                    <a href="{{ route(($productRoutes ?? 'admin.products') . '.index') }}" class="secondary-action">Annuler</a>
                     <button type="submit" class="primary-action" id="saveProductButton">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
-                        Enregistrer les modifications
+                        Enregistrer et publier
                     </button>
                 </div>
             </footer>
@@ -494,23 +481,24 @@
                 </dl>
             </section>
 
+            @if($canDeleteProducts ?? true)
             <section class="side-panel danger-panel">
                 <h3>Zone sensible</h3>
-                <p>La suppression est définitive et retire également les images associées à cette offre.</p>
                 <button type="button" class="danger-action" id="openDeleteDialog">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>
                     Supprimer le produit
                 </button>
             </section>
+            @endif
         </aside>
     </div>
 </div>
 
+@if($canDeleteProducts ?? true)
 <dialog class="delete-dialog" id="deleteProductDialog">
     <form method="dialog" class="delete-dialog-card">
         <div class="delete-dialog-icon">!</div>
         <h3>Supprimer définitivement ce produit ?</h3>
-        <p>Cette action supprimera l’offre et ses images. Elle ne peut pas être annulée.</p>
         <div class="delete-dialog-actions">
             <button type="submit" class="secondary-action">Conserver le produit</button>
             <button type="button" class="danger-action" id="confirmDeleteProduct">Confirmer la suppression</button>
@@ -518,10 +506,11 @@
     </form>
 </dialog>
 
-<form method="POST" action="{{ route('admin.products.destroy', $product) }}" id="deleteProductForm" hidden>
+<form method="POST" action="{{ route(($productRoutes ?? 'admin.products') . '.destroy', $product) }}" id="deleteProductForm" hidden>
     @csrf
     @method('DELETE')
 </form>
+@endif
 @endsection
 
 @push('scripts')
@@ -540,6 +529,36 @@
     const uploadInput = document.getElementById('imagesUpload');
     const preview = document.getElementById('newImagesPreview');
     const dialog = document.getElementById('deleteProductDialog');
+    const mainCategorySelect = document.getElementById('main_category_id');
+    const subCategorySelect = document.getElementById('category_id');
+
+    const filterSubCategories = () => {
+        if (!mainCategorySelect || !subCategorySelect) return;
+
+        const parentId = String(mainCategorySelect.value || '');
+        const currentValue = String(subCategorySelect.value || '');
+        let currentStillVisible = false;
+
+        [...subCategorySelect.options].forEach(option => {
+            if (!option.value) {
+                option.hidden = false;
+                option.disabled = false;
+                return;
+            }
+
+            const visible = parentId !== '' && String(option.dataset.parentId || '') === parentId;
+            option.hidden = !visible;
+            option.disabled = !visible;
+
+            if (visible && option.value === currentValue) {
+                currentStillVisible = true;
+            }
+        });
+
+        if (!currentStillVisible) {
+            subCategorySelect.value = '';
+        }
+    };
 
     const calculateVolume = () => {
         const length = Number(lengthInput.value || 0);
@@ -559,6 +578,7 @@
         if (!required) unloadingInstructions.value = '';
     };
 
+    mainCategorySelect?.addEventListener('change', filterSubCategories);
     [lengthInput, widthInput, heightInput].forEach(input => input.addEventListener('input', calculateVolume));
     form.querySelectorAll('input[name="requires_unloading"]').forEach(input => input.addEventListener('change', syncUnloading));
 
@@ -593,6 +613,7 @@
         document.getElementById('deleteProductForm').submit();
     });
 
+    filterSubCategories();
     calculateVolume();
     syncUnloading();
 })();

@@ -12,6 +12,7 @@ class BusinessContactAccess extends Model
 
     protected $fillable = [
         'user_id',
+        'pro_user_id',
         'company_id',
         'payment_id',
         'business_request_type',
@@ -34,6 +35,11 @@ class BusinessContactAccess extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function proUser()
+    {
+        return $this->belongsTo(ProUser::class, 'pro_user_id');
     }
 
     public function payment()
@@ -63,4 +69,27 @@ class BusinessContactAccess extends Model
             return true;
         }, 3);
     }
+    public function consumeForPro(ProUser $user): bool
+    {
+        return DB::transaction(function () use ($user): bool {
+            $access = self::query()->whereKey($this->getKey())->lockForUpdate()->first();
+
+            if (! $access
+                || (int) $access->pro_user_id !== (int) $user->id
+                || $access->revoked_at !== null
+                || ($access->expires_at !== null && $access->expires_at->isPast())) {
+                return false;
+            }
+
+            $access->forceFill([
+                'access_count' => $access->access_count + 1,
+                'last_accessed_at' => now(),
+            ])->save();
+
+            $this->setRawAttributes($access->getAttributes(), true);
+
+            return true;
+        }, 3);
+    }
+
 }

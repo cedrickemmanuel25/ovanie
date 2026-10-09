@@ -133,6 +133,8 @@
                     'count' => (int) (data_get($child, 'products_count') ?? 0),
                 ];
             })
+            // Les sous-catégories sans produit ne sont pas proposées : elles mènent à une page vide.
+            ->filter(fn ($child) => $child['count'] > 0 || $child['slug'] === (string) request('category'))
             ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
 
@@ -164,7 +166,7 @@
             ['id' => 0, 'name' => 'Énergie solaire', 'slug' => 'energie-solaire', 'count' => 0, 'sort' => 5, 'children' => collect()],
             ['id' => 0, 'name' => 'Électricité & Plomberie', 'slug' => 'electricite-plomberie', 'count' => 0, 'sort' => 6, 'children' => collect()],
             ['id' => 0, 'name' => 'Nos reconditionnés', 'slug' => 'nos-reconditionnes', 'count' => 0, 'sort' => 7, 'children' => collect()],
-            ['id' => 0, 'name' => 'Carte cadeau Ovanie', 'slug' => 'carte-cadeau-ovanie', 'count' => 0, 'sort' => 8, 'children' => collect()],
+            ['id' => 0, 'name' => 'Carte cadeau OVANIE', 'slug' => 'carte-cadeau-ovanie', 'count' => 0, 'sort' => 8, 'children' => collect()],
         ]);
     }
 
@@ -353,7 +355,7 @@
                 <img src="{{ $listingPage['image'] }}" alt="{{ $listingPage['title'] }}">
             </section>
             <section class="category-benefits curated-benefits" aria-label="Avantages OVANIE">
-                <div><i data-lucide="flame"></i><span><strong>{{ $listingPageType === 'best-sellers' ? 'Les plus commandés' : 'Nouveautés régulières' }}</strong><small>Données réelles OVANIE</small></span></div>
+                <div><i data-lucide="flame"></i><span><strong>{{ $listingPageType === 'best-sellers' ? 'Les plus commandés' : 'Nouveautés régulières' }}</strong><small>Selon les commandes des clients</small></span></div>
                 <div><i data-lucide="shield-check"></i><span><strong>Produits de qualité</strong><small>Sélection professionnelle</small></span></div>
                 <div><i data-lucide="package-check"></i><span><strong>Stock disponible</strong><small>Informations mises à jour</small></span></div>
                 <div><a class="catalog-service-link" href="{{ route('delivery.info') }}" aria-label="Informations sur la livraison"></a><i data-lucide="truck"></i><span><strong>Livraison adaptée</strong><small>Partout en Côte d’Ivoire</small></span></div>
@@ -373,7 +375,7 @@
             </section>
 
             <section class="category-benefits" aria-label="Avantages OVANIE">
-                <div><i data-lucide="shield-check"></i><span><strong>Produits vérifiés</strong><small>Qualité professionnelle</small></span></div>
+                <div><i data-lucide="shield-check"></i><span><strong>Catalogue contrôlé</strong><small>Règles de publication OVANIE</small></span></div>
                 <div><a class="catalog-service-link" href="{{ route('delivery.info') }}" aria-label="Informations sur la livraison"></a><i data-lucide="truck"></i><span><strong>Livraison adaptée</strong><small>Partout en Côte d’Ivoire</small></span></div>
                 <div><a class="catalog-service-link" href="{{ route('payment.secure') }}" aria-label="Informations sur le paiement sécurisé"></a><i data-lucide="lock-keyhole"></i><span><strong>Paiement sécurisé</strong><small>Plusieurs moyens</small></span></div>
                 <div><i data-lucide="headphones"></i><span><strong>Assistance 7j/7</strong><small>À votre écoute</small></span></div>
@@ -409,7 +411,7 @@
         <header class="catalog-page-heading {{ $categoryPage || $listingPage ? 'is-category' : '' }}">
             <div>
                 @unless($categoryPage || $listingPage)<h1>Catalogue</h1>@endunless
-                <span id="resultCountText">Chargement…</span>
+                <span id="resultCountText">@if(isset($initialTotal) && $initialTotal !== null){{ number_format((int) $initialTotal, 0, ',', ' ') }} {{ (int) $initialTotal > 1 ? 'produits' : 'produit' }}@else Catalogue OVANIE @endif</span>
             </div>
             <p>Matériaux, équipements et solutions BTP disponibles sur OVANIE.</p>
         </header>
@@ -613,7 +615,7 @@
                                     ['value' => 'promo', 'label' => 'Promotions actives', 'icon' => 'badge-percent', 'visible' => ($offerStats->get('promo', 0) > 0)],
                                     ['value' => 'vente-flash', 'label' => 'Vente flash', 'icon' => 'zap', 'visible' => ($offerStats->get('vente-flash', 0) > 0)],
                                     ['value' => 'black-friday', 'label' => 'Black Friday', 'icon' => 'tag', 'visible' => ($offerStats->get('black-friday', 0) > 0)],
-                                    ['value' => 'top', 'label' => 'Top ventes', 'icon' => 'trending-up', 'visible' => true],
+                                    ['value' => 'top', 'label' => 'Top ventes', 'icon' => 'trending-up', 'visible' => ($offerStats->get('top', 0) > 0)],
                                     ['value' => 'new', 'label' => 'Nouveautés', 'icon' => 'sparkles', 'visible' => true],
                                     ['value' => 'boosted', 'label' => 'À la une', 'icon' => 'star', 'visible' => ($offerStats->get('a-la-une', 0) > 0)],
                                 ])->where('visible', true);
@@ -669,22 +671,38 @@
 
             <main class="catalog-main" id="catalogMain">
                 <section class="catalog-trust-strip" aria-label="Garanties OVANIE">
-                    <div><span><i data-lucide="shield-check"></i></span><p><strong>Produits vérifiés</strong><small>Contrôle qualité OVANIE</small></p></div>
+                    <div><span><i data-lucide="shield-check"></i></span><p><strong>Catalogue contrôlé</strong><small>Règles de publication OVANIE</small></p></div>
                     <div><a class="catalog-service-link" href="{{ route('delivery.info') }}" aria-label="Informations sur la livraison"></a><span><i data-lucide="truck"></i></span><p><strong>Livraison adaptée</strong><small>Selon poids, volume et zone</small></p></div>
                     <div><a class="catalog-service-link" href="{{ route('payment.secure') }}" aria-label="Informations sur le paiement sécurisé"></a><span><i data-lucide="credit-card"></i></span><p><strong>Paiement sécurisé</strong><small>Mobile Money et carte</small></p></div>
                     <div><span><i data-lucide="headphones"></i></span><p><strong>Assistance 7j/7</strong><small>Avant et après l’achat</small></p></div>
                 </section>
 
                 <section class="products-grid" id="productsGrid" aria-live="polite">
-                    <div class="catalog-empty">
-                        <span><i data-lucide="loader-circle"></i></span>
-                        <h3>Chargement des produits…</h3>
-                        <p>Nous préparons votre catalogue OVANIE.</p>
-                    </div>
+                    {{-- Première page rendue par le serveur ; catalog.js la remplace par la version interactive. --}}
+                    @forelse(($initialProducts ?? []) as $item)
+                        <article class="ovcat-ssr-card">
+                            <a href="{{ $item['url'] }}">
+                                @if(!empty($item['image']))<img src="{{ $item['image'] }}" alt="{{ $item['name'] }}" loading="lazy" width="240" height="240">@endif
+                                <h3>{{ $item['name'] }}</h3>
+                            </a>
+                            @if(!empty($item['category_name']))<small>{{ $item['category_name'] }}</small>@endif
+                            <p><strong>{{ number_format((int) $item['public_price'], 0, ',', ' ') }} FCFA</strong> / {{ $item['display_unit'] }}</p>
+                            <span>{{ $item['availability_label'] }}</span>
+                        </article>
+                    @empty
+                        <div class="catalog-empty">
+                            <span><i data-lucide="package-search"></i></span>
+                            <h3>Aucun produit à afficher pour le moment</h3>
+                            <p>Modifiez vos filtres ou revenez bientôt : de nouvelles références sont ajoutées régulièrement.</p>
+                        </div>
+                    @endforelse
                 </section>
 
                 <div class="catalog-pagination-wrap">
-                    <div class="catalog-pagination" id="paginationWrapper"></div>
+                    <div class="catalog-pagination" id="paginationWrapper">
+                        @if(!empty($initialPrevUrl))<a href="{{ $initialPrevUrl }}" rel="prev">Page précédente</a>@endif
+                        @if(!empty($initialNextUrl))<a href="{{ $initialNextUrl }}" rel="next">Page suivante</a>@endif
+                    </div>
                 </div>
             </main>
         </div>

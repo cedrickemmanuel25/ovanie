@@ -146,7 +146,8 @@ class ClientOrderStatusService
 
     public function canTrack(Order $order): bool
     {
-        if ($order->status === 'cancelled') {
+        // Une commande livrée, annulée ou retournée n'a plus de livraison à suivre.
+        if (in_array($order->status, ['cancelled', 'delivered', 'completed', 'returned', 'refunded'], true) || $order->delivered_at) {
             return false;
         }
 

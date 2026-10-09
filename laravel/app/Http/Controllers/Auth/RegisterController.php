@@ -61,7 +61,7 @@ class RegisterController extends Controller
        // event(new Registered($user));
 
         // Auto-login
-        Auth::login($user);
+        Auth::login($user, true);
 
         return redirect()->route('home')
             ->with('success', 'Compte créé avec succès. Bienvenue !');

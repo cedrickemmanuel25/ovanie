@@ -75,7 +75,7 @@
 
                 <div class="ov-invoice-section-title">
                     <h2>Livraisons prévues</h2>
-                    <span>{{ $deliveryData['deliveries_count'] }} livraison(s)</span>
+                    <span>{{ $deliveryData['deliveries_count'] }} {{ ($deliveryData['deliveries_count']) > 1 ? 'livraisons' : 'livraison' }}</span>
                 </div>
 
                 <div class="ov-delivery-invoice-list">
@@ -85,7 +85,7 @@
                                 <div class="ov-delivery-invoice-number">{{ $group['number'] }}</div>
                                 <div>
                                     <h3>{{ $group['label'] }}</h3>
-                                    <p>{{ $group['item_count'] }} article(s) · {{ $group['line_count'] }} référence(s)</p>
+                                    <p>{{ $group['item_count'] }} {{ ($group['item_count']) > 1 ? 'articles' : 'article' }} · {{ $group['line_count'] }} {{ ($group['line_count']) > 1 ? 'références' : 'référence' }}</p>
                                 </div>
                                 <span class="ov-status">{{ $group['status_label'] }}</span>
                             </header>

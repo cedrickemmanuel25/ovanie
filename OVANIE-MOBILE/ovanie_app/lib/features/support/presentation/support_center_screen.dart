@@ -9,6 +9,7 @@ import '../../cart/domain/cart_store.dart';
 import '../data/support_repository.dart';
 import '../domain/support_models.dart';
 import 'new_support_ticket_screen.dart';
+import 'client_ai_chat_screen.dart';
 import 'support_conversation_screen.dart';
 import 'support_ticket_detail_screen.dart';
 import 'support_whatsapp_screen.dart';
@@ -87,107 +88,12 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
   }
 
   Future<void> _newConversation() async {
-    final subject = TextEditingController(text: 'Assistance client OVANIE');
-    final message = TextEditingController();
-    final started = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          18,
-          20,
-          MediaQuery.viewInsetsOf(context).bottom + 20,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Center(
-                child: SizedBox(
-                  width: 38,
-                  child: Divider(thickness: 4, color: Color(0xFFDCE1EA)),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Chat support',
-                style: TextStyle(
-                  color: _navy,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 5),
-              const Text(
-                'Décrivez votre besoin et démarrez une conversation avec notre équipe.',
-                style: TextStyle(color: _textBlue, fontSize: 13.5, height: 1.35),
-              ),
-              const SizedBox(height: 18),
-              TextField(
-                controller: subject,
-                decoration: const InputDecoration(labelText: 'Objet'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: message,
-                minLines: 4,
-                maxLines: 7,
-                decoration: const InputDecoration(labelText: 'Votre message'),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: FilledButton(
-                  onPressed: () async {
-                    if (message.text.trim().isEmpty) return;
-                    try {
-                      final token = await _repository.startConversation(
-                        subject: subject.text,
-                        message: message.text,
-                      );
-                      if (context.mounted) Navigator.pop(context, token);
-                    } catch (error) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(ApiClient.friendlyError(error))),
-                      );
-                    }
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: OvanieColors.orange,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Démarrer la conversation',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const ClientAiChatScreen()),
     );
-    subject.dispose();
-    message.dispose();
-    if (started != null && started.isNotEmpty && mounted) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => SupportConversationScreen(token: started),
-        ),
-      );
-      await _load();
-    }
+    await _load();
   }
+
 
   Future<void> _openPhone() async {
     final phone = _data?.phone.trim() ?? '';
@@ -405,7 +311,7 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
                   children: [
                     _Header(onBack: () => Navigator.of(context).pop()),
                     const SizedBox(height: 16),
-                    _AssistanceHero(onContact: _newTicket),
+                    _AssistanceHero(onContact: _newConversation, onWrite: _newTicket),
                     if (_error != null) ...[
                       const SizedBox(height: 10),
                       _ErrorBanner(message: _error!, onRetry: _load),
@@ -438,8 +344,6 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
                       },
                       onCreate: _newTicket,
                     ),
-                    const SizedBox(height: 17),
-                    const _SupportHoursCard(),
                   ],
                 ),
               ),
@@ -472,22 +376,11 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         const Text(
-          'Aide & Support',
+          'Aide et support',
           style: TextStyle(
             color: Color(0xFF071B67),
-            fontSize: 29,
-            height: 1.04,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -.5,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'FAQ, contact et assistance',
-          style: TextStyle(
-            color: Color(0xFF24366F),
-            fontSize: 14.5,
-            fontWeight: FontWeight.w500,
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ],
@@ -497,79 +390,71 @@ class _Header extends StatelessWidget {
 
 class _AssistanceHero extends StatelessWidget {
   final Future<void> Function() onContact;
-  const _AssistanceHero({required this.onContact});
+  final Future<void> Function() onWrite;
+  const _AssistanceHero({required this.onContact, required this.onWrite});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAFCFF),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD8E4FA)),
-        boxShadow: const [
-          BoxShadow(color: Color(0x0B1B3F7A), blurRadius: 14, offset: Offset(0, 5)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFFE3E9F5)),
-              boxShadow: const [
-                BoxShadow(color: Color(0x0C072866), blurRadius: 9, offset: Offset(0, 3)),
-              ],
-            ),
-            child: const Icon(Icons.headset_mic_outlined, color: Color(0xFF075DEB), size: 30),
-          ),
-          const SizedBox(width: 14),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Besoin d’assistance ?',
-                  style: TextStyle(
-                    color: Color(0xFF071B67),
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w900,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: OvanieColors.navy,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            onTap: onContact,
+            borderRadius: BorderRadius.circular(14),
+            child: const Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: OvanieColors.orange,
+                    child: Icon(Icons.support_agent_rounded, color: Colors.white),
                   ),
-                ),
-                SizedBox(height: 5),
-                Text(
-                  'Notre équipe est disponible pour\nvous accompagner rapidement.',
-                  style: TextStyle(
-                    color: Color(0xFF24366F),
-                    fontSize: 12.6,
-                    height: 1.35,
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Discuter avec le support', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                        SizedBox(height: 2),
+                        Text('Réponse immédiate, relais vers un conseiller', style: TextStyle(color: Color(0xFFBFD0EA), fontSize: 13)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            height: 44,
-            child: FilledButton(
-              onPressed: onContact,
-              style: FilledButton.styleFrom(
-                backgroundColor: OvanieColors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text(
-                'Nous contacter',
-                style: TextStyle(fontSize: 13.2, fontWeight: FontWeight.w900),
+                  Icon(Icons.chevron_right_rounded, color: Colors.white),
+                ],
               ),
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 10),
+        Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            onTap: onWrite,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE4EAF2)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.edit_note_rounded, color: OvanieColors.navy),
+                  SizedBox(width: 12),
+                  Expanded(child: Text('Envoyer une demande écrite', style: TextStyle(color: OvanieColors.navy, fontSize: 15, fontWeight: FontWeight.w600))),
+                  Icon(Icons.chevron_right_rounded, color: OvanieColors.muted),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -689,14 +574,6 @@ class _ContactChannels extends StatelessWidget {
         title: 'Appel téléphonique',
         subtitle: 'Appelez le support OVANIE',
         onTap: onPhone,
-      ),
-      _ContactRowData(
-        icon: Icons.chat_bubble_rounded,
-        iconColor: const Color(0xFF304DEA),
-        iconBackground: const Color(0xFFEEF0FF),
-        title: 'Chat support',
-        subtitle: 'Discutez en direct avec un conseiller',
-        onTap: onChat,
       ),
       _ContactRowData(
         icon: Icons.mail_outline_rounded,
@@ -957,7 +834,7 @@ class _TicketRow extends StatelessWidget {
                     ticket.category.isEmpty ? 'Assistance client OVANIE' : _prettyCategory(ticket.category),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Color(0xFF5A6990), fontSize: 10.8),
+                    style: const TextStyle(color: Color(0xFF5A6990), fontSize: 12),
                   ),
                 ],
               ),
@@ -976,7 +853,7 @@ class _TicketRow extends StatelessWidget {
                     _statusLabel,
                     style: TextStyle(
                       color: _resolved ? const Color(0xFF118B3D) : OvanieColors.orange,
-                      fontSize: 10.7,
+                      fontSize: 12,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -984,7 +861,7 @@ class _TicketRow extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   _dateLabel(date),
-                  style: const TextStyle(color: Color(0xFF647198), fontSize: 10.6),
+                  style: const TextStyle(color: Color(0xFF647198), fontSize: 12),
                 ),
               ],
             ),
@@ -999,70 +876,9 @@ class _TicketRow extends StatelessWidget {
   String _prettyCategory(String raw) {
     final value = raw.replaceAll('_', ' ').replaceAll('-', ' ').trim();
     if (value.isEmpty) return 'Assistance client OVANIE';
+    final label = supportCategoryLabel(raw.trim());
+    if (label != raw.trim()) return label;
     return value[0].toUpperCase() + value.substring(1);
-  }
-}
-
-class _SupportHoursCard extends StatelessWidget {
-  const _SupportHoursCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 91,
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAFCFF),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD8E4FA)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          const Positioned(
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 205,
-            child: CustomPaint(painter: _SupportSkylinePainter()),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
-            child: Row(
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFFE2E9F5)),
-                  ),
-                  child: const Icon(Icons.schedule_rounded, color: Color(0xFF075DEB), size: 25),
-                ),
-                const SizedBox(width: 13),
-                const Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Horaires du support',
-                        style: TextStyle(color: Color(0xFF071B67), fontSize: 13.8, fontWeight: FontWeight.w900),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        'Lundi à samedi · 8h à 18h\nRéponse rapide via WhatsApp et chat',
-                        style: TextStyle(color: Color(0xFF24366F), fontSize: 11.4, height: 1.33),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

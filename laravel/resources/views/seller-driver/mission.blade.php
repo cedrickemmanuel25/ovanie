@@ -65,9 +65,9 @@
                 @if($status === 'planned')
                     <h2>Confirmez la prise en charge</h2><p class="muted">Vérifiez les articles et la destination avant d’accepter.</p>
                 @elseif($status === 'accepted')
-                    <h2>Démarrez la livraison</h2><p class="muted">Le premier signal GPS sera enregistré avant le départ. Le mode manuel reste disponible.</p>
+                    <h2>Démarrez la livraison</h2><p class="muted">Chargez les articles puis partez : le départ est détecté automatiquement.</p>
                 @elseif($status === 'in_transit')
-                    <h2>Livraison en cours</h2><p class="muted">Gardez cette page ouverte. L’arrivée sera détectée automatiquement à proximité du client.</p>
+                    <h2>Livraison en cours</h2><p class="muted">Gardez cette page ouverte jusqu’à la remise au client.</p>
                 @elseif($status === 'arrived')
                     <h2>Confirmez la remise</h2><p class="muted">Demandez le code au client après avoir remis tous les articles.</p>
                 @endif
@@ -95,10 +95,10 @@
     <div class="main-grid">
         <div class="stack">
             <section class="card section">
-                <div class="section-head"><div><h2>Trajet de livraison</h2><p class="muted" style="margin:4px 0 0">Le tracé suit la route entre la position réelle du téléphone et la destination.</p></div><button type="button" id="seller-map-recenter" class="map-recenter" hidden>Recentrer</button></div>
+                <div class="section-head"><div><h2>Trajet de livraison</h2><p class="muted" style="margin:4px 0 0">Itinéraire jusqu’au client.</p></div><button type="button" id="seller-map-recenter" class="map-recenter" hidden>Recentrer</button></div>
                 <div id="seller-map-shell" class="map-shell ovd-map-shell">
                     <div id="seller-driver-map" class="map"></div>
-                    <div id="seller-map-loading" class="ovd-map-shell__loading"><div><strong>Localisation de la livraison</strong><span>OVANIE prépare la position du véhicule et la destination sans afficher de coordonnées approximatives.</span></div></div>
+                    <div id="seller-map-loading" class="ovd-map-shell__loading"><div><strong>Chargement de la carte</strong><span>Préparation de l’itinéraire…</span></div></div>
                 </div>
                 <div class="route-meta">
                     <div class="metric"><span>Distance restante</span><strong id="route-distance">{{ $session->remaining_distance_km !== null ? number_format($session->remaining_distance_km,1,',',' ').' km' : 'À confirmer' }}</strong></div>
@@ -133,7 +133,7 @@
 
             @if($session->isTrackable())
             <section class="card section">
-                <div class="section-head"><div><h2>Partage de position</h2><p class="muted" style="margin:4px 0 0">La position est envoyée régulièrement tant que cette page reste ouverte, même si le véhicule est immobile.</p></div></div>
+                <div class="section-head"><div><h2>Partage de position</h2><p class="muted" style="margin:4px 0 0">Le client suit votre trajet tant que cette page reste ouverte.</p></div></div>
                 <div class="status-box"><div class="gps-left"><span id="gps-dot" class="dot {{ $signal['code']==='active'?'live':(($signal['code']??'')==='lost'?'warn':'') }}"></span><div><strong id="gps-state">{{ $signal['label'] }}</strong><small id="last-sent">{{ $session->last_location_at ? 'Dernière mise à jour '.$session->last_location_at->diffForHumans() : 'Aucune position envoyée' }}</small></div></div></div>
                 <div class="stack" style="margin-top:10px">
                     <button id="start-gps" class="btn btn-primary {{ $manualTracking ? 'hidden' : '' }}">Activer le GPS</button>
@@ -203,7 +203,8 @@
 
     bootMap();
     bindActions();
-    if(['in_transit','arrived'].includes(missionStatus) && !manualTracking){window.setTimeout(()=>startGps(true),500);}
+    // Mission acceptée : le GPS démarre seul, le départ puis l’arrivée sont détectés automatiquement.
+    if(['accepted','in_transit','arrived'].includes(missionStatus) && !manualTracking){window.setTimeout(()=>startGps(true),500);}
 
     function bindActions(){
         document.getElementById('accept-mission')?.addEventListener('click',async event=>{await runButton(event.currentTarget,async()=>{await send(urls.accept,{});location.reload();});});
@@ -221,7 +222,7 @@
         document.getElementById('verify-otp')?.addEventListener('click',async event=>{await runButton(event.currentTarget,async()=>{await send(urls.otp,{delivery_otp_code:document.getElementById('otp-code').value.trim()});location.reload();});});
         document.getElementById('simulate-route')?.addEventListener('click',event=>simulateLocalRoute(event.currentTarget));
         document.getElementById('seller-map-recenter')?.addEventListener('click',()=>resumeCameraFollow(true));
-        document.addEventListener('visibilitychange',()=>{if(!document.hidden && ['in_transit','arrived'].includes(missionStatus) && !manualTracking && watchId===null){startGps(true);}});
+        document.addEventListener('visibilitychange',()=>{if(!document.hidden && ['accepted','in_transit','arrived'].includes(missionStatus) && !manualTracking && watchId===null){startGps(true);}});
         window.addEventListener('beforeunload',()=>{if(wakeLock){try{wakeLock.release();}catch(_){}}});
     }
 
@@ -262,7 +263,12 @@
             const stableLat=Number(data.location?.latitude ?? position.coords.latitude);
             const stableLng=Number(data.location?.longitude ?? position.coords.longitude);
             updateMapPosition(stableLat,stableLng,data.route?.geometry || null,data.location?.heading ?? position.coords.heading);
-            if(data.mission_status==='arrived'&&!arrivalReloading){
+            if(missionStatus==='accepted'&&data.mission_status==='in_transit'&&!arrivalReloading){
+                arrivalReloading=true;
+                feedback('Départ détecté. Le client suit maintenant votre trajet.',true);
+                window.setTimeout(()=>location.reload(),900);
+            }
+            if(data.mission_status==='arrived'&&missionStatus!=='arrived'&&!arrivalReloading){
                 arrivalReloading=true;
                 missionStatus='arrived';
                 document.getElementById('route-distance').textContent='0 km';

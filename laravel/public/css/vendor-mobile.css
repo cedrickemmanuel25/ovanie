@@ -1,0 +1,264 @@
+/* Seller mobile layout. Desktop and print retain the complete original content. */
+.vm-toggle, .vm-record-toggle, .vm-more-records { display: none; }
+.vm-onboarding-section { display:contents; }
+@media screen and (max-width: 1023px) {
+    body.vm-dialog-open { overflow:hidden !important; }
+    /* Onboarding starts with the form, with a short introduction. */
+    body[data-current-step] .topbar__inner { height:60px; width:calc(100% - 28px); }
+    body[data-current-step] .brand img { width:124px; }
+    body[data-current-step] .page-shell { width:calc(100% - 24px); margin:0 auto 20px; gap:12px; }
+    body[data-current-step] .progress-wrap { padding:12px; }
+    body[data-current-step] .progress-track { gap:8px; min-height:60px; }
+    body[data-current-step] .progress-step { min-height:44px; }
+    body[data-current-step] .progress-step__copy { display:none; }
+    body[data-current-step] .intro-card { min-height:0; padding:16px; border-radius:12px; background:#031a4d; }
+    body[data-current-step] .intro-card::after { display:none; }
+    body[data-current-step] .content-grid { grid-template-columns:minmax(0,1fr); }
+    body[data-current-step] .intro-card__content { padding:0; }
+    body[data-current-step] .intro-card h1 { font-size:21px; line-height:1.25; margin:0; }
+    body[data-current-step] .intro-card :is(.eyebrow,p,.intro-stats) { display:none; }
+    body[data-current-step]:not([data-current-step="1"]) .intro-card { display:none; }
+    body[data-current-step] .wizard-card { border-radius:12px; overflow:visible; }
+    body[data-current-step] .wizard-card__body { padding:16px; }
+    body[data-current-step] .step-header { margin-bottom:16px; }
+    body[data-current-step] .step-header h2 { font-size:18px; line-height:1.4; }
+    body[data-current-step] .form-grid { gap:14px; }
+    body[data-current-step] .vm-onboarding-section { display:block; margin-top:12px; padding:8px 12px; border:1px solid #dfe6f3; border-radius:10px; }
+    body[data-current-step] .shop-basics-grid > .vm-toggle { padding-top:0; }
+    body[data-current-step] .shop-location-card { margin-top:12px; }
+    body[data-current-step] :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.mobile-select-trigger) { font-size:16px !important; }
+    body[data-current-step] :is(.info-panel,.final-aside) { padding:6px 14px; margin-top:12px; }
+    body[data-current-step] .info-panel svg { max-height:90px; }
+    body[data-current-step] .wizard-actions { position:sticky; bottom:0; z-index:10; background:#fff; border-top:1px solid #dfe6f3; padding:10px 12px max(10px,env(safe-area-inset-bottom)); border-radius:0 0 12px 12px; }
+    body[data-current-step] .choice-card { padding:14px 12px 14px 42px; }
+    body[data-current-step] .choice-card .choice-icon { display:none; }
+    body[data-current-step] .payment-rules > div { min-height:0; padding:12px; }
+    body[data-current-step] .payment-rules > div > span { margin-bottom:6px; }
+    .vm-toggle { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-height:48px; padding:10px 0; border:0; background:transparent; color:#112f5e; font:700 14px/1.4 Inter,Arial,sans-serif; text-align:left; cursor:pointer; grid-column:1/-1; }
+    .vm-toggle-state { flex:none; font-size:11px; font-weight:600; color:#0d63ef; }
+    [data-vm-fold] > .vm-toggle:focus-visible, .vm-record-toggle:focus-visible { outline:3px solid #0d63ef; outline-offset:3px; }
+    [data-vm-fold][data-vm-open="false"] > .vm-fold-content { display:none !important; }
+    [data-vm-fold] .vm-source-heading { display:none !important; }
+    body [data-vm-fold] { min-height:0 !important; height:auto !important; }
+    body [data-vm-fold][data-vm-open="false"] { padding-top:4px !important; padding-bottom:4px !important; gap:0 !important; }
+    body .ov-content { padding:16px 12px 28px; overflow-x:visible; }
+    .ov-content > div, .ov-content section, .ov-content article, .ov-content form { min-width:0; }
+    .ov-content :is(.oc-page,.order-detail-page,.sales-page,.vp-page,.vr-page,.ds-page,.sp-page,.se-page,.st-page,.doc-page,.pm-page,.dl-page,.va-page,.cgu-page) { padding:0 !important; }
+    .ov-content h1 { font-size:24px !important; line-height:1.2 !important; letter-spacing:-.6px; overflow-wrap:anywhere; }
+    .ov-content h2 { font-size:16px; line-height:1.4; }
+    .ov-content :is(.se-label,.pm-label,.doc-field > label,.dl-field > label,.sp-data-row > small,.se-field > label) { font-size:12px; line-height:1.4; }
+    .ov-content :is(.sp-data-row > strong,.sp-value-icon > strong) { font-size:13px; }
+    .ov-content .vm-records :is(.oc-status,.vr-status,.vp-status,.sales-status) { font-size:11px; }
+    .ov-content :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]), select, textarea) { font-size:16px !important; max-width:100%; }
+    .ov-content :is(button, a[class*="btn"]) { touch-action:manipulation; }
+    .ov-content :is(.dashboard-card,.sales-card,.vp-card,.vr-panel,.ds-card,.sp-card,.se-card,.st-card,.doc-card,.pm-card,.dl-panel,.od-card) { border-radius:12px; box-shadow:0 3px 12px rgba(17,47,94,.035); }
+    .ov-content :is(.dashboard-head,.sales-head,.vp-head,.vr-head,.ds-head,.sp-head,.se-head,.st-head,.doc-head,.pm-header,.dl-head,.od-header) { margin-bottom:16px; gap:12px; }
+    .ov-content :is(.sales-head-actions,.vp-head-actions,.sp-head-actions,.se-head-actions,.st-head-actions,.vr-head-actions) { display:flex; flex-wrap:wrap; gap:8px; }
+    .ov-content :is(.sales-head-actions,.vp-head-actions,.sp-head-actions,.se-head-actions,.st-head-actions,.vr-head-actions) > * { flex:1 1 140px; min-width:0; }
+
+    /* Compact, readable overview with two cards per row. */
+    .ov-content :is(.main-kpis,.sales-kpis,.vp-kpi-grid,.vr-top-stats,.sp-stats,.se-stats,.st-overview-grid) { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:10px !important; margin-bottom:14px; }
+    .ov-content :is(.main-kpi-card,.sales-kpi,.vp-kpi,.vr-stat-card,.sp-stat,.se-stat,.st-overview-card) { padding:14px !important; min-height:0 !important; gap:8px; }
+    .ov-content :is(.main-kpis,.vp-kpi-grid) > :last-child:nth-child(odd) { grid-column:1/-1; }
+    .ov-content :is(.kpi-icon,.sales-kpi-icon,.vp-kpi-icon,.sp-stat-icon,.se-stat-icon) { display:none; }
+    .ov-content :is(.kpi-number,.vp-kpi-value) { font-size:22px !important; line-height:1.2; overflow-wrap:anywhere; }
+    .ov-content :is(.kpi-number-row,.kpi-body) { flex-wrap:wrap; gap:4px; margin-top:8px; }
+    .ov-content .main-kpi-card, .ov-content .kpi-body { display:block; }
+    .ov-content :is(.kpi-heading,.vp-kpi-label) { font-size:12px; line-height:1.4; }
+    .ov-content :is(.kpi-subline,.vp-kpi-note) { font-size:11px; line-height:1.45; margin-top:6px; }
+    .ov-content .dashboard-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .ov-content .dashboard-action { min-height:44px; padding:8px; font-size:12px; }
+    .ov-content .shop-meta { flex-direction:row; flex-wrap:wrap; gap:6px 12px; }
+    .ov-content .operations-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .ov-content .operation-item { min-height:64px; padding:10px; gap:6px; border:0; }
+    .ov-content .operation-item > svg { width:18px; }
+    .ov-content .operation-copy > span { font-size:11px; }
+    .ov-content :is(.finance-row,.sales-top-grid,.vp-top-grid,.vr-overview-grid) { gap:10px; margin-bottom:12px; }
+    .ov-content :is(.sales-mini-grid,.vp-status-strip,.vr-mini-metrics) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .ov-content :is(.sp-stat,.se-stat,.st-overview-card) p { font-size:11px; line-height:1.4; }
+    .ov-content :is(.sp-stat,.se-stat,.st-overview-card) h3 { font-size:12px; }
+    .ov-content :is(.sp-stat-main,.se-stat-main,.st-global-layout) { display:block; }
+    .ov-content .st-overview-main { display:block; }
+    .ov-content .st-overview-main > .st-icon-circle { display:none; }
+    .ov-content .st-global-layout .st-ring { float:left; width:44px; height:44px; margin:0 8px 8px 0; }
+    .ov-content .st-global-layout .st-ring strong { font-size:13px; }
+    .ov-content .st-action-card { min-height:0; padding:14px; }
+    .ov-content :is(.sp-ring,.se-ring) { float:left; width:36px; height:36px; margin:0 8px 8px 0; }
+    .ov-content :is(.sp-ring,.se-ring) strong { font-size:11px; }
+    .ov-content :is(.sp-stat-main,.se-stat-main) > div { min-width:0; }
+    .ov-content :is(.sp-stat-desc,.se-stat-desc) { margin-top:6px; }
+    .ov-content .se-stats[data-vm-open="false"] { background:#fff; border:1px solid #dfe6f0; border-radius:12px; padding:0 14px; }
+    .ov-content .sp-overview-col { padding:0 !important; }
+    .ov-content :is(.sp-overview,.sp-block,.se-block,.st-block,.doc-panel,.doc-side-card,.pm-card,.ds-side-card,.vr-panel) { padding:16px; }
+    .ov-content :is(.sp-overview,.sp-grid-2,.sp-bottom-grid,.se-grid-top,.se-grid-middle,.st-main-grid,.st-bottom-grid,.doc-layout,.pm-layout) { gap:12px; }
+
+    /* Status tabs stay compact and explicitly scroll horizontally. */
+    .ov-content :is(.oc-status-card,.ds-status-tabs) { display:flex; overflow-x:auto; scrollbar-width:thin; gap:0; margin-bottom:12px; }
+    .ov-content :is(.oc-status-tab,.ds-status-tab) { flex:0 0 auto; width:auto; min-width:110px; min-height:48px; padding:10px 14px; border-bottom:2px solid transparent; }
+    .ov-content .oc-search-card { padding:12px; margin-bottom:12px; }
+    .ov-content .oc-search-form { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+    .ov-content .oc-search-button { width:auto; padding:0 12px; min-height:44px; font-size:12px; }
+    .ov-content .oc-search-input { min-width:0; }
+    .ov-content :is(.sales-filter-form,.vp-filters,.vr-filters,.ds-filters) { gap:12px; }
+
+    /* Readable record cards replace compressed desktop table columns. */
+    .ov-content .vm-records-wrap { width:100%; min-width:0; overflow:visible; }
+    .ov-content table.vm-records { display:block; width:100% !important; min-width:0 !important; table-layout:auto; }
+    .ov-content .vm-records thead { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; }
+    .ov-content .vm-records tbody { display:grid; gap:10px; padding:10px; }
+    .ov-content .vm-records tbody tr { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 12px; padding:14px; border:1px solid #dfe6f0; border-radius:10px; background:#fff; }
+    .ov-content :is(.cat-table,.cp-table).vm-records tbody tr[style*="display: none"], .ov-content :is(.cat-table,.cp-table).vm-records tbody tr.vm-beyond-limit { display:none !important; }
+    .ov-content :is(.cat-table,.cp-table).vm-records thead { position:static; width:auto; height:auto; clip-path:none; }
+    .ov-content :is(.cat-table,.cp-table).vm-records thead th { display:none; }
+    .ov-content :is(.cat-table,.cp-table).vm-records thead th:first-child { display:flex; align-items:center; gap:10px; width:auto !important; }
+    .ov-content :is(.cat-table,.cp-table).vm-records thead th:first-child::after { content:'Tout sélectionner sur cette page'; text-transform:none; }
+    .ov-content :is(.cat-table,.cp-table).vm-records tbody tr { grid-template-columns:24px minmax(0,1fr) minmax(0,1fr); }
+    .ov-content :is(.cat-table,.cp-table).vm-records tbody td:first-child { grid-column:1; grid-row:1; }
+    .ov-content :is(.cat-table,.cp-table).vm-records tbody td:first-child::before { display:none; }
+    .ov-content :is(.cat-table,.cp-table).vm-records tbody td:nth-child(2) { grid-column:2/-1; }
+    .ov-content :is(.cat-table,.cp-table).vm-records tbody td:nth-child(3) { grid-column:2; }
+    .ov-content :is(.cat-table,.cp-table).vm-records tbody td.vm-record-actions { grid-column:2/-1; }
+    .ov-content :is(.cat-table,.cp-table).vm-records :is(.cat-prod-cell,.cp-product-cell) { align-items:flex-start; gap:8px; }
+    .ov-content :is(.cat-table,.cp-table).vm-records :is(.cat-prod-name,.cp-product-name) { font-size:13px; }
+    .ov-content :is(.cat-table,.cp-table).vm-records :is(.cat-prod-img,.cp-product-image) { width:40px; height:40px; }
+    .ov-content .vm-more-records:not([hidden]) { display:block; width:calc(100% - 20px); min-height:44px; padding:10px; margin:0 10px 12px; border:1px solid #cbd9ef; border-radius:8px; background:#f7faff; color:#0d63ef; font-weight:700; cursor:pointer; }
+    .ov-content .vm-records tbody td { display:block !important; width:auto !important; min-width:0 !important; max-width:none !important; padding:0 !important; border:0; font-size:13px; line-height:1.5; white-space:normal !important; overflow:visible !important; text-overflow:clip; overflow-wrap:anywhere; }
+    .ov-content .vm-records tbody td { height:auto !important; }
+    .ov-content .vm-records tbody td::before { content:attr(data-label); display:block; margin-bottom:4px; font-size:11px; color:#667892; font-weight:500; position:static; width:auto; }
+    .ov-content .vm-records .vm-record-actions { display:flex !important; flex-wrap:wrap; align-items:center; gap:4px 12px; }
+    .ov-content .vm-records .vm-record-actions::before { display:none; }
+    .ov-content .cp-page { padding:0; }
+    .ov-content :is(.cp-header,.cp-filter-card,.cp-search-card) { margin-bottom:12px; }
+    .ov-content .cp-filter-card { padding:12px; }
+    .ov-content .cp-filter-card > .vm-toggle { flex:1 0 100%; }
+    .ov-content .cp-search-card { padding:12px; }
+    .ov-content .cp-row-actions { flex-wrap:wrap; justify-content:flex-start; }
+    .ov-content .vm-records tbody td :is(a,span,strong,div) { max-width:100%; white-space:normal; text-overflow:clip; overflow-wrap:anywhere; }
+    .ov-content .vm-records tbody td.vm-record-extra { display:none !important; }
+    .ov-content .vm-records .vm-record-open td.vm-record-extra { display:block !important; }
+    .ov-content .vm-record-toggle { display:block; min-height:36px; margin-top:0; padding:4px 0; border:0; background:transparent; color:#0d63ef; font:600 12px/1.4 Inter,Arial,sans-serif; cursor:pointer; }
+    .ov-content .vm-record-actions :is(a,button) { min-height:40px; display:inline-flex; align-items:center; justify-content:center; }
+
+    /* Order details: smaller steps, tighter totals, secondary history on demand. */
+    .ov-content .od-header { display:flex; flex-wrap:wrap; padding:0; }
+    .ov-content .od-title-row { display:flex; flex-wrap:nowrap; gap:8px; }
+    .ov-content .od-title-row h1 { font-size:22px !important; }
+    .ov-content .od-copy-btn { flex:none; }
+    .ov-content .od-status-badge { padding:8px 12px; min-height:36px; font-size:13px; }
+    .ov-content .od-timeline-card { padding:14px 10px; }
+    .ov-content .od-timeline { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; padding:8px 0; }
+    .ov-content .od-step { min-width:0; padding:0; }
+    .ov-content .od-step-icon { width:32px; height:32px; margin-bottom:6px; }
+    .ov-content .od-step-icon svg { width:18px; height:18px; }
+    .ov-content .od-step-label { font-size:10px; line-height:1.35; white-space:normal; overflow-wrap:anywhere; margin-top:4px; }
+    .ov-content .od-step-date { font-size:9px; margin-top:4px; }
+    .ov-content .od-card { margin-bottom:12px; }
+    .ov-content :is(.od-card-head,.od-card-body,.od-profile-list,.od-products-card) { padding:14px; }
+    .ov-content .od-products-card .od-card-head { padding:0 0 10px; }
+    .ov-content .od-table tbody td { padding-top:6px; padding-bottom:6px; }
+    .ov-content .od-totals { margin-top:10px; padding-top:0; }
+    .ov-content .od-total-row { padding:8px 0; }
+    .ov-content .od-total-row.grand { margin-top:4px; padding-top:10px; }
+    .ov-content .od-workflow { gap:12px; }
+    .ov-content .od-alert { padding:10px; font-size:12px; line-height:1.45; }
+    .ov-content .od-card form[style*="grid-template-columns"] { grid-template-columns:minmax(0,1fr) !important; }
+
+    /* Logistics, documents and payment forms. */
+    .ov-content .dl-form-body { padding:14px; }
+    .ov-content .dl-panel-head { padding:14px; }
+    .ov-content .dl-status { padding:14px; gap:10px; margin-bottom:12px; }
+    .ov-content .dl-status-icon { width:32px; height:32px; }
+    .ov-content .dl-empty { min-height:0; padding:20px 14px; }
+    .ov-content .dl-empty-icon { width:40px; height:40px; margin-bottom:8px; }
+    .ov-content .dl-empty-icon svg { width:24px; height:24px; }
+    .ov-content .dl-section + .dl-section { margin-top:8px; padding-top:8px; }
+    .ov-content .dl-overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .ov-content .dl-section { padding:0 0 12px; margin-bottom:12px; }
+    .ov-content .dl-vehicles { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .ov-content .dl-vehicle-card { padding:8px; min-height:0; }
+    .ov-content .dl-vehicle-visual { width:100%; max-width:132px; height:65px; }
+    .ov-content .dl-vehicle-visual img { max-height:60px; }
+    .ov-content .pm-operators { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .ov-content .pm-operator-card { min-height:56px; padding:10px; gap:6px; }
+    .ov-content .pm-operator-logo { max-width:36px; }
+    .ov-content .pm-operator-name { font-size:11px; }
+    .ov-content .doc-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; padding:12px; align-items:center; }
+    .ov-content .doc-row .doc-name { grid-column:1/-1; padding-right:20px; grid-template-columns:36px minmax(0,1fr); gap:10px; }
+    .ov-content .doc-copy strong { font-size:13px; }
+    .ov-content .doc-copy span { font-size:11px; }
+    .ov-content .doc-row .doc-status { grid-column:1; grid-row:auto; }
+    .ov-content .doc-row .doc-date { display:none; }
+    .ov-content .doc-row .doc-actions { grid-column:2; grid-row:auto; justify-content:flex-end; }
+    .ov-content .doc-row .doc-more { position:absolute; top:10px; right:4px; }
+    .ov-content .doc-dropzone { min-height:120px; padding:16px; }
+    .ov-content :is(.doc-history,.vr-history,.vr-documents) { min-height:0; }
+    .ov-content :is(.sales-mini-grid,.vp-status-strip,.doc-history,.od-right > .od-card)[data-vm-fold] { padding-left:14px; padding-right:14px; }
+    .ov-content :is(.va-hero,.cgu-content-card) { padding:18px; }
+    .ov-content .va-hero h1 { font-size:24px !important; }
+    .ov-content :is(.va-module,.cgu-section) { padding:8px 14px; margin-bottom:10px; scroll-margin-top:84px; }
+    .ov-content :is(.va-module,.cgu-section) .vm-toggle { font-size:14px; }
+    .ov-content :is(.va-layout,.cgu-layout) { gap:12px; }
+
+    /* Viewport-bound dialogs: footer buttons wrap instead of leaving the screen. */
+    body :is(.vr-modal-backdrop,.ds-modal,.doc-modal,.dl-modal) { padding:12px; overscroll-behavior:contain; }
+    body :is(.vr-modal,.ds-modal-card,.doc-modal-card,.dl-modal-card) { width:100%; max-width:100%; max-height:calc(100dvh - 24px); overflow-y:auto; overscroll-behavior:contain; border-radius:14px; margin:auto; }
+    body :is(.vr-modal-head,.ds-modal-head,.doc-modal-head,.dl-modal-head) { padding:16px; }
+    body :is(.vr-modal-body,.ds-modal-body,.doc-modal-content,.dl-modal-body) { padding:16px; }
+    body :is(.vr-modal-actions,.ds-modal-actions,.dl-modal-actions) { display:flex; flex-wrap:wrap; gap:8px; padding:12px; }
+    body :is(.vr-modal-actions,.ds-modal-actions,.dl-modal-actions) > * { flex:1 1 120px; min-width:0; }
+    body :is(.vr-modal-actions,.ds-modal-actions,.dl-modal-actions) button { width:100%; min-height:44px; white-space:normal; }
+    body :is(.vr-modal-summary,.ds-detail-grid) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media print {
+    .vm-toggle, .vm-record-toggle { display:none !important; }
+}
+
+/* Livraison vendeur sur téléphone : cartes de synthèse lisibles et grille tarifaire qui tient dans l'écran. */
+@media screen and (max-width: 820px) {
+    .ov-content .dl-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px; }
+    .ov-content .dl-overview-card { min-height: 0; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px; min-width: 0; }
+    .ov-content .dl-overview-icon { width: 38px; height: 38px; flex: 0 0 38px; }
+    .ov-content .dl-overview-icon svg { width: 19px; height: 19px; }
+    .ov-content .dl-overview-copy { min-width: 0; width: 100%; }
+    .ov-content .dl-overview-copy > span { display: block; font-size: 12px; line-height: 1.35; }
+    .ov-content .dl-overview-copy > span br { display: none; }
+    .ov-content .dl-overview-copy > strong { display: block; font-size: 20px; line-height: 1.2; margin-top: 4px; }
+    .ov-content .dl-mode-badge { max-width: 100%; white-space: normal; font-size: 11.5px; line-height: 1.3; padding: 4px 9px; }
+
+    .ov-content .dl-section { padding: 16px 14px 14px; }
+    .ov-content .dl-section-head { margin: 0 0 12px; padding: 0; gap: 8px; }
+    .ov-content .dl-section-title { margin: 0; padding: 0; }
+
+    .ov-content .dl-table-wrap.vm-records-wrap { border: 0; padding: 0; margin: 0; max-width: 100%; overflow: visible; }
+    .ov-content table.dl-table.vm-records tbody { padding: 0 12px 12px; box-sizing: border-box; width: 100%; }
+    .ov-content table.dl-table.vm-records tbody tr { box-sizing: border-box; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ov-content table.dl-table.vm-records tbody td > span { min-height: 0 !important; height: auto !important; padding: 4px 10px !important; }
+    .ov-content table.dl-table.vm-records tbody td.vm-record-actions { grid-column: 1 / -1; justify-content: space-between; padding-top: 4px !important; }
+    .ov-content table.dl-table.vm-records .dl-row-actions { justify-content: flex-start; }
+    .ov-content table.dl-table.vm-records tbody td strong { font-size: 14px; }
+}
+
+/* Listes de choix de l'espace vendeur (remplacent la liste native du navigateur). */
+.vs-overlay { position: fixed; inset: 0; z-index: 9000; }
+.vs-overlay.is-sheet { display: flex; align-items: flex-end; background: rgba(9, 27, 58, .55); animation: vs-fade .16s ease-out; }
+.vs-panel { display: flex; flex-direction: column; background: #fff; color: #0d1f3c; font-family: inherit; box-shadow: 0 18px 50px rgba(9, 27, 58, .28); overflow: hidden; }
+.vs-overlay.is-sheet .vs-panel { width: 100%; max-height: 72vh; border-radius: 18px 18px 0 0; padding-bottom: env(safe-area-inset-bottom, 0); animation: vs-rise .22s cubic-bezier(.2, .9, .25, 1); }
+.vs-overlay.is-popover .vs-panel { position: fixed; border: 1px solid #dce4ee; border-radius: 12px; }
+.vs-overlay.is-popover .vs-head { display: none; }
+.vs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid #edf1f6; }
+.vs-head strong { font-size: 16px; font-weight: 700; }
+.vs-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: #f1f5f9; color: #334155; font-size: 22px; line-height: 1; cursor: pointer; }
+.vs-search { margin: 12px 14px 4px; padding: 11px 14px; border: 1px solid #cfdae8; border-radius: 10px; font: inherit; font-size: 15px; outline: none; }
+.vs-search:focus { border-color: #0759c7; box-shadow: 0 0 0 3px rgba(7, 89, 199, .12); }
+.vs-list { overflow-y: auto; padding: 6px 8px 10px; -webkit-overflow-scrolling: touch; }
+.vs-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; font-size: 15.5px; text-align: left; cursor: pointer; }
+.vs-option[hidden] { display: none; }
+.vs-option:hover, .vs-option:focus-visible { background: #f1f5fb; outline: none; }
+.vs-option.is-selected { background: #eaf2fe; color: #0759c7; font-weight: 700; }
+.vs-check { flex: 0 0 18px; width: 18px; height: 10px; }
+.vs-option.is-selected .vs-check { border-left: 2.5px solid #0759c7; border-bottom: 2.5px solid #0759c7; transform: rotate(-45deg) translate(2px, -2px); }
+.vs-empty { margin: 0; padding: 18px 12px; color: #64748b; font-size: 14.5px; text-align: center; }
+.vs-overlay.is-popover .vs-option { min-height: 40px; font-size: 14.5px; }
+@keyframes vs-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes vs-rise { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .vs-overlay.is-sheet, .vs-overlay.is-sheet .vs-panel { animation: none; } }

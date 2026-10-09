@@ -153,6 +153,7 @@
 
     .dl-flash.success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #166534; }
     .dl-flash.error { background: #fff1f2; border: 1px solid #fecdd3; color: #9f1239; }
+    .dl-flash.info { background: #eff6ff; border: 1px solid #bfdbfe; color: #174a8b; }
 
     .dl-status {
         display: flex;
@@ -771,21 +772,24 @@
         </a>
     </header>
 
-    @if($shop->usesOvanieLogistics())
+    @if(!$shop->hasConfirmedLogistics() || $shop->usesOvanieLogistics())
         <section class="dl-panel" style="padding:20px;margin-bottom:20px">
             <h2>Préparer ma propre logistique</h2>
-            <p>OVANIE Logistics reste actif pendant la configuration. Enregistrez vos capacités, puis au moins une zone avec son tarif et son délai, avant de confirmer le changement.</p>
+            <p>{{ $shop->hasConfirmedLogistics() ? 'OVANIE Logistics reste actif pendant la configuration.' : 'Votre mode logistique n’est pas encore confirmé.' }} Enregistrez vos capacités, puis au moins une zone avec son tarif et son délai, avant d’activer votre propre logistique.</p>
             <form method="POST" action="{{ route('vendor.delivery.mode.update') }}" onsubmit="return window.confirm('Activer ma propre logistique uniquement pour les nouvelles commandes ? Les commandes existantes conservent leur mode logistique.');">
                 @csrf
                 <input type="hidden" name="logistics_type" value="seller">
-                <input type="hidden" name="expected_logistics_type" value="ovanie">
-                <input type="hidden" name="confirmed" value="1">
+                <input type="hidden" name="expected_logistics_type" value="{{ $shop->usesSellerLogistics() ? 'seller' : 'ovanie' }}">
+                @if($shop->hasConfirmedLogistics())<input type="hidden" name="confirmed" value="1">@endif
                 <button type="submit" class="dl-back" @disabled(!$configurationReady)>Activer ma propre logistique</button>
                 <a class="dl-back" href="{{ route('vendor.delivery.index') }}">Annuler le changement</a>
             </form>
         </section>
     @endif
 
+    @if(session('info'))
+        <div class="dl-flash info">{{ session('info') }}</div>
+    @endif
     @if(session('success'))
         <div class="dl-flash success">{{ session('success') }}</div>
     @endif
@@ -904,7 +908,7 @@
                             <span class="dl-vehicle-card">
                                 <span class="dl-vehicle-check"><i data-lucide="check"></i></span>
                                 <span class="dl-vehicle-visual">
-                                    <img src="{{ $vehicle['image'] }}" alt="{{ $vehicle['label'] }}">
+                                    <img src="{{ $vehicle['image'] }}" alt="{{ $vehicle['label'] }}" loading="lazy" onerror="this.onerror=null;this.src='{{ asset('images/logistics/vehicle-assets/'.basename($vehicle['image'])) }}'">
                                 </span>
                                 <strong>{{ $vehicle['label'] }}</strong>
                             </span>

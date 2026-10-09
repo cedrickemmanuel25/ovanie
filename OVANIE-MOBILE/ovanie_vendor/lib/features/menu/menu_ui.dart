@@ -6,9 +6,12 @@ import '../../core/utils/formatters.dart';
 import '../../core/network/api_client.dart';
 import '../orders/order_ui.dart';
 import '../finance/data_ui.dart';
+import '../../core/ui/vendor_mockup_ui.dart';
+import '../orders/order_widgets.dart';
 import '../shell/vendor_tabs.dart';
 export '../orders/order_ui.dart'
-    show orderMoney, orderText, orderMuted, orderOrange, orderGreen, orderBorder, orderNavy, OrderHeader, OrderSheet, OrderResponsiveBody;
+    show orderMoney, orderText, orderMuted, orderOrange, orderGreen, orderBorder, orderNavy, orderBlue, OrderCard, OrderSectionTitle, OrderCaption;
+export '../../core/ui/vendor_mockup_ui.dart' show Mk, MkBarButton, MkInfoBox, MkNotice, MkLabel, mkInput, mkFieldText, MkTheme;
 export '../finance/data_ui.dart'
     show DataCard, dataPair, dataLine, screenText, screenMoney;
 
@@ -72,59 +75,74 @@ void openMenuPage(BuildContext c, Widget page) =>
 void menuError(BuildContext c, Object e) => ScaffoldMessenger.of(
   c,
 ).showSnackBar(SnackBar(content: Text(ApiClient.friendlyError(e))));
-const menuBlue = Color(0xFF07136B),
-    menuMuted = Color(0xFF536A9C),
-    menuOrange = Color(0xFFFF5700);
+const menuBlue = Mk.navy, menuMuted = Mk.muted, menuOrange = Mk.orange;
+const menuGreen = Color(0xFF12894A), menuRed = Color(0xFFD92D20), menuAzure = Color(0xFF1668E3), menuPurple = Color(0xFF6D3BD9);
+
 Widget menuHeading(String s) => Text(
   s,
-  style: const TextStyle(
-    fontSize: 17,
-    fontWeight: FontWeight.w800,
-    color: menuBlue,
+  style: const TextStyle(fontSize: 16, height: 1.25, fontWeight: FontWeight.w800, color: menuBlue),
+);
+
+/// Pastille de statut arrondie ; [icon] ajoute un pictogramme devant le libellé.
+Widget menuPill(String label, {Color color = menuBlue, IconData? icon}) => Container(
+  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+  decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(99)),
+  child: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (icon != null) ...[Icon(icon, color: color, size: 16), const SizedBox(width: 5)],
+      Flexible(
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: color, fontSize: 12.5, fontWeight: FontWeight.w700),
+        ),
+      ),
+    ],
   ),
 );
-Widget menuPill(String label, {Color color = menuBlue}) => Container(
-  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-  decoration: BoxDecoration(
-    color: color.withValues(alpha: .09),
-    borderRadius: BorderRadius.circular(8),
-  ),
-  child: Text(label, style: TextStyle(color: color, fontSize: 12)),
-);
-Widget menuImage(
-  dynamic url, {
-  double size = 64,
-  bool circle = false,
-}) => ClipRRect(
-  borderRadius: BorderRadius.circular(circle ? 100 : 10),
+
+/// Pastille verte « Vendeur vérifié ».
+Widget menuVerifiedPill() => menuPill('Vendeur vérifié', color: menuGreen, icon: Icons.check_circle_rounded);
+
+bool menuShopVerified(Map<String, dynamic> shop) =>
+    ['approved', 'verified', 'validated', 'automated_checked'].contains(shop['kyc_status']);
+
+Widget menuImage(dynamic url, {double size = 64, bool circle = false, double? width, double radius = 10}) => ClipRRect(
+  borderRadius: BorderRadius.circular(circle ? 100 : radius),
   child: SizedBox(
-    width: size,
+    width: width ?? size,
     height: size,
     child: '${url ?? ''}'.isEmpty
         ? ColoredBox(
-            color: const Color(0xFFEAF1FC),
+            color: circle ? const Color(0xFFFFEEE3) : Mk.softBlue,
             child: Icon(
               circle ? Icons.storefront_outlined : Icons.inventory_2_outlined,
-              color: menuBlue,
-              size: 30,
+              color: circle ? menuOrange : Mk.icon,
+              size: size * .46,
             ),
           )
         : Image.network(
             '$url',
             fit: BoxFit.cover,
             errorBuilder: (_, e, s) => const ColoredBox(
-              color: Color(0xFFEAF1FC),
+              color: Mk.softBlue,
               child: Icon(Icons.image_not_supported_outlined, color: menuMuted),
             ),
           ),
   ),
 );
-Widget menuIcon(IconData icon, {Color color = menuBlue}) => CircleAvatar(
-  radius: 23,
-  backgroundColor: color.withValues(alpha: .07),
-  child: Icon(icon, color: color, size: 27),
+
+Widget menuIcon(IconData icon, {Color color = menuAzure, double size = 44}) => Container(
+  width: size,
+  height: size,
+  decoration: BoxDecoration(color: color.withValues(alpha: .12), shape: BoxShape.circle),
+  child: Icon(icon, color: color, size: size * .52),
 );
 
+/// Page d'un écran du Menu : en-tête blanc avec retour, contenu défilant,
+/// barre d'actions facultative et barre d'onglets (onglet Menu actif).
 class MenuPage extends StatelessWidget {
   const MenuPage({
     super.key,
@@ -134,309 +152,264 @@ class MenuPage extends StatelessWidget {
     required this.refresh,
     this.loading = false,
     this.error,
-    this.root = false,
-    this.headerBottom,
+    this.hasContent,
+    this.actions = const <Widget>[],
+    this.showLogo = false,
     this.titleTrailing,
   });
   final String title, subtitle;
   final List<Widget> children;
   final Future<void> Function() refresh;
-  final bool loading, root;
+  final bool loading, showLogo;
   final String? error;
-  final Widget? headerBottom;
+
+  /// Faux tant qu'aucune donnée n'est disponible ; par défaut, le contenu est
+  /// masqué pendant le chargement.
+  final bool? hasContent;
+  final List<Widget> actions;
   final Widget? titleTrailing;
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.white,
-    bottomNavigationBar: root
-        ? null
-        : const VendorBottomBar(selected: VendorTab.menu),
-    body: RefreshIndicator(
-      onRefresh: refresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: OrderHeader(
-              title: title,
-              subtitle: subtitle,
-              showBack: !root,
-              showNotifications: root,
-              bottom: headerBottom,
-              titleTrailing: titleTrailing,
-            ),
-          ),
-          if (loading)
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator(color: orderOrange)),
-            )
-          else
-            SliverToBoxAdapter(
-              child: ColoredBox(
-                color: const Color(0xFF031D47),
-                child: OrderSheet(
-                  child: OrderResponsiveBody(
-                    padding: const EdgeInsets.fromLTRB(14, 18, 14, 20),
-                    child: ListView(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        if (error != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
-                            child: Column(
-                              children: [
-                                Text(error!, style: const TextStyle(color: Color(0xFFB42318))),
-                                TextButton(onPressed: refresh, child: const Text('Réessayer')),
-                              ],
-                            ),
-                          ),
-                        ...children,
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    ),
+  Widget build(BuildContext context) => OrderPage(
+    tab: VendorTab.menu,
+    title: title,
+    subtitle: subtitle,
+    trailing: titleTrailing,
+    showLogo: showLogo,
+    loading: loading,
+    error: error,
+    hasContent: hasContent ?? !loading,
+    emptyMessage: 'Ces informations sont indisponibles pour le moment.',
+    onRefresh: refresh,
+    gap: 0,
+    actions: actions,
+    children: children,
   );
 }
 
+/// Carte d'identité de la boutique : logo, nom, titulaire et statut vérifié.
 class ShopIdentity extends StatelessWidget {
-  const ShopIdentity({
-    super.key,
-    required this.shop,
-    this.user = const {},
-    this.onTap,
-    this.action,
-  });
+  const ShopIdentity({super.key, required this.shop, this.user = const {}, this.onTap, this.action});
   final Map<String, dynamic> shop, user;
   final VoidCallback? onTap;
   final Widget? action;
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: const [BoxShadow(color: Color(0x1A02173D), blurRadius: 18, offset: Offset(0, 8))],
-    ),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Row(
-        children: [
-          menuImage(shop['logo_url'], circle: true, size: 58),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  screenText(shop['name'], 'Ma boutique'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: menuBlue, fontSize: 16.5, fontWeight: FontWeight.w800),
-                ),
-                Text(
-                  screenText(shop['owner_name'] ?? user['name']),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: menuMuted, fontSize: 13),
-                ),
-                if (['approved', 'verified', 'validated'].contains(shop['kyc_status'])) ...[
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: const Color(0xFFEAF8EC), borderRadius: BorderRadius.circular(8)),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.check_circle, color: orderGreen, size: 13),
-                        SizedBox(width: 4),
-                        Text('Vendeur vérifié', style: TextStyle(color: orderGreen, fontSize: 11.5, fontWeight: FontWeight.w700)),
-                      ],
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              menuImage(shop['logo_url'], circle: true, size: 54),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      screenText(shop['name'], 'Ma boutique'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: menuBlue, fontSize: 16.5, height: 1.2, fontWeight: FontWeight.w800),
                     ),
-                  ),
-                ],
-              ],
-            ),
+                    if (screenText(shop['owner_name'] ?? user['name'], '').isNotEmpty)
+                      Text(
+                        screenText(shop['owner_name'] ?? user['name']),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: menuMuted, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    if (menuShopVerified(shop)) ...[const SizedBox(height: 6), menuVerifiedPill()],
+                  ],
+                ),
+              ),
+              if (action != null) action! else if (onTap != null) const Icon(Icons.chevron_right_rounded, color: Mk.icon),
+            ],
           ),
-          if (action != null)
-            action!
-          else if (onTap != null)
-            const Icon(Icons.chevron_right, color: menuBlue),
-        ],
+        ),
       ),
     ),
   );
 }
 
+/// Rangée d'indicateurs : pictogramme, libellé et grand chiffre centrés.
 class MenuMetrics extends StatelessWidget {
   const MenuMetrics({super.key, required this.items});
   final List<(String, String, IconData, Color)> items;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Row(
-      children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i != 0) const SizedBox(width: 8),
-          Expanded(child: _cell(items[i])),
-        ],
-      ],
+    padding: const EdgeInsets.only(bottom: 10),
+    child: LayoutBuilder(
+      builder: (context, box) {
+        // Quatre cartes tiennent côte à côte ; faute de place, deux par ligne.
+        final perRow = items.length <= 2 || box.maxWidth / items.length >= 76 ? items.length : 2;
+        final width = (box.maxWidth - 8 * (perRow - 1)) / perRow;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [for (final item in items) SizedBox(width: width, child: _cell(item, items.length <= 2))],
+        );
+      },
     ),
   );
 
-  Widget _cell((String, String, IconData, Color) i) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: orderBorder),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: i.$4.withValues(alpha: .11), shape: BoxShape.circle),
-          child: Icon(i.$3, color: i.$4, size: 18),
-        ),
-        const SizedBox(height: 9),
-        Text(
-          i.$1,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          softWrap: false,
-          style: const TextStyle(color: menuMuted, fontSize: 10, height: 1.15),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          i.$2,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: menuBlue, fontSize: 15, fontWeight: FontWeight.w800),
-        ),
-      ],
-    ),
+  Widget _cell((String, String, IconData, Color) i, bool wide) => Container(
+    padding: EdgeInsets.symmetric(horizontal: wide ? 12 : 6, vertical: 12),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+    child: wide
+        ? Row(
+            children: [
+              menuIcon(i.$3, color: i.$4, size: 42),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      i.$1,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: menuMuted, fontSize: 12.5, fontWeight: FontWeight.w500),
+                    ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(i.$2, style: const TextStyle(color: menuBlue, fontSize: 20, height: 1.2, fontWeight: FontWeight.w800)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          )
+        : Column(
+            children: [
+              menuIcon(i.$3, color: i.$4, size: 36),
+              const SizedBox(height: 6),
+              Text(
+                i.$1,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: menuMuted, fontSize: 12, fontWeight: FontWeight.w500),
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(i.$2, style: const TextStyle(color: menuBlue, fontSize: 21, height: 1.25, fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
   );
 }
 
 Widget menuSearch(ValueChanged<String> change, String hint) => Padding(
-  padding: const EdgeInsets.symmetric(vertical: 8),
+  padding: const EdgeInsets.only(bottom: 10),
   child: TextField(
     onChanged: change,
+    textInputAction: TextInputAction.search,
+    style: const TextStyle(color: menuBlue, fontSize: 14.5, fontWeight: FontWeight.w500),
     decoration: InputDecoration(
       hintText: hint,
-      prefixIcon: const Icon(Icons.search),
+      hintStyle: const TextStyle(color: Mk.hint, fontSize: 14, fontWeight: FontWeight.w400),
+      prefixIcon: const Icon(Icons.search_rounded, color: Mk.icon, size: 22),
       filled: true,
       fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFDCE5F5)),
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(vertical: 13),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: orderBorder)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: orderBorder)),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Mk.blue, width: 1.4),
       ),
     ),
   ),
 );
-Widget menuFilters(
-  List<String> labels,
-  int selected,
-  ValueChanged<int> change, {
-  List<IconData?>? icons,
-}) => Padding(
-  padding: const EdgeInsets.only(bottom: 12),
+
+/// Puce de filtre : bleu nuit lorsqu'elle est sélectionnée.
+Widget menuChip(String label, bool active, VoidCallback onTap, {Color activeColor = Mk.navy}) => Semantics(
+  button: true,
+  selected: active,
+  child: Material(
+    color: active ? activeColor : Colors.white,
+    shape: StadiumBorder(side: BorderSide(color: active ? activeColor : orderBorder, width: 1.2)),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 15),
+        child: Center(
+          widthFactor: 1,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : Mk.icon,
+              fontSize: 13.5,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    ),
+  ),
+);
+
+Widget menuFilters(List<String> labels, int selected, ValueChanged<int> change, {List<IconData?>? icons}) => Padding(
+  padding: const EdgeInsets.only(bottom: 10),
   child: SizedBox(
-    height: 42,
+    height: 40,
     child: ListView.separated(
       scrollDirection: Axis.horizontal,
       itemCount: labels.length,
       separatorBuilder: (_, __) => const SizedBox(width: 8),
-      itemBuilder: (context, i) {
-        final active = i == selected;
-        return InkWell(
-          borderRadius: BorderRadius.circular(99),
-          onTap: () => change(i),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: active ? orderNavy : Colors.white,
-              borderRadius: BorderRadius.circular(99),
-              border: Border.all(color: active ? orderNavy : orderBorder),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icons != null && icons[i] != null) ...[
-                  Icon(icons[i], size: 15, color: active ? Colors.white : menuMuted),
-                  const SizedBox(width: 6),
-                ],
-                Text(
-                  labels[i],
-                  style: TextStyle(
-                    color: active ? Colors.white : menuMuted,
-                    fontSize: 13,
-                    fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      itemBuilder: (context, i) => menuChip(labels[i], i == selected, () => change(i)),
     ),
   ),
 );
-Widget menuButton(
-  String label,
-  VoidCallback? action, {
-  IconData? icon,
-  bool outlined = false,
-}) => outlined
-    ? OutlinedButton.icon(
-        onPressed: action,
-        icon: Icon(icon ?? Icons.arrow_back, size: 20),
-        label: Text(label),
-      )
-    : FilledButton.icon(
-        style: FilledButton.styleFrom(
-          backgroundColor: menuOrange,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-        ),
-        onPressed: action,
-        icon: Icon(icon ?? Icons.save_outlined, size: 20),
-        label: Text(label),
-      );
-Widget menuInfo(String text) => DataCard(
-  color: const Color(0xFFEFF5FF),
-  child: Row(
+
+Widget menuButton(String label, VoidCallback? action, {IconData? icon, bool outlined = false, Color color = Mk.orange}) =>
+    MkBarButton(label: label, onTap: action, icon: icon, filled: !outlined, color: color);
+
+Widget menuInfo(String text) => Padding(
+  padding: const EdgeInsets.only(bottom: 10),
+  child: MkInfoBox(icon: Icons.info_rounded, child: Text(text)),
+);
+
+Widget menuEmpty(String label, {IconData icon = Icons.inbox_outlined, String? hint}) => Container(
+  margin: const EdgeInsets.only(bottom: 10),
+  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 26),
+  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+  child: Column(
     children: [
-      const Icon(Icons.info, color: Color(0xFF004BCE)),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Text(
-          text,
-          style: const TextStyle(color: menuMuted, fontSize: 13),
-        ),
+      Icon(icon, color: Mk.hint, size: 42),
+      const SizedBox(height: 10),
+      Text(
+        label,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: menuBlue, fontSize: 15.5, fontWeight: FontWeight.w800),
       ),
+      if (hint != null) ...[
+        const SizedBox(height: 4),
+        Text(
+          hint,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: menuMuted, fontSize: 13, height: 1.4, fontWeight: FontWeight.w500),
+        ),
+      ],
     ],
   ),
 );
-Widget menuEmpty(String label) => Padding(
-  padding: const EdgeInsets.all(24),
-  child: Text(
-    label,
-    textAlign: TextAlign.center,
-    style: const TextStyle(color: menuMuted),
-  ),
+
+/// Intertitre en capitales espacées (« LISTE DES ZONES »).
+Widget menuCaption(String text) => Padding(
+  padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+  child: OrderCaption(text),
 );
+
 String caseStatus(dynamic x) =>
     const {
       'pending': 'En attente',
@@ -452,9 +425,168 @@ String caseStatus(dynamic x) =>
       'waiting_ovanie': 'En attente OVANIE',
     }['$x'] ??
     screenText(x);
-Color caseColor(dynamic x) =>
-    ['accepted', 'resolved', 'closed', 'refunded'].contains(x)
-    ? Colors.green
+Color caseColor(dynamic x) => ['accepted', 'resolved', 'closed', 'refunded'].contains(x)
+    ? menuGreen
     : ['rejected', 'open', 'new'].contains(x)
-    ? Colors.red
-    : menuOrange;
+    ? menuRed
+    : '$x' == 'waiting_ovanie'
+    ? menuAzure
+    : const Color(0xFFE85400);
+
+/// Date courte « 11/09/2026 ».
+String menuDate(dynamic raw) {
+  final date = DateTime.tryParse('${raw ?? ''}')?.toLocal();
+  if (date == null) return '';
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${two(date.day)}/${two(date.month)}/${date.year}';
+}
+
+/// Téléphone lisible « 07 08 45 12 36 » ; valeur d'origine si le format est inconnu.
+String menuPhone(dynamic raw) {
+  final text = '${raw ?? ''}'.trim();
+  final digits = text.replaceAll(RegExp(r'\D'), '');
+  final local = digits.length == 13 && digits.startsWith('225') ? digits.substring(3) : digits;
+  if (local.length != 10) return text;
+  return [for (var i = 0; i < 10; i += 2) local.substring(i, i + 2)].join(' ');
+}
+
+/// Image de couverture de la boutique ; à défaut, une vue de magasin générique.
+class ShopCoverImage extends StatelessWidget {
+  const ShopCoverImage({super.key, required this.url});
+  final String url;
+
+  static const _fallback = 'assets/images/mockups/menu_cover.jpg';
+
+  @override
+  Widget build(BuildContext context) => url.isEmpty
+      ? Image.asset(_fallback, fit: BoxFit.cover, excludeFromSemantics: true)
+      : Image.network(
+          url,
+          fit: BoxFit.cover,
+          errorBuilder: (_, e, s) => Image.asset(_fallback, fit: BoxFit.cover, excludeFromSemantics: true),
+        );
+}
+
+/// Bouton orange compact « Modifier ».
+Widget menuEditButton(VoidCallback? onTap, {String label = 'Modifier'}) => Material(
+  color: onTap == null ? const Color(0xFFFFB98A) : Mk.orange,
+  borderRadius: BorderRadius.circular(10),
+  clipBehavior: Clip.antiAlias,
+  child: InkWell(
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.edit_rounded, color: Colors.white, size: 17),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    ),
+  ),
+);
+
+/// Champ de sélection : ouvre une feuille de choix au toucher.
+class MenuSelect extends StatelessWidget {
+  const MenuSelect({super.key, required this.value, required this.hint, required this.onTap, this.icon, this.error = false});
+  final String? value;
+  final String hint;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  final bool error;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: value ?? hint,
+    child: Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: error ? Mk.danger : Mk.border, width: 1.2),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+          child: Row(
+            children: [
+              if (icon != null) ...[Icon(icon, color: menuAzure, size: 20), const SizedBox(width: 10)],
+              Expanded(
+                child: ExcludeSemantics(
+                  child: Text(
+                    value ?? hint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: value == null ? Mk.hint : menuBlue, fontSize: 14.5, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+              const Icon(Icons.keyboard_arrow_down_rounded, color: Mk.icon, size: 24),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Feuille de choix unique ; renvoie la clé retenue.
+Future<T?> menuPick<T>(BuildContext context, String title, Map<T, String> options, T? selected) => showModalBottomSheet<T>(
+  context: context,
+  isScrollControlled: true,
+  backgroundColor: Colors.white,
+  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+  builder: (sheet) => MkTheme(
+    lightStatusBar: false,
+    child: SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheet).height * .72),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(color: const Color(0xFFD5DBE7), borderRadius: BorderRadius.circular(99)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
+              child: Text(title, style: const TextStyle(color: menuBlue, fontSize: 18, fontWeight: FontWeight.w800)),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+                children: [
+                  for (final option in options.entries)
+                    ListTile(
+                      onTap: () => Navigator.pop(sheet, option.key),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      title: Text(
+                        option.value,
+                        style: TextStyle(
+                          color: menuBlue,
+                          fontSize: 15,
+                          fontWeight: option.key == selected ? FontWeight.w800 : FontWeight.w500,
+                        ),
+                      ),
+                      trailing: option.key == selected ? const Icon(Icons.check_rounded, color: Mk.orange) : null,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  ),
+);

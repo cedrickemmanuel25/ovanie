@@ -31,6 +31,10 @@ class Authenticate
         // de connexion puisse y renvoyer l'utilisateur avec redirect()->intended()
         // une fois connecté, au lieu de toujours atterrir sur son tableau de bord
         // (ex. : "Passer la commande" en visiteur -> connexion -> retour au panier).
+        if (in_array('pro', $guards, true)) {
+            return redirect()->guest(route('pro.login'));
+        }
+
         if ($request->is('espace-livreur') || $request->is('espace-livreur/*') || in_array('driver', $guards, true)) {
             return redirect()->guest(route('driver.login'));
         }

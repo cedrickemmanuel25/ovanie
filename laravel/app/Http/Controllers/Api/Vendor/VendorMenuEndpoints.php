@@ -29,7 +29,8 @@ trait VendorMenuEndpoints
     }
     public function personalProfile(Request $request) {
         $u=$request->user();
-        return response()->json(['user'=>$u->only(['id','name','phone','email','whatsapp_phone','city','role','status','created_at']) + ['avatar_url'=>$u->avatar ? Storage::disk('public')->url($u->avatar) : null], 'address'=>$u->addresses()->orderByDesc('is_default')->first()?->only(['city','commune','quartier','country','address']), 'shop'=>$this->shopPayload($this->shopFor($request))]);
+        $shop=$this->shopFor($request);
+        return response()->json(['user'=>$u->only(['id','name','phone','email','whatsapp_phone','city','role','status','created_at']) + ['avatar_url'=>$u->avatar ? Storage::disk('public')->url($u->avatar) : null], 'address'=>$u->addresses()->orderByDesc('is_default')->first()?->only(['city','commune','quartier','country','address']) ?? ($shop ? ['city'=>$shop->city,'commune'=>$shop->commune,'quartier'=>$shop->district,'country'=>"Côte d'Ivoire",'address'=>$shop->address] : null), 'shop'=>$this->shopPayload($shop)]);
     }
     public function updatePersonalProfile(Request $request) {
         $u=$request->user();
@@ -53,7 +54,7 @@ trait VendorMenuEndpoints
     }
     public function savePreparationSettings(Request $request) {
         $shop=$this->shopFor($request);
-        $d=$request->validate(['logistics_type'=>['sometimes',Rule::in([$shop->logistics_type ?: 'ovanie'])],'processing_time'=>['required',Rule::in(['lt24h','24_48h','3_5j','7j_plus'])],'days'=>['required','array','min:1'],'days.*'=>['integer','between:1,7','distinct'],'start'=>['required','date_format:H:i'],'end'=>['required','date_format:H:i','after:start']]);
+        $d=$request->validate(['logistics_type'=>['sometimes',Rule::in(array_values(array_filter([$shop->logistics_type])))],'processing_time'=>['required',Rule::in(['lt24h','24_48h','3_5j','7j_plus'])],'days'=>['required','array','min:1'],'days.*'=>['integer','between:1,7','distinct'],'start'=>['required','date_format:H:i'],'end'=>['required','date_format:H:i','after:start']]);
         $p=json_decode($shop->getRawOriginal('mobile_presentation')??'{}',true)?:[];
         $p['preparation']=collect($d)->only(['days','start','end'])->all();
         $shop->mobile_presentation=json_encode($p);
@@ -72,12 +73,12 @@ trait VendorMenuEndpoints
         $shop=$this->shopFor($request);abort_unless((int)$review->product?->shop_id===(int)$shop->id,404);
         $d=$request->validate(['reply'=>['required','string','max:2000']]);
         $review->vendor_reply=$d['reply'];$review->vendor_replied_at=now();$review->save();
-        return response()->json(['message'=>'RÃ©ponse enregistrÃ©e.']);
+        return response()->json(['message'=>'Réponse enregistrée.']);
     }
     public function statistics(Request $request) {
         $request->validate(['from'=>['required','date_format:Y-m-d'],'to'=>['required','date_format:Y-m-d','after_or_equal:from']]);
         $from=Carbon::parse($request->input('from'))->startOfDay();$to=Carbon::parse($request->input('to'))->endOfDay();
-        abort_if($from->diffInDays($to)>366,422,'SÃ©lectionnez une pÃ©riode de 366 jours maximum.');
+        abort_if($from->diffInDays($to)>366,422,'Sélectionnez une période de 366 jours maximum.');
         $shop=$this->shopFor($request);
         $base=OrderItem::query()->where(fn($q)=>$this->visibleVendorItems($q,$shop));
         $period=fn($a,$b)=>(clone $base)->whereHas('order',fn($q)=>$q->whereBetween('created_at',[$a,$b]))->with(['order.payments','product'])->get();
@@ -91,7 +92,7 @@ trait VendorMenuEndpoints
         $growth=fn($a,$b)=>$b>0?round(($a-$b)/$b*100,1):null;
         $series=[];for($date=$from->copy();$date<=$to;$date->addDay()){$key=$date->toDateString();$rows=$items->filter(fn($i)=>$i->order?->created_at?->toDateString()===$key);$series[]=['date'=>$key,'amount'=>$amount($paid($rows)),'orders'=>$rows->pluck('order_id')->unique()->count()];}
         $statuses=$items->groupBy('order_id')->map(fn($rows)=>$this->vendorOrderStatus($rows))->countBy();
-        $top=$sales->groupBy('product_id')->map(function($rows)use($amount){$p=$rows->first()->product;return ['id'=>$p?->id,'name'=>$p?->name,'image_url'=>$p?$this->productPayload($p)['image_url']??null:null,'quantity'=>$rows->sum('quantity'),'amount'=>$amount($rows)];})->sortByDesc('amount')->values();
+        $top=$sales->groupBy('product_id')->map(function($rows)use($amount){$p=$rows->first()->product;return ['id'=>$p?->id,'name'=>$p?->name,'image_url'=>$p?->card_image_url,'quantity'=>$rows->sum('quantity'),'amount'=>$amount($rows)];})->sortByDesc('amount')->values();
         return response()->json(['revenue'=>$total,'orders'=>$count,'average'=>$avg,'conversion'=>null,'growth'=>['revenue'=>$growth($total,$oldTotal),'orders'=>$growth($count,$oldCount),'average'=>$growth($avg,$oldAvg)],'series'=>$series,'statuses'=>$statuses,'top_products'=>$top]);
     }
     private function caseSummary($m): array {
@@ -105,12 +106,25 @@ trait VendorMenuEndpoints
         $item=$m->orderItem;$product=$item?->product;
         $data=$dispute?$this->disputePayload($m):$this->returnPayload($m);
         $data['client']=['name'=>$m->client?->name??$m->client_name,'phone'=>$m->client?->phone,'city'=>$m->client?->city];
-        $data['product']=['id'=>$product?->id,'name'=>$product?->name??$m->product_name,'image_url'=>$product?($this->productPayload($product)['image_url']??null):null,'quantity'=>$m->quantity??$item?->quantity,'price'=>$item?->price,'amount'=>$dispute?$item?->subtotal:$m->refund_amount];
-        $data['reason']=$m->reason;$data['response']=$dispute?$m->response:$m->vendor_response;
+        $quantity=$m->quantity??$item?->quantity;
+        $data['product']=['id'=>$product?->id,'name'=>$product?->name??$m->product_name,'image_url'=>$product?($this->productPayload($product)['image_url']??null):null,'quantity'=>$quantity,'price'=>$item?->price,'amount'=>$dispute?$item?->subtotal:($m->refund_amount??($item?->price!==null?(float)$item->price*max(1,(int)$quantity):null))];
+        if(!$dispute){
+            $data['reference']='RET-'.$m->id;
+            $data['client']['address']=data_get($m->meta,'pickup_address');
+            $data['client']['city']=$data['client']['city']?:data_get($m->meta,'pickup_address');
+        }
+        $data['reason']=$m->reason;
+        // Le vendeur lit aussi l'explication détaillée du client.
+        if(!$dispute && filled(data_get($m->meta,'detailed_description')))$data['reason']=trim($m->reason."\n\n".data_get($m->meta,'detailed_description'));$data['response']=$dispute?$m->response:$m->vendor_response;
         $data['timeline']=[];
-        foreach(['created_at'=>'Demande crÃ©Ã©e','accepted_at'=>'Retour validÃ©','rejected_at'=>'Retour refusÃ©','responded_at'=>'RÃ©ponse vendeur envoyÃ©e','escalated_at'=>'Dossier transmis Ã  OVANIE','refund_prepared_at'=>'Remboursement prÃ©parÃ©','refunded_at'=>'Remboursement effectuÃ©','resolved_at'=>'Dossier rÃ©solu'] as $field=>$label){if($m->$field)$data['timeline'][]=['label'=>$label,'date'=>$m->$field];}
+        foreach(['created_at'=>'Demande créée','accepted_at'=>'Retour validé','rejected_at'=>'Retour refusé','responded_at'=>'Réponse vendeur envoyée','escalated_at'=>'Dossier transmis à OVANIE','refund_prepared_at'=>'Remboursement préparé','refunded_at'=>'Remboursement effectué','resolved_at'=>'Dossier résolu'] as $field=>$label){if($m->$field)$data['timeline'][]=['label'=>$label,'date'=>$m->$field];}
         $data['attachments']=[];
-        if(!$dispute && filled($m->photo_proof))$data['attachments'][]=Storage::disk('public')->url($m->photo_proof);
+        if(!$dispute){
+            // Les preuves sont privées : liens signés valables 30 minutes.
+            foreach(\App\Http\Controllers\SensitiveDocumentController::returnProofPaths($m)->keys() as $index){
+                $data['attachments'][]=\Illuminate\Support\Facades\URL::temporarySignedRoute('api.vendor.returns.proof',now()->addMinutes(30),['return'=>$m->id,'document'=>$index]);
+            }
+        }
         $data['can_decide']=!$dispute && $m->status==='pending';
         return response()->json(['case'=>$data]);
     }

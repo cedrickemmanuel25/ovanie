@@ -80,7 +80,7 @@ class MobileCheckoutService
                 ->all();
 
             $this->optimizer->optimizeForAddress($cart, $this->addressPayload($request));
-            $cart->refresh()->load('items.product.shop');
+            $cart->refresh()->load(['items.product.shop', 'items.variant']);
             // refresh() recharge toutes les lignes du panier : réappliquer la
             // sélection par id de ligne garantit qu'aucun produit décoché ne
             // peut réapparaître dans la commande après l'optimisation.
@@ -208,6 +208,9 @@ class MobileCheckoutService
                 $orderItem = OrderItem::create([
                     'order_id' => $order->id,
                     'product_id' => $cartItem->product_id,
+                    'product_variant_id' => $cartItem->product_variant_id,
+                    'variant_label_snapshot' => $cartItem->variant_label_snapshot ?: $cartItem->variant?->label,
+                    'variant_image_snapshot' => $cartItem->variant_image_snapshot ?: $cartItem->variant?->card_url,
                     'original_product_id' => $cartItem->original_product_id ?: $cartItem->product_id,
                     'fulfilled_product_id' => $cartItem->fulfillment_product_id ?: $cartItem->product_id,
                     'original_shop_id' => $cartItem->original_shop_id ?: $cartItem->product?->shop_id,
@@ -431,7 +434,12 @@ class MobileCheckoutService
             // PayDunya reste côté serveur et aucune page Chrome n'est ouverte.
             // La carte bancaire conserve la page PCI PayDunya, affichée dans la
             // WebView sécurisée de l'application mobile.
-            if ($operator !== 'card') {
+            //
+            // En PAYDUNYA_MODE=test, SoftPay n'existe pas chez PayDunya : on
+            // ouvre alors la page de paiement PayDunya du bac à sable (même
+            // facture), où l'on paie avec le compte client fictif de test.
+            $softPayAvailable = strtolower((string) config('paydunya.mode', 'test')) === 'live';
+            if ($operator !== 'card' && $softPayAvailable) {
                 $softPay = $this->paydunya->startSoftPay([
                     'operator' => $operator,
                     'payment_token' => $token,
@@ -556,7 +564,7 @@ class MobileCheckoutService
             $product->setRelation('shop', \App\Models\Shop::query()
                 ->whereKey($product->shop_id)->lockForUpdate()->first());
             if (! $product->shop?->canPublishProducts()) {
-                throw ValidationException::withMessages(['cart' => 'La boutique ne peut plus accepter cette commande.']);
+                throw ValidationException::withMessages(['cart' => 'Cette boutique termine sa configuration de livraison ou de reversement. La commande ne peut pas encore être validée.']);
             }
 
             $minimum = max(1, (int) ($product->min_order_quantity ?: 1));
@@ -566,9 +574,12 @@ class MobileCheckoutService
                 ]);
             }
 
-            if ((int) $product->stock < (int) $item->quantity) {
+            $item->loadMissing('variant');
+            $availableStock = (int) ($item->variant?->stock ?? $product->stock);
+            if ($availableStock < (int) $item->quantity) {
+                $variantLabel = $item->variant_label_snapshot ? ' (' . $item->variant_label_snapshot . ')' : '';
                 throw ValidationException::withMessages([
-                    'cart' => 'Stock insuffisant pour le produit ' . $product->name . '.',
+                    'cart' => 'Stock insuffisant pour le produit ' . $product->name . $variantLabel . '.',
                 ]);
             }
 

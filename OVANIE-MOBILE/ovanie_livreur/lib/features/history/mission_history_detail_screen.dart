@@ -1,123 +1,38 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
-import '../../core/network/api_client.dart';
-import '../missions/data/mission_repository.dart';
 import '../missions/models/driver_mission.dart';
+import '../missions/widgets/mission_live_map.dart';
 import '../missions/widgets/mission_ui.dart';
 
-/// Détail d'une mission archivée (livrée, incident ou refusée).
-class MissionHistoryDetailScreen extends StatefulWidget {
-  const MissionHistoryDetailScreen({
-    super.key,
-    required this.missionNumber,
-    this.initialMission,
-  });
+/// Sections d'une mission terminée (livrée, incident ou refusée), affichées
+/// dans l'écran unique [MissionDetailScreen].
+class MissionArchiveSections extends StatelessWidget {
+  const MissionArchiveSections({super.key, required this.mission});
 
-  final String missionNumber;
-  final DriverMissionDetail? initialMission;
-
-  @override
-  State<MissionHistoryDetailScreen> createState() => _MissionHistoryDetailScreenState();
-}
-
-class _MissionHistoryDetailScreenState extends State<MissionHistoryDetailScreen> {
-  DriverMissionDetail? _mission;
-  bool _loading = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _mission = widget.initialMission;
-    _load(showSpinner: _mission == null);
-  }
-
-  Future<void> _load({bool showSpinner = true}) async {
-    if (showSpinner && mounted) setState(() => _loading = true);
-    try {
-      final mission = await MissionRepository.instance.fetchMission(widget.missionNumber);
-      if (!mounted) return;
-      setState(() {
-        _mission = mission;
-        _error = null;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = ApiClient.friendlyError(error));
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
+  final DriverMissionDetail mission;
 
   @override
   Widget build(BuildContext context) {
-    final mission = _mission;
-    return Scaffold(
-      backgroundColor: MissionPalette.mint,
-      body: Column(
-        children: [
-          MissionPageHeader(
-            title: 'Détail de mission',
-            subtitle: 'Mission archivée',
-            showBack: true,
-            onBack: () => Navigator.of(context).pop(),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              color: OvanieColors.green,
-              onRefresh: () => _load(showSpinner: false),
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 22),
-                children: [
-                  if (_loading && mission == null)
-                    const SizedBox(
-                      height: 420,
-                      child: Center(child: CircularProgressIndicator(color: OvanieColors.green)),
-                    )
-                  else if (_error != null && mission == null)
-                    MissionSurfaceCard(
-                      child: Column(
-                        children: [
-                          const Icon(Icons.cloud_off_rounded, size: 45, color: OvanieColors.green),
-                          const SizedBox(height: 12),
-                          Text(
-                            _error!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: MissionPalette.slate, height: 1.4),
-                          ),
-                          const SizedBox(height: 14),
-                          MissionPrimaryButton(label: 'Réessayer', onPressed: () => _load()),
-                        ],
-                      ),
-                    )
-                  else if (mission != null) ...[
-                    _HeaderCard(mission: mission),
-                    const SizedBox(height: 12),
-                    _SummaryCard(mission: mission),
-                    const SizedBox(height: 12),
-                    _StepsCard(mission: mission),
-                    if (mission.pickupStops.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _PickupStopsCard(mission: mission),
-                    ],
-                    const SizedBox(height: 12),
-                    _RouteCard(mission: mission),
-                    const SizedBox(height: 12),
-                    _OutcomeCard(mission: mission),
-                    const SizedBox(height: 16),
-                    MissionOutlineButton(
-                      label: '← Retour à l\'historique',
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _HeaderCard(mission: mission),
+        if (mission.netAmount > 0) ...[
+          const SizedBox(height: 12),
+          MissionEarningsCard(netAmount: mission.netAmount),
         ],
-      ),
+        const SizedBox(height: 12),
+        _StepsCard(mission: mission),
+        if (mission.pickupStops.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _PickupStopsCard(mission: mission),
+        ],
+        const SizedBox(height: 12),
+        _RouteCard(mission: mission),
+        const SizedBox(height: 12),
+        _OutcomeCard(mission: mission),
+      ],
     );
   }
 }
@@ -143,195 +58,42 @@ class _HeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rows = <(IconData, String, String)>[
+      (Icons.receipt_long_outlined, 'Commande', mission.orderNumber ?? ''),
+      (Icons.location_on_outlined, 'Destination', mission.displayDestination),
+      (Icons.schedule_rounded, _terminalLabel(mission), _terminalAt(mission) == null ? '' : '${missionDate(_terminalAt(mission))} · ${missionTime(_terminalAt(mission))}'),
+      (Icons.inventory_2_outlined, 'Collectes', '${mission.pickupCount}'),
+      (Icons.local_shipping_outlined, 'Véhicule', mission.vehicleLabel ?? ''),
+      (Icons.scale_outlined, 'Poids', missionWeight(mission.totalWeightKg)),
+    ].where((row) => row.$3.trim().isNotEmpty && row.$3.trim() != '—').toList();
     return MissionSurfaceCard(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Mission ${mission.missionNumber}',
-                      style: const TextStyle(
-                        color: MissionPalette.navy,
-                        fontSize: 20,
-                        height: 1.1,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -.3,
-                      ),
+          for (var i = 0; i < rows.length; i++)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              decoration: BoxDecoration(
+                border: i == rows.length - 1 ? null : const Border(bottom: BorderSide(color: Color(0xFFE6ECE8))),
+              ),
+              child: Row(
+                children: [
+                  Icon(rows[i].$1, size: 19, color: MissionPalette.slate),
+                  const SizedBox(width: 10),
+                  Text(rows[i].$2, style: const TextStyle(color: MissionPalette.slate, fontSize: 14)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      rows[i].$3,
+                      textAlign: TextAlign.right,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: MissionPalette.navy, fontSize: 14, fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Commande ${mission.orderNumber ?? '—'}',
-                      style: const TextStyle(
-                        color: MissionPalette.slate,
-                        fontSize: 13.8,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              MissionStatusPill.forMission(mission),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _InfoGrid(
-            left: [
-              _InfoItem(Icons.calendar_today_rounded, 'Date', missionDate(mission.pickupScheduledAt)),
-              _InfoItem(Icons.schedule_rounded, 'Heure prévue', missionTime(mission.pickupScheduledAt)),
-              _InfoItem(Icons.location_on_rounded, 'Destination', mission.displayDestination),
-              _InfoItem(Icons.inventory_2_outlined, 'Points de collecte', '${mission.pickupCount}'),
-            ],
-            right: [
-              _InfoItem(Icons.local_shipping_rounded, 'Véhicule', mission.vehicleLabel ?? '—'),
-              _InfoItem(Icons.scale_outlined, 'Poids', missionWeight(mission.totalWeightKg)),
-              _InfoItem(Icons.assignment_outlined, 'Statut', mission.statusLabel),
-              _InfoItem(
-                Icons.schedule_rounded,
-                _terminalLabel(mission),
-                missionTime(_terminalAt(mission)),
-                valueColor: mission.isDelivered
-                    ? OvanieColors.green
-                    : mission.isRejected
-                        ? MissionPalette.danger
-                        : MissionPalette.amber,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.mission});
-
-  final DriverMissionDetail mission;
-
-  @override
-  Widget build(BuildContext context) {
-    return MissionSurfaceCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.list_alt_rounded, color: OvanieColors.green, size: 22),
-              SizedBox(width: 9),
-              Text(
-                'Résumé de la mission',
-                style: TextStyle(
-                  color: MissionPalette.navy,
-                  fontSize: 16.5,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _InfoGrid(
-            left: [
-              _InfoItem(Icons.calendar_today_rounded, 'Date', missionDate(mission.pickupScheduledAt)),
-              _InfoItem(Icons.schedule_rounded, 'Heure prévue', missionTime(mission.pickupScheduledAt)),
-              _InfoItem(Icons.location_on_rounded, 'Destination', mission.displayDestination),
-              _InfoItem(Icons.inventory_2_outlined, 'Points de collecte', '${mission.pickupCount}'),
-            ],
-            right: [
-              _InfoItem(Icons.local_shipping_rounded, 'Véhicule', mission.vehicleLabel ?? '—'),
-              _InfoItem(Icons.scale_outlined, 'Poids', missionWeight(mission.totalWeightKg)),
-              _InfoItem(
-                Icons.schedule_rounded,
-                'Heure de fin',
-                missionTime(_terminalAt(mission)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoGrid extends StatelessWidget {
-  const _InfoGrid({required this.left, required this.right});
-
-  final List<_InfoItem> left;
-  final List<_InfoItem> right;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(children: left),
-        ),
-        Container(
-          width: 1,
-          height: left.length * 40.0,
-          margin: const EdgeInsets.symmetric(horizontal: 10),
-          color: const Color(0xFFDDE4EC),
-        ),
-        Expanded(
-          child: Column(children: right),
-        ),
-      ],
-    );
-  }
-}
-
-class _InfoItem extends StatelessWidget {
-  const _InfoItem(this.icon, this.label, this.value, {this.valueColor});
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 17, color: MissionPalette.slate),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: MissionPalette.slate,
-                    fontSize: 11.2,
-                    fontWeight: FontWeight.w600,
                   ),
-                ),
-                Text(
-                  value,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: valueColor ?? MissionPalette.navy,
-                    fontSize: 13,
-                    height: 1.2,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -594,7 +356,7 @@ class _RouteCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          MissionRouteMap(route: mission.routePlan, points: mission.mapPoints, height: 180),
+          MissionLiveMap(route: mission.routePlan, points: mission.mapPoints, height: 200),
         ],
       ),
     );

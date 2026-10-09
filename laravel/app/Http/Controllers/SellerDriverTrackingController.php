@@ -258,7 +258,7 @@ class SellerDriverTrackingController extends Controller
                 $deliveredItem->refresh(),
                 'delivered',
                 'Livraison effectuée',
-                'Votre livraison a été remise. Vérifiez les articles puis confirmez la réception depuis votre espace client.'
+                'Votre livraison a été remise. Un problème avec un article ? Signalez-le sous 48 h depuis votre espace client.'
             );
         }
 

@@ -1,10 +1,13 @@
 <?php
+
 namespace App\Http\Controllers\Api\Commercial;
+
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\Shop;
+use App\Models\ShopConfigurationAssignment;
 use App\Services\OvanieReferenceDataService;
 use App\Services\ProductImageNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -13,47 +16,552 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
-class CommercialMobileProductController extends Controller {
- private function shops(Request $r){$id=(int)$r->user()->id;return Shop::query()->where(function($q)use($id){$q->where('created_by_commercial_id',$id)->orWhere('managed_by_commercial_id',$id);});}
- private function ownShop(Request $r,int $id): Shop {return $this->shops($r)->findOrFail($id);}
- public function shopsIndex(Request $r): JsonResponse { $q=trim((string)$r->query('q','')); $rows=$this->shops($r)->withCount('products')->when($q!=='',fn($x)=>$x->where('name','like',"%$q%"))->latest()->get(); return response()->json(['shops'=>$rows->map(fn($s)=>['id'=>$s->id,'name'=>$s->name,'category'=>$s->main_category?:'Boutique OVANIE','location'=>trim(($s->city?:'').' '.($s->commune?:''), ' ,'),'products_count'=>(int)$s->products_count,'status'=>$s->status==='suspended'?'suspended':($s->status==='approved' || $s->is_active?'online':'pending'),'logistics'=>($s->logistics_type??'ovanie')==='seller'?'Logistique vendeur':'OVANIE Logistics','image_url'=>$s->logo_url??null])->values()]); }
- public function meta(OvanieReferenceDataService $references): JsonResponse { $categories=collect($references->productCategories())->map(fn($c)=>['id'=>$c['id'],'name'=>$c['name'],'children'=>collect($c['children']??[])->map(fn($x)=>['id'=>$x['id'],'name'=>$x['name']])->values()])->values(); return response()->json(['categories'=>$categories,'units'=>$references->codes('product_units')]); }
- public function sessions(Request $r): JsonResponse { $shop=$this->ownShop($r,(int)$r->query('shop_id')); $rows=DB::table('commercial_capture_sessions')->where('commercial_id',$r->user()->id)->where('shop_id',$shop->id)->latest()->get(); return response()->json(['sessions'=>$rows->map(fn($s)=>$this->sessionPayload($s,$shop))->values()]); }
- public function createSession(Request $r): JsonResponse { $d=$r->validate(['shop_id'=>'required|integer','name'=>'required|string|max:150','category_id'=>'required|integer|exists:categories,id','subcategory_id'=>'nullable|integer|exists:categories,id','notes'=>'nullable|string|max:1000','keep_category'=>'boolean']); $shop=$this->ownShop($r,(int)$d['shop_id']); $id=DB::table('commercial_capture_sessions')->insertGetId(['commercial_id'=>$r->user()->id,'shop_id'=>$shop->id,'name'=>$d['name'],'category_id'=>$d['category_id'],'subcategory_id'=>$d['subcategory_id']??null,'notes'=>$d['notes']??null,'keep_category'=>$d['keep_category']??true,'status'=>'in_progress','created_at'=>now(),'updated_at'=>now()]); return response()->json(['session'=>$this->sessionPayload(DB::table('commercial_capture_sessions')->find($id),$shop)],201); }
- public function session(Request $r,int $id): JsonResponse { $s=$this->ownedSession($r,$id); $shop=$this->ownShop($r,(int)$s->shop_id); $products=$this->sessionProducts($s->id); return response()->json(['session'=>$this->sessionPayload($s,$shop),'products'=>$products->map(fn($p)=>$this->productPayload($p))->values()]); }
- public function capture(Request $r): JsonResponse { $d=$r->validate(['session_id'=>'required|integer','category_id'=>'required|integer|exists:categories,id','subcategory_id'=>'nullable|integer|exists:categories,id','photo'=>'required|image|mimes:jpg,jpeg,png,webp|max:8192']); $s=$this->ownedSession($r,(int)$d['session_id']); $shop=$this->ownShop($r,(int)$s->shop_id); $categoryId=(int)($d['subcategory_id']??$d['category_id']); $imageData=$this->normalizePhotoUpload($r->file('photo'),'products/commercial-capture'); $p=DB::transaction(function() use ($r,$d,$s,$shop,$categoryId,$imageData) { $n=DB::table('commercial_capture_session_products')->where('session_id',$s->id)->count()+1; $attrs=['commercial_capture'=>true,'capture_session_id'=>$s->id,'main_category_id'=>(int)$d['category_id'],'subcategory_id'=>$d['subcategory_id']??null,'completion_step'=>0]; $vals=['shop_id'=>$shop->id,'category_id'=>$categoryId,'name'=>'Produit capturé #'.$n,'slug'=>Str::slug($shop->name.' produit '.$n.' '.Str::random(5)),'description'=>null,'price'=>0,'stock'=>0,'is_active'=>false]; if(Schema::hasColumn('products','created_by_commercial_id'))$vals['created_by_commercial_id']=$r->user()->id; if(Schema::hasColumn('products','status'))$vals['status']='draft'; if(Schema::hasColumn('products','product_attributes'))$vals['product_attributes']=$attrs; $p=Product::create($vals); $imgVals=array_merge(['product_id'=>$p->id,'is_main'=>true,'is_primary'=>true],$imageData); if(Schema::hasColumn('product_images','image_path'))$imgVals['image_path']=$imageData['path']; ProductImage::create($imgVals); DB::table('commercial_capture_session_products')->insert(['session_id'=>$s->id,'product_id'=>$p->id,'capture_status'=>'draft','created_at'=>now(),'updated_at'=>now()]); return $p; }); $p->load(['category','images']); return response()->json(['product'=>$this->productPayload($p)],201); }
- public function finish(Request $r,int $id): JsonResponse { $s=$this->ownedSession($r,$id); DB::table('commercial_capture_sessions')->where('id',$s->id)->update(['status'=>'finished','finished_at'=>now(),'updated_at'=>now()]); return response()->json(['ok'=>true]); }
- public function incomplete(Request $r): JsonResponse { $s=$this->ownedSession($r,(int)$r->query('session_id')); $ps=$this->sessionProducts($s->id)->filter(fn($p)=>!$p->is_active); return response()->json(['products'=>$ps->map(fn($p)=>$this->productPayload($p))->values()]); }
- public function edit(Request $r,Product $product): JsonResponse { $this->assertProduct($r,$product); $product->load(['category.parent','images']); return response()->json(['product'=>$this->productPayload($product,true)]); }
- public function saveStep(Request $r,Product $product,int $step): JsonResponse { $this->assertProduct($r,$product); abort_unless($step>=1&&$step<=5,404); $a=(array)($product->product_attributes??[]); foreach($r->all() as $k=>$v){if($v!==null)$a[$k]=$v;} $map=[];
-  if($step===1){foreach(['name','brand','short_description','description'] as $k) if(isset($a[$k])&&Schema::hasColumn('products',$k))$map[$k]=$a[$k]; if(isset($a['name'])){$map['name']=$a['name'];$map['slug']=Str::slug($a['name'].'-'.$product->id);} }
-  if($step===2){foreach(['price','promo_price','stock','unit','unit_label','min_order_quantity','sale_type','price_p1','price_p2','price_p3'] as $k) if(isset($a[$k])&&Schema::hasColumn('products',$k)){ $value=$a[$k]===''?null:$a[$k]; if(in_array($k,['price','promo_price','price_p1','price_p2','price_p3'],true)&&$value!==null){$value=max(0,(int)round((float)str_replace(',','.',(string)$value)));} $map[$k]=$value; } if(isset($a['is_negotiable'])&&Schema::hasColumn('products','is_negotiable')){ $negotiable=filter_var($a['is_negotiable'],FILTER_VALIDATE_BOOLEAN); $map['is_negotiable']=$negotiable && !empty($map['price_p1']??null) && !empty($map['price_p2']??null) && !empty($map['price_p3']??null); }}
-  if($step===3){foreach(['usage_area','technical_details','warranty'] as $k) if(isset($a[$k])&&Schema::hasColumn('products',$k))$map[$k]=$a[$k]===''?null:$a[$k];}
-  if($step===4){foreach(['weight_kg','length_cm','width_cm','height_cm'] as $k) if(isset($a[$k])&&Schema::hasColumn('products',$k))$map[$k]=$a[$k]===''?null:$a[$k]; if(isset($a['fragile'])&&Schema::hasColumn('products','fragile'))$map['fragile']=filter_var($a['fragile'],FILTER_VALIDATE_BOOLEAN); if(isset($a['requires_unloading'])&&Schema::hasColumn('products','requires_unloading'))$map['requires_unloading']=filter_var($a['requires_unloading'],FILTER_VALIDATE_BOOLEAN); if(isset($a['unloading_instructions'])&&Schema::hasColumn('products','unloading_instructions'))$map['unloading_instructions']=$a['unloading_instructions'];}
-  $a['completion_step']=max((int)($a['completion_step']??0),$step); if(Schema::hasColumn('products','product_attributes'))$map['product_attributes']=$a; $product->update($map); return response()->json(['ok'=>true,'product'=>$this->productPayload($product->fresh(['category','images']),true)]); }
- public function media(Request $r,Product $product): JsonResponse { $this->assertProduct($r,$product); $d=$r->validate(['kind'=>'nullable|string|max:20','media'=>'required|file|max:20480']); $imageData=$this->normalizePhotoUpload($r->file('media'),'products/commercial-media'); $imgVals=array_merge(['product_id'=>$product->id,'is_main'=>$product->images()->count()===0,'is_primary'=>$product->images()->count()===0],$imageData); if(Schema::hasColumn('product_images','image_path'))$imgVals['image_path']=$imageData['path']; ProductImage::create($imgVals); return response()->json(['ok'=>true,'url'=>Storage::url($imageData['path'])]); }
- public function publish(Request $r,Product $product): JsonResponse { $this->assertProduct($r,$product); $a=(array)($product->product_attributes??[]); if((float)$product->price<=0 || (int)$product->stock<0 || empty($product->name) || $product->images()->count()===0) return response()->json(['message'=>'La fiche produit est incomplète : nom, prix et photo sont obligatoires.'],422); $product->update(array_filter(['is_active'=>true,'status'=>Schema::hasColumn('products','status')?'active':null],fn($v)=>$v!==null)); DB::table('commercial_capture_session_products')->where('product_id',$product->id)->update(['capture_status'=>'completed','updated_at'=>now()]); return response()->json(['ok'=>true,'product'=>$this->productPayload($product->fresh(['category','images']),true)]); }
- /**
-  * Fait passer la photo par ProductImageNormalizer (mêmes variantes carrées
-  * WEBP que le web) afin d'obtenir un rendu cohérent sur l'accueil public et
-  * de rendre la photo éligible à la régénération IA. Si le fichier n'est pas
-  * exploitable comme photo produit (résolution/ratio hors standard, ou pièce
-  * jointe non-image via /media), on revient au stockage brut historique
-  * plutôt que de bloquer la capture commerciale.
-  */
- private function normalizePhotoUpload($file,string $directory): array {
-  try {
-   $result=app(ProductImageNormalizer::class)->normalize($file,'products');
-   return ['path'=>$result['master'],'original_path'=>$result['original'],'card_path'=>$result['card'],'thumb_path'=>$result['thumb'],'original_width'=>$result['original_width'],'original_height'=>$result['original_height'],'normalized_at'=>now()];
-  } catch (\Throwable $e) {
-   return ['path'=>$file->store($directory,'public')];
-  }
- }
- private function ownedSession(Request $r,int $id){$s=DB::table('commercial_capture_sessions')->where('id',$id)->where('commercial_id',$r->user()->id)->first();abort_unless($s,404);return $s;}
- private function sessionProducts(int $sid){$ids=DB::table('commercial_capture_session_products')->where('session_id',$sid)->pluck('product_id');return Product::query()->whereIn('id',$ids)->with(['category.parent','images'])->orderBy('id')->get();}
- private function assertProduct(Request $r,Product $p): void {$shop=$this->ownShop($r,(int)$p->shop_id); abort_unless($shop->id===$p->shop_id,404);}
- private function sessionPayload($s,Shop $shop): array {$ids=DB::table('commercial_capture_session_products')->where('session_id',$s->id)->pluck('product_id');$captured=$ids->count();$completed=$ids->isEmpty()?0:Product::whereIn('id',$ids)->where('is_active',true)->count();$cat=$s->category_id?Category::find($s->category_id):null;$sub=$s->subcategory_id?Category::find($s->subcategory_id):null;return ['id'=>$s->id,'shop_id'=>$shop->id,'shop_name'=>$shop->name,'name'=>$s->name,'status'=>$s->status,'captured'=>$captured,'completed'=>$completed,'drafts'=>max(0,$captured-$completed),'sync_status'=>'synced','date'=>optional($s->created_at?\Carbon\Carbon::parse($s->created_at):now())->format('d/m/Y H:i'),'category_id'=>$s->category_id,'category'=>$cat?->name??'','subcategory_id'=>$s->subcategory_id,'subcategory'=>$sub?->name??''];}
- private function productPayload(Product $p,bool $full=false): array {$p->loadMissing(['category.parent','images']);$a=(array)($p->product_attributes??[]);$main=$p->category?->parent?:$p->category;$sub=$p->category?->parent?$p->category:null;$base=['id'=>$p->id,'name'=>$p->name,'reference'=>$p->sku?:('PRD-'.str_pad((string)$p->id,4,'0',STR_PAD_LEFT)),'status'=>$p->is_active?'completed':'draft','image_url'=>$p->images->first()?->public_url??'','category'=>$main?->name??'','subcategory'=>$sub?->name??'','captured_at'=>optional($p->created_at)->format('H:i'),'attributes'=>$a]; if(!$full)return $base; return array_merge($base,$a,['brand'=>$p->brand,'short_description'=>$p->short_description,'description'=>$p->description,'price'=>$p->price,'promo_price'=>$p->promo_price,'stock'=>$p->stock,'unit'=>$p->unit,'unit_label'=>$p->unit_label,'min_order_quantity'=>$p->min_order_quantity,'sale_type'=>$p->sale_type,'is_negotiable'=>(bool)$p->is_negotiable,'price_p1'=>$p->price_p1,'price_p2'=>$p->price_p2,'price_p3'=>$p->price_p3,'content_per_unit'=>$p->content_per_unit,'color'=>$p->color,'standard'=>$p->standard,'usage_area'=>$p->usage_area,'technical_details'=>$p->technical_details,'warranty'=>$p->warranty,'packaging'=>$p->packaging,'weight_kg'=>$p->weight_kg,'length_cm'=>$p->length_cm,'width_cm'=>$p->width_cm,'height_cm'=>$p->height_cm,'fragile'=>(bool)$p->fragile,'requires_unloading'=>(bool)$p->requires_unloading,'unloading_instructions'=>$p->unloading_instructions]);}
+class CommercialMobileProductController extends Controller
+{
+    private function shops(Request $request)
+    {
+        $commercialId = (int) $request->user()->id;
+
+        return Shop::query()->where(function ($query) use ($commercialId) {
+            $query->where('created_by_commercial_id', $commercialId)
+                ->orWhere('managed_by_commercial_id', $commercialId)
+                ->orWhereHas('user', fn ($user) => $user->where('created_by_commercial_id', $commercialId));
+        });
+    }
+
+    private function ownShop(Request $request, int $id): Shop
+    {
+        $direct = $this->shops($request)->find($id);
+        if ($direct) {
+            return $direct;
+        }
+
+        $missionId = (int) $request->input('mission_id', $request->query('mission_id', 0));
+        if ($missionId > 0) {
+            $assignment = ShopConfigurationAssignment::query()
+                ->whereKey($missionId)
+                ->where('commercial_id', (int) $request->user()->id)
+                ->where('shop_id', $id)
+                ->where('manage_products', true)
+                ->whereIn('status', [ShopConfigurationAssignment::STATUS_PENDING, ShopConfigurationAssignment::STATUS_IN_PROGRESS])
+                ->first();
+
+            if ($assignment) {
+                return Shop::query()->findOrFail($id);
+            }
+        }
+
+        abort(404);
+    }
+
+    public function shopsIndex(Request $request): JsonResponse
+    {
+        $query = trim((string) $request->query('q', ''));
+        $rows = $this->shops($request)
+            ->withCount('products')
+            ->when($query !== '', fn ($builder) => $builder->where('name', 'like', "%{$query}%"))
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'shops' => $rows->map(fn ($shop) => [
+                'id' => $shop->id,
+                'name' => $shop->name,
+                'category' => $shop->main_category ?: 'Boutique OVANIE',
+                'location' => trim(($shop->city ?: '') . ' ' . ($shop->commune ?: ''), ' ,'),
+                'products_count' => (int) $shop->products_count,
+                'status' => $shop->status === 'suspended' ? 'suspended' : (($shop->status === 'approved' || $shop->is_active) ? 'online' : 'pending'),
+                'logistics' => $shop->logistics_mode_label,
+                'logistics_configured' => $shop->hasConfirmedLogistics(),
+                'payout_configured' => $shop->hasConfiguredPayout(),
+                'can_publish_products' => $shop->canPublishProducts(),
+                'image_url' => $shop->logo_url ?? null,
+            ])->values(),
+        ]);
+    }
+
+    public function meta(OvanieReferenceDataService $references): JsonResponse
+    {
+        $categories = collect($references->productCategories())
+            ->map(fn ($category) => [
+                'id' => $category['id'],
+                'name' => $category['name'],
+                'children' => collect($category['children'] ?? [])
+                    ->map(fn ($child) => ['id' => $child['id'], 'name' => $child['name']])
+                    ->values(),
+            ])
+            ->values();
+
+        return response()->json([
+            'categories' => $categories,
+            'units' => $references->codes('product_units'),
+        ]);
+    }
+
+    public function sessions(Request $request): JsonResponse
+    {
+        $shop = $this->ownShop($request, (int) $request->query('shop_id'));
+        $rows = DB::table('commercial_capture_sessions')
+            ->where('commercial_id', $request->user()->id)
+            ->where('shop_id', $shop->id)
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('commercial_capture_session_products')
+                    ->whereColumn('commercial_capture_session_products.session_id', 'commercial_capture_sessions.id');
+            })
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'sessions' => $rows->map(fn ($session) => $this->sessionPayload($session, $shop))->values(),
+        ]);
+    }
+
+    public function createSession(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'shop_id' => 'required|integer',
+            'name' => 'required|string|max:150',
+            'price' => 'required|numeric|min:0',
+            'promo_price' => 'nullable|numeric|min:0',
+            'stock' => 'required|integer|min:0',
+            'weight_kg' => 'required|numeric|min:0.01',
+            'unit' => 'required|string|max:40',
+        ]);
+
+        $shop = $this->ownShop($request, (int) $data['shop_id']);
+        $productName = trim((string) $data['name']);
+        $name = Str::limit($productName, 150, '');
+
+        $id = DB::table('commercial_capture_sessions')->insertGetId([
+            'commercial_id' => $request->user()->id,
+            'shop_id' => $shop->id,
+            'name' => $name,
+            'product_name' => $productName,
+            'product_price' => (float) $data['price'],
+            'product_promo_price' => $data['promo_price'] !== null && $data['promo_price'] !== '' ? (float) $data['promo_price'] : null,
+            'product_stock' => (int) $data['stock'],
+            'product_weight_kg' => (float) $data['weight_kg'],
+            'product_unit' => trim((string) $data['unit']),
+            'keep_category' => false,
+            'status' => 'in_progress',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'session' => $this->sessionPayload(DB::table('commercial_capture_sessions')->find($id), $shop),
+        ], 201);
+    }
+
+    public function session(Request $request, int $id): JsonResponse
+    {
+        $session = $this->ownedSession($request, $id);
+        $shop = $this->ownShop($request, (int) $session->shop_id);
+        $products = $this->sessionProducts($session->id);
+
+        return response()->json([
+            'session' => $this->sessionPayload($session, $shop),
+            'products' => $products->map(fn ($product) => $this->productPayload($product))->values(),
+        ]);
+    }
+
+    public function capture(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'session_id' => 'required|integer',
+            'photo' => 'required|image|mimes:jpg,jpeg,png,webp|max:8192',
+        ]);
+
+        $session = $this->ownedSession($request, (int) $data['session_id']);
+        $shop = $this->ownShop($request, (int) $session->shop_id);
+        $imageData = $this->normalizePhotoUpload($request->file('photo'), 'products/commercial-capture');
+
+        $product = DB::transaction(function () use ($request, $session, $shop, $imageData) {
+            $count = DB::table('commercial_capture_session_products')->where('session_id', $session->id)->count() + 1;
+            $productName = trim((string) ($session->product_name ?: $session->name ?: ('Produit capturé #' . $count)));
+            $attrs = [
+                'commercial_capture' => true,
+                'capture_session_id' => $session->id,
+                'admin_completion_required' => true,
+                'completion_step' => 0,
+                'source' => 'commercial_mobile',
+                'mission_assignment_id' => (int) $request->input('mission_id', 0) ?: null,
+                'captured_name' => $productName,
+                'captured_price' => $session->product_price,
+                'captured_promo_price' => $session->product_promo_price,
+                'captured_stock' => $session->product_stock,
+                'captured_weight_kg' => $session->product_weight_kg,
+                'captured_unit' => $session->product_unit,
+            ];
+
+            $values = [
+                'shop_id' => $shop->id,
+                'name' => $productName,
+                'slug' => Str::slug($shop->name . ' ' . $productName . ' ' . Str::random(5)),
+                'description' => null,
+                'price' => (int) round((float) ($session->product_price ?? 0)),
+                'promo_price' => $session->product_promo_price !== null ? (int) round((float) $session->product_promo_price) : null,
+                'stock' => max(0, (int) ($session->product_stock ?? 0)),
+                'weight_kg' => (float) ($session->product_weight_kg ?? 0),
+                'unit' => $session->product_unit ?: 'unité',
+                'unit_label' => $session->product_unit ?: 'unité',
+                'min_order_quantity' => 1,
+                'is_active' => false,
+            ];
+
+            if (Schema::hasColumn('products', 'created_by_commercial_id')) {
+                $values['created_by_commercial_id'] = $request->user()->id;
+            }
+            if (Schema::hasColumn('products', 'status')) {
+                $values['status'] = 'draft';
+            }
+            if (Schema::hasColumn('products', 'product_attributes')) {
+                $values['product_attributes'] = $attrs;
+            }
+
+            $product = Product::create(array_filter($values, static fn ($value) => $value !== null));
+
+            $imageValues = array_merge([
+                'product_id' => $product->id,
+                'is_main' => true,
+                'is_primary' => true,
+            ], $imageData);
+            if (Schema::hasColumn('product_images', 'image_path')) {
+                $imageValues['image_path'] = $imageData['path'];
+            }
+            ProductImage::create($imageValues);
+
+            DB::table('commercial_capture_session_products')->insert([
+                'session_id' => $session->id,
+                'product_id' => $product->id,
+                'capture_status' => 'draft',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('commercial_capture_sessions')
+                ->where('id', $session->id)
+                ->update([
+                    'status' => 'finished',
+                    'finished_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            return $product;
+        });
+
+        $product->load(['category', 'images']);
+
+        return response()->json([
+            'product' => $this->productPayload($product, true),
+        ], 201);
+    }
+
+    public function finish(Request $request, int $id): JsonResponse
+    {
+        $session = $this->ownedSession($request, $id);
+        DB::table('commercial_capture_sessions')->where('id', $session->id)->update([
+            'status' => 'finished',
+            'finished_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function incomplete(Request $request): JsonResponse
+    {
+        $session = $this->ownedSession($request, (int) $request->query('session_id'));
+        $products = $this->sessionProducts($session->id)->filter(fn ($product) => ! $product->is_active);
+
+        return response()->json([
+            'products' => $products->map(fn ($product) => $this->productPayload($product))->values(),
+        ]);
+    }
+
+    public function edit(Request $request, Product $product): JsonResponse
+    {
+        $this->assertProduct($request, $product);
+        $product->load(['category.parent', 'images']);
+
+        return response()->json(['product' => $this->productPayload($product, true)]);
+    }
+
+    public function saveStep(Request $request, Product $product, int $step): JsonResponse
+    {
+        $this->assertProduct($request, $product);
+        abort_unless($step >= 1 && $step <= 5, 404);
+
+        $attributes = (array) ($product->product_attributes ?? []);
+        foreach ($request->all() as $key => $value) {
+            if ($value !== null) {
+                $attributes[$key] = $value;
+            }
+        }
+
+        $map = [];
+        if ($step === 1) {
+            foreach (['name', 'brand', 'short_description', 'description'] as $key) {
+                if (isset($attributes[$key]) && Schema::hasColumn('products', $key)) {
+                    $map[$key] = $attributes[$key];
+                }
+            }
+            if (isset($attributes['name'])) {
+                $map['name'] = $attributes['name'];
+                $map['slug'] = Str::slug($attributes['name'] . '-' . $product->id);
+            }
+        }
+
+        if ($step === 2) {
+            foreach (['price', 'promo_price', 'stock', 'unit', 'unit_label', 'min_order_quantity', 'sale_type', 'price_p1', 'price_p2', 'price_p3'] as $key) {
+                if (isset($attributes[$key]) && Schema::hasColumn('products', $key)) {
+                    $value = $attributes[$key] === '' ? null : $attributes[$key];
+                    if (in_array($key, ['price', 'promo_price', 'price_p1', 'price_p2', 'price_p3'], true) && $value !== null) {
+                        $value = max(0, (int) round((float) str_replace(',', '.', (string) $value)));
+                    }
+                    $map[$key] = $value;
+                }
+            }
+            if (isset($attributes['is_negotiable']) && Schema::hasColumn('products', 'is_negotiable')) {
+                $negotiable = filter_var($attributes['is_negotiable'], FILTER_VALIDATE_BOOLEAN);
+                $map['is_negotiable'] = $negotiable && ! empty($map['price_p1'] ?? null) && ! empty($map['price_p2'] ?? null) && ! empty($map['price_p3'] ?? null);
+            }
+        }
+
+        if ($step === 3) {
+            foreach (['usage_area', 'technical_details', 'warranty'] as $key) {
+                if (isset($attributes[$key]) && Schema::hasColumn('products', $key)) {
+                    $map[$key] = $attributes[$key] === '' ? null : $attributes[$key];
+                }
+            }
+        }
+
+        if ($step === 4) {
+            foreach (['weight_kg', 'length_cm', 'width_cm', 'height_cm'] as $key) {
+                if (isset($attributes[$key]) && Schema::hasColumn('products', $key)) {
+                    $map[$key] = $attributes[$key] === '' ? null : $attributes[$key];
+                }
+            }
+            if (isset($attributes['fragile']) && Schema::hasColumn('products', 'fragile')) {
+                $map['fragile'] = filter_var($attributes['fragile'], FILTER_VALIDATE_BOOLEAN);
+            }
+            if (isset($attributes['requires_unloading']) && Schema::hasColumn('products', 'requires_unloading')) {
+                $map['requires_unloading'] = filter_var($attributes['requires_unloading'], FILTER_VALIDATE_BOOLEAN);
+            }
+            if (isset($attributes['unloading_instructions']) && Schema::hasColumn('products', 'unloading_instructions')) {
+                $map['unloading_instructions'] = $attributes['unloading_instructions'];
+            }
+        }
+
+        $attributes['completion_step'] = max((int) ($attributes['completion_step'] ?? 0), $step);
+        if (Schema::hasColumn('products', 'product_attributes')) {
+            $map['product_attributes'] = $attributes;
+        }
+
+        $product->update($map);
+
+        return response()->json([
+            'ok' => true,
+            'product' => $this->productPayload($product->fresh(['category', 'images']), true),
+        ]);
+    }
+
+    public function media(Request $request, Product $product): JsonResponse
+    {
+        $this->assertProduct($request, $product);
+        $request->validate([
+            'kind' => 'nullable|string|max:20',
+            'media' => 'required|file|max:20480',
+        ]);
+
+        $imageData = $this->normalizePhotoUpload($request->file('media'), 'products/commercial-media');
+        $imageValues = array_merge([
+            'product_id' => $product->id,
+            'is_main' => $product->images()->count() === 0,
+            'is_primary' => $product->images()->count() === 0,
+        ], $imageData);
+        if (Schema::hasColumn('product_images', 'image_path')) {
+            $imageValues['image_path'] = $imageData['path'];
+        }
+        ProductImage::create($imageValues);
+
+        return response()->json(['ok' => true, 'url' => Storage::url($imageData['path'])]);
+    }
+
+    public function publish(Request $request, Product $product): JsonResponse
+    {
+        $this->assertProduct($request, $product);
+
+        if ((float) $product->price <= 0 || (int) $product->stock < 0 || empty($product->name) || $product->images()->count() === 0) {
+            return response()->json(['message' => 'La fiche produit est incomplète : nom, prix et photo sont obligatoires.'], 422);
+        }
+
+        $shop = $this->ownShop($request, (int) $product->shop_id);
+        $publishable = $shop->canPublishProducts();
+        $product->update(array_filter([
+            'is_active' => $publishable,
+            'status' => Schema::hasColumn('products', 'status') ? ($publishable ? 'active' : 'pending_logistics') : null,
+        ], fn ($value) => $value !== null));
+
+        DB::table('commercial_capture_session_products')
+            ->where('product_id', $product->id)
+            ->update([
+                'capture_status' => $publishable ? 'completed' : 'draft',
+                'updated_at' => now(),
+            ]);
+
+        return response()->json([
+            'ok' => true,
+            'published' => $publishable,
+            'message' => $publishable
+                ? 'Produit publié.'
+                : 'Produit enregistré, mais publication bloquée jusqu’à la configuration complète de la boutique.',
+            'product' => $this->productPayload($product->fresh(['category', 'images']), true),
+        ]);
+    }
+
+    private function normalizePhotoUpload($file, string $directory): array
+    {
+        try {
+            $result = app(ProductImageNormalizer::class)->normalize($file, 'products');
+
+            return [
+                'path' => $result['master'],
+                'original_path' => $result['original'],
+                'card_path' => $result['card'],
+                'thumb_path' => $result['thumb'],
+                'original_width' => $result['original_width'],
+                'original_height' => $result['original_height'],
+                'normalized_at' => now(),
+            ];
+        } catch (\Throwable $e) {
+            return ['path' => $file->store($directory, 'public')];
+        }
+    }
+
+    private function ownedSession(Request $request, int $id)
+    {
+        $session = DB::table('commercial_capture_sessions')
+            ->where('id', $id)
+            ->where('commercial_id', $request->user()->id)
+            ->first();
+
+        abort_unless($session, 404);
+
+        return $session;
+    }
+
+    private function sessionProducts(int $sessionId)
+    {
+        $ids = DB::table('commercial_capture_session_products')->where('session_id', $sessionId)->pluck('product_id');
+
+        return Product::query()
+            ->whereIn('id', $ids)
+            ->with(['category.parent', 'images'])
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function assertProduct(Request $request, Product $product): void
+    {
+        $shop = $this->ownShop($request, (int) $product->shop_id);
+        abort_unless($shop->id === $product->shop_id, 404);
+    }
+
+    private function sessionPayload($session, Shop $shop): array
+    {
+        $ids = DB::table('commercial_capture_session_products')->where('session_id', $session->id)->pluck('product_id');
+        $captured = $ids->count();
+        $completed = $ids->isEmpty() ? 0 : Product::whereIn('id', $ids)->where('is_active', true)->count();
+        $category = $session->category_id ? Category::find($session->category_id) : null;
+        $subcategory = $session->subcategory_id ? Category::find($session->subcategory_id) : null;
+
+        $productName = trim((string) ($session->product_name ?? $session->name ?? ''));
+        $price = isset($session->product_price) ? (float) $session->product_price : null;
+        $promoPrice = isset($session->product_promo_price) ? (float) $session->product_promo_price : null;
+        $stock = isset($session->product_stock) ? (int) $session->product_stock : null;
+        $weightKg = isset($session->product_weight_kg) ? (float) $session->product_weight_kg : null;
+        $unit = trim((string) ($session->product_unit ?? 'unité')) ?: 'unité';
+
+        return [
+            'id' => $session->id,
+            'shop_id' => $shop->id,
+            'shop_name' => $shop->name,
+            'name' => $productName,
+            'status' => (string) ($session->status ?? 'in_progress'),
+            'captured' => $captured,
+            'completed' => $completed,
+            'drafts' => max(0, $captured - $completed),
+            'sync_status' => 'synced',
+            'date' => ! empty($session->created_at) ? \Carbon\Carbon::parse($session->created_at)->format('d/m/Y H:i') : now()->format('d/m/Y H:i'),
+            'category_id' => $session->category_id ?? null,
+            'category' => $category?->name ?? '',
+            'subcategory_id' => $session->subcategory_id ?? null,
+            'subcategory' => $subcategory?->name ?? '',
+            'product_name' => $productName,
+            'price' => $price,
+            'promo_price' => $promoPrice,
+            'stock' => $stock,
+            'weight_kg' => $weightKg,
+            'unit' => $unit,
+        ];
+    }
+
+    private function productPayload(Product $product, bool $full = false): array
+    {
+        $product->loadMissing(['category.parent', 'images']);
+        $attributes = (array) ($product->product_attributes ?? []);
+        $main = $product->category?->parent ?: $product->category;
+        $sub = $product->category?->parent ? $product->category : null;
+
+        $base = [
+            'id' => $product->id,
+            'name' => $product->name,
+            'reference' => $product->sku ?: ('PRD-' . str_pad((string) $product->id, 4, '0', STR_PAD_LEFT)),
+            'status' => $product->is_active ? 'completed' : 'draft',
+            'image_url' => $product->images->first()?->public_url ?? '',
+            'category' => $main?->name ?? '',
+            'subcategory' => $sub?->name ?? '',
+            'captured_at' => optional($product->created_at)->format('H:i'),
+            'price' => $product->price,
+            'promo_price' => $product->promo_price,
+            'stock' => $product->stock,
+            'unit' => $product->unit,
+            'weight_kg' => $product->weight_kg,
+            'attributes' => $attributes,
+            'admin_completion_required' => (bool) ($attributes['admin_completion_required'] ?? false),
+        ];
+
+        if (! $full) {
+            return $base;
+        }
+
+        return array_merge($base, $attributes, [
+            'brand' => $product->brand,
+            'short_description' => $product->short_description,
+            'description' => $product->description,
+            'unit_label' => $product->unit_label,
+            'min_order_quantity' => $product->min_order_quantity,
+            'sale_type' => $product->sale_type,
+            'is_negotiable' => (bool) $product->is_negotiable,
+            'price_p1' => $product->price_p1,
+            'price_p2' => $product->price_p2,
+            'price_p3' => $product->price_p3,
+            'content_per_unit' => $product->content_per_unit,
+            'color' => $product->color,
+            'standard' => $product->standard,
+            'usage_area' => $product->usage_area,
+            'technical_details' => $product->technical_details,
+            'warranty' => $product->warranty,
+            'packaging' => $product->packaging,
+            'length_cm' => $product->length_cm,
+            'width_cm' => $product->width_cm,
+            'height_cm' => $product->height_cm,
+            'fragile' => (bool) $product->fragile,
+            'requires_unloading' => (bool) $product->requires_unloading,
+            'unloading_instructions' => $product->unloading_instructions,
+        ]);
+    }
 }

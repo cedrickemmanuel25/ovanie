@@ -55,7 +55,9 @@
     display: grid;
     grid-template-columns: minmax(430px, 1.12fr) minmax(390px, 1fr) 330px;
     gap: 12px;
-    align-items: stretch;
+    /* Chaque colonne garde sa hauteur propre : une longue galerie ne doit plus
+       étirer les blocs Informations et Achat jusqu'en bas de la page. */
+    align-items: start;
 }
 .ov-product-hero > * { min-width: 0; }
 
@@ -76,8 +78,25 @@
     grid-template-columns: 58px minmax(0, 1fr);
     gap: 9px;
     padding: 10px;
+    height: 540px;
+    max-height: 540px;
+    overflow: hidden;
+    align-self: start;
 }
-.ov-product-thumbs { display: flex; flex-direction: column; gap: 8px; }
+.ov-product-thumbs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 518px;
+    max-height: 518px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 3px;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.ov-product-thumbs::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .ov-product-thumb,
 .ov-product-thumb-more {
     width: 56px;
@@ -101,12 +120,13 @@
     position: relative;
     display: grid;
     place-items: center;
-    min-height: 420px;
+    height: 518px;
+    min-height: 0;
     overflow: hidden;
     border-radius: 8px;
     background: #fff;
 }
-.ov-product-main-image { width: 100%; height: 100%; max-height: 430px; object-fit: contain; padding: 18px; }
+.ov-product-main-image { width: 100%; height: 100%; max-height: 100%; object-fit: contain; padding: 18px; }
 .ov-product-badge {
     position: absolute;
     z-index: 3;
@@ -344,7 +364,9 @@
 @media (max-width: 840px) {
     .ov-product-container { width: min(calc(100% - 20px), 760px); }
     .ov-product-hero { grid-template-columns: 1fr; }
-    .ov-product-gallery-panel { min-height: 390px; }
+    .ov-product-gallery-panel { height: auto; max-height: none; min-height: 390px; overflow: visible; }
+    .ov-product-thumbs { height: auto; max-height: 390px; }
+    .ov-product-image-stage { height: 390px; min-height: 390px; }
     .ov-product-image-stage { min-height: 360px; }
     .ov-product-buybox { display: block; }
     .ov-product-tools-grid,
@@ -358,8 +380,8 @@
     .ov-product-page { padding-top: 6px; }
     .ov-product-container { width: min(calc(100% - 14px), 520px); }
     .ov-product-breadcrumb { font-size: 10px; }
-    .ov-product-gallery-panel { grid-template-columns: 1fr; padding: 8px; }
-    .ov-product-thumbs { order: 2; flex-direction: row; overflow-x: auto; }
+    .ov-product-gallery-panel { grid-template-columns: 1fr; padding: 8px; height: auto; max-height: none; }
+    .ov-product-thumbs { order: 2; flex-direction: row; overflow-x: auto; overflow-y: hidden; height: auto; max-height: none; padding-right: 0; }
     .ov-product-thumb,
     .ov-product-thumb-more { width: 50px; height: 50px; flex: 0 0 auto; }
     .ov-product-image-stage { min-height: 300px; }
@@ -380,3 +402,7 @@
     .ov-product-trust-strip > div:nth-child(2) { border-right: 0; }
     .ov-product-trust-strip > div:nth-child(-n+2) { border-bottom: 1px solid #edf0f4; }
 }
+
+
+/* Variantes produit OVANIE */
+.ov-variant-selector{margin:16px 0;padding:14px;border:1px solid #dbe4f0;border-radius:14px;background:#f8fbff}.ov-variant-selector__head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}.ov-variant-selector__head strong{color:#102a56;font-size:14px}.ov-variant-selector__head span{font-size:12px;font-weight:800;color:#667085}.ov-variant-options{display:flex;flex-wrap:wrap;gap:8px}.ov-variant-option{display:inline-flex;align-items:center;gap:7px;min-height:38px;padding:7px 11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#102a56;font-weight:800;cursor:pointer}.ov-variant-option.is-active{border-color:#f59e0b;box-shadow:0 0 0 2px rgba(245,158,11,.14);background:#fffaf0}.ov-variant-option:disabled{opacity:.45;cursor:not-allowed}.ov-variant-option small{font-size:9px;color:#b42318}.ov-variant-swatch{width:17px;height:17px;border-radius:50%;border:1px solid rgba(0,0,0,.12)}.ov-variant-help{margin:9px 0 0;color:#64748b;font-size:11px}

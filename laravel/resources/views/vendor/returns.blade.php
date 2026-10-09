@@ -469,7 +469,7 @@
 
     <section class="vr-support">
         <div class="vr-support-copy"><span class="vr-support-icon"><i data-lucide="headphones"></i></span><div><h3>Besoin d’assistance ? Contactez le support OVANIE</h3><p>Notre équipe vous accompagne pour toute question liée aux retours ou remboursements.</p></div></div>
-        <a href="tel:0161780000" class="vr-outline-btn"><i data-lucide="headphones"></i> Contacter le support</a>
+        <a href="tel:{{ config('public_contact.phone_e164') }}" class="vr-outline-btn"><i data-lucide="headphones"></i> Contacter le support</a>
     </section>
 </div>
 

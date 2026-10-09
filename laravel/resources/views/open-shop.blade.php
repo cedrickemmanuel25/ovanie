@@ -12,6 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
     <link rel="stylesheet" href="{{ asset('css/open-shop.css') }}?v={{ file_exists(public_path('css/open-shop.css')) ? filemtime(public_path('css/open-shop.css')) : time() }}">
+    <link rel="stylesheet" href="{{ asset('css/vendor-mobile.css') }}?v={{ filemtime(public_path('css/vendor-mobile.css')) }}">
+    <script src="{{ asset('js/vendor-mobile.js') }}?v={{ filemtime(public_path('js/vendor-mobile.js')) }}" defer></script>
 </head>
 @php
     $stepFields = [
@@ -64,7 +66,7 @@
     <header class="topbar">
         <div class="topbar__inner">
             <a href="{{ route('home') }}" class="brand" aria-label="Retour à l'accueil OVANIE">
-                <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE">
+                <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE">
             </a>
 
             <div class="topbar__support">
@@ -107,29 +109,6 @@
             <strong>ESPACE VENDEUR OVANIE</strong>
         </div>
 
-        <section class="intro-card">
-            <div class="intro-card__content">
-                <span class="eyebrow">ESPACE VENDEUR OVANIE</span>
-                <h1>Ouvrez votre boutique professionnelle</h1>
-                <p>Rejoignez la marketplace des matériaux de construction en Côte d’Ivoire et développez votre activité en toute simplicité.</p>
-
-                <div class="intro-stats" aria-label="Avantages vendeur">
-                    <div>
-                        <span class="intro-stat__icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></span>
-                        <span class="intro-stat__copy"><strong>5 étapes simples</strong><small>Création rapide</small></span>
-                    </div>
-                    <div>
-                        <span class="intro-stat__icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
-                        <span class="intro-stat__copy"><strong>GPS adresse intelligente</strong><small>Position précise</small></span>
-                    </div>
-                    <div>
-                        <span class="intro-stat__icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
-                        <span class="intro-stat__copy"><strong>KYC vérification séparée</strong><small>Sécurisé & conforme</small></span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         @if ($errors->any())
             <div class="alert alert-error" role="alert">
                 <div class="alert-icon">!</div>
@@ -155,7 +134,7 @@
                         <span class="step-badge">Compte vendeur</span>
                     </div>
 
-                    <div class="content-grid">
+                    <div class="content-grid content-grid-single">
                         <div class="form-panel">
                             <div class="form-grid two-cols">
                                 <div class="field span-2-mobile">
@@ -283,28 +262,6 @@
                                 </div>
                             </div>
                         </div>
-
-                        <aside class="info-panel info-panel-blue">
-                            <div class="info-icon">01</div>
-                            <h3>Un seul responsable principal</h3>
-                            <p>Le compte créé devient propriétaire de la boutique et reçoit les notifications importantes liées aux commandes, paiements et contrôles.</p>
-                            <ul class="check-list">
-                                <li>Accès immédiat à l’espace vendeur</li>
-                                <li>KYC suivi séparément</li>
-                                <li>Données protégées et non affichées au client</li>
-                            </ul>
-                            <div class="store-line-illustration" aria-hidden="true">
-                                <svg viewBox="0 0 360 150">
-                                    <path d="M32 132h296"/>
-                                    <path d="M94 62h118l10 28H84l10-28zM91 90v42h124V90M110 90v42M190 90v42"/>
-                                    <path d="M126 108h42v24h-42zM244 102h54v30h-54z"/>
-                                    <circle cx="286" cy="122" r="22"/>
-                                    <circle cx="286" cy="115" r="7"/>
-                                    <path d="M274 136c3-8 8-12 12-12s9 4 12 12"/>
-                                    <path d="M46 132V91h28v41M54 91V70h12v21M226 132V82h18v50M234 82V58h8v24" opacity=".18"/>
-                                </svg>
-                            </div>
-                        </aside>
                     </div>
                 </section>
 

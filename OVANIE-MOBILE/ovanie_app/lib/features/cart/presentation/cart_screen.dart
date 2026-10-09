@@ -142,7 +142,7 @@ class _CartScreenState extends State<CartScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'La suppression a été enregistrée sur ce téléphone. La synchronisation sera réessayée automatiquement.',
+              'Le produit a été retiré de votre panier.',
             ),
           ),
         );
@@ -167,8 +167,8 @@ class _CartScreenState extends State<CartScreen> {
       (line) => selection.contains(line.product.id),
     ).where(
       (line) => !line.product.canAddToCart ||
-          line.product.stock <= 0 ||
-          line.quantity > line.product.stock ||
+          line.availableStock <= 0 ||
+          line.quantity > line.availableStock ||
           line.quantity < (line.product.minOrderQuantity <= 0 ? 1 : line.product.minOrderQuantity),
     );
     if (unavailable.isNotEmpty) {
@@ -542,7 +542,7 @@ class _CartHeader extends StatelessWidget {
                       '$count',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -634,7 +634,7 @@ class _CartLineTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final product = line.product;
     final hasOldPrice = product.hasDiscount && product.price > line.unitPrice;
-    final inStock = product.canAddToCart && product.stock >= line.quantity;
+    final inStock = product.canAddToCart && line.availableStock >= line.quantity;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -655,7 +655,7 @@ class _CartLineTile extends StatelessWidget {
               SizedBox(
                 width: imageSize,
                 height: imageSize,
-                child: _ProductImage(url: product.imageUrl),
+                child: _ProductImage(url: line.imageUrl),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -673,6 +673,20 @@ class _CartLineTile extends StatelessWidget {
                         fontWeight: FontWeight.w900,
                       ),
                     ),
+                    if (line.variant != null) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: OvanieColors.navy.withValues(alpha: .06),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          line.variant!.label,
+                          style: const TextStyle(color: OvanieColors.navy, fontSize: 12, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
                     if (_subtitle().isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(
@@ -713,7 +727,7 @@ class _CartLineTile extends StatelessWidget {
                             formatFcfa(product.price),
                             style: const TextStyle(
                               color: OvanieColors.muted,
-                              fontSize: 10.5,
+                              fontSize: 12,
                               decoration: TextDecoration.lineThrough,
                             ),
                           ),
@@ -757,7 +771,7 @@ class _CartLineTile extends StatelessWidget {
                           tooltip: 'Supprimer',
                           onPressed: () async {
                             final synced = await CartStore.instance
-                                .removeAndSync(product.id);
+                                .removeLineAndSync(line.key);
                             if (!context.mounted ||
                                 synced ||
                                 !SessionStore.instance.isAuthenticated) {
@@ -766,7 +780,7 @@ class _CartLineTile extends StatelessWidget {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
-                                  'Le produit a été supprimé sur ce téléphone. La synchronisation sera réessayée automatiquement.',
+                                  'Le produit a été retiré de votre panier.',
                                 ),
                               ),
                             );
@@ -873,7 +887,7 @@ class _QuantityControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final product = line.product;
-    final canIncrement = product.canAddToCart && line.quantity < product.stock;
+    final canIncrement = product.canAddToCart && line.quantity < line.availableStock;
     return Container(
       height: 42,
       decoration: BoxDecoration(
@@ -886,7 +900,7 @@ class _QuantityControl extends StatelessWidget {
           Expanded(
             child: _QtyTap(
               icon: Icons.remove_rounded,
-              onTap: () => CartStore.instance.decrement(product.id),
+              onTap: () => CartStore.instance.decrement(line.key),
             ),
           ),
           Expanded(
@@ -905,7 +919,7 @@ class _QuantityControl extends StatelessWidget {
             child: _QtyTap(
               icon: Icons.add_rounded,
               onTap: canIncrement
-                  ? () => CartStore.instance.increment(product.id)
+                  ? () => CartStore.instance.increment(line.key)
                   : null,
             ),
           ),
@@ -1066,7 +1080,7 @@ class _DeliveryInfoCard extends StatelessWidget {
                       'Livraison disponible',
                       style: TextStyle(
                         color: OvanieColors.success,
-                        fontSize: 10.2,
+                        fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1077,7 +1091,7 @@ class _DeliveryInfoCard extends StatelessWidget {
                   'Frais confirmés avant validation',
                   style: TextStyle(
                     color: OvanieColors.muted,
-                    fontSize: 10.5,
+                    fontSize: 12,
                     height: 1.35,
                   ),
                 ),
@@ -1161,7 +1175,7 @@ class _OrderSummary extends StatelessWidget {
                       'Modifiez les quantités des produits indisponibles avant de continuer.',
                       style: TextStyle(
                         color: OvanieColors.danger,
-                        fontSize: 10.8,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
                     ),

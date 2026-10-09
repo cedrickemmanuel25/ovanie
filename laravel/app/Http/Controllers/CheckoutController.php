@@ -112,7 +112,7 @@ class CheckoutController extends Controller
         CheckoutAddressResolver $addressResolver
     ): View|RedirectResponse
     {
-        $cart = Cart::with('items.product.shop')
+        $cart = Cart::with(['items.product.shop', 'items.variant'])
             ->where('user_id', $request->user()->id)
             ->first();
 
@@ -288,7 +288,7 @@ class CheckoutController extends Controller
 
         $requestedLoyaltyPoints = (int) $request->input('loyalty_points', 0);
 
-        $cart = Cart::with('items.product.shop')
+        $cart = Cart::with(['items.product.shop', 'items.variant'])
             ->where('user_id', $request->user()->id)
             ->first();
 
@@ -458,7 +458,7 @@ class CheckoutController extends Controller
                 throw new \RuntimeException('Ce compte ne peut plus créer de commande.');
             }
 
-            $cart = Cart::with('items.product.shop')
+            $cart = Cart::with(['items.product.shop', 'items.variant'])
                 ->where('user_id', $request->user()->id)
                 ->lockForUpdate()
                 ->first();
@@ -476,7 +476,7 @@ class CheckoutController extends Controller
             }
 
             $optimizer->optimizeForAddress($cart, $this->optimizationAddressPayload($request));
-            $cart->loadMissing('items.product.shop');
+            $cart->loadMissing(['items.product.shop', 'items.variant']);
 
             foreach ($cart->items as $cartItem) {
                 $lockedProduct = \App\Models\Product::query()
@@ -497,7 +497,7 @@ class CheckoutController extends Controller
                     ->whereKey($lockedProduct->shop_id)->lockForUpdate()->first());
 
                 if (! $lockedProduct->shop?->canPublishProducts()) {
-                    throw new \RuntimeException('Le produit ' . $lockedProduct->name . ' n’est plus disponible à la commande.');
+                    throw new \RuntimeException('Le produit ' . $lockedProduct->name . ' est visible sur OVANIE mais sa boutique doit terminer sa configuration avant validation de la commande.');
                 }
 
                 $minimumQuantity = max(1, (int) ($lockedProduct->min_order_quantity ?: 1));
@@ -505,8 +505,11 @@ class CheckoutController extends Controller
                     throw new \RuntimeException('La quantité minimale pour ' . $lockedProduct->name . ' est de ' . $minimumQuantity . '.');
                 }
 
-                if ((int) $lockedProduct->stock < (int) $cartItem->quantity) {
-                    throw new \RuntimeException('Stock insuffisant pour le produit ' . $lockedProduct->name . '.');
+                $cartItem->loadMissing('variant');
+                $availableStock = (int) ($cartItem->variant?->stock ?? $lockedProduct->stock);
+                if ($availableStock < (int) $cartItem->quantity) {
+                    $variantLabel = $cartItem->variant_label_snapshot ? ' (' . $cartItem->variant_label_snapshot . ')' : '';
+                    throw new \RuntimeException('Stock insuffisant pour le produit ' . $lockedProduct->name . $variantLabel . '.');
                 }
 
                 $cartItem->setRelation('product', $lockedProduct->loadMissing('shop'));
@@ -662,6 +665,9 @@ class CheckoutController extends Controller
                 $orderItemPayload = [
                     'order_id' => $order->id,
                     'product_id' => $item->product_id,
+                    'product_variant_id' => $item->product_variant_id,
+                    'variant_label_snapshot' => $item->variant_label_snapshot,
+                    'variant_image_snapshot' => $item->variant_image_snapshot,
                     'original_product_id' => $item->original_product_id ?: $item->product_id,
                     'fulfilled_product_id' => $item->fulfillment_product_id ?: $item->product_id,
                     'original_shop_id' => $item->original_shop_id ?: $item->product?->shop_id,
@@ -1243,7 +1249,6 @@ class CheckoutController extends Controller
         Request $request,
         CheckoutSummaryService $checkoutSummary,
         CartFulfillmentOptimizer $optimizer,
-        CommissionService $commissions,
         CheckoutPaymentOptionsService $paymentOptions
     )
     {
@@ -1269,7 +1274,7 @@ class CheckoutController extends Controller
         app(\App\Services\Geo\DeliveryPointGuard::class)->validateOperationalPoint($request);
         $territoryZone = app(\App\Services\LogisticsTerritoryCoverageService::class)->summaryForRequest($request);
 
-        $cart = Cart::with('items.product.shop')
+        $cart = Cart::with(['items.product.shop', 'items.variant'])
             ->where('user_id', $request->user()->id)
             ->first();
 
@@ -1278,8 +1283,6 @@ class CheckoutController extends Controller
                 'subtotal' => 0,
                 'delivery_fee' => 0,
                 'total' => 0,
-                'commission' => 0,
-                'delivery_breakdown' => [],
                 'total_weight_kg' => 0,
                 'total_volume_m3' => 0,
                 'recommended_vehicle' => null,
@@ -1304,8 +1307,6 @@ class CheckoutController extends Controller
                 'subtotal' => $subtotal,
                 'delivery_fee' => 0,
                 'total' => $subtotal,
-                'commission' => $commissions->commissionFromPublicItems($cart->items),
-                'delivery_breakdown' => [],
                 'total_weight_kg' => 0,
                 'total_volume_m3' => 0,
                 'recommended_vehicle' => null,
@@ -1325,17 +1326,14 @@ class CheckoutController extends Controller
             'subtotal'                => $checkout['subtotal'],
             'delivery_fee'            => $checkout['delivery_fee'],
             'total'                   => $checkout['total'],
-            'commission'              => $checkout['commission'],
             'delivery_quote_required' => $checkout['delivery_quote_required'] ?? false,
             'delivery_available'      => $checkout['delivery_available'] ?? false,
             'delivery_message'        => $checkout['client_delivery_message'] ?? null,
-            'delivery_debug'          => $checkout['delivery_issues'] ?? [],
             'delivery_calculated'     => true,
             'total_weight_kg'         => $checkout['total_weight_kg']         ?? 0,
             'total_volume_m3'         => $checkout['total_volume_m3']         ?? 0,
             'recommended_vehicle'     => $checkout['recommended_vehicle']     ?? null,
             'recommended_vehicle_code'=> $checkout['recommended_vehicle_code']?? null,
-            'shop_deliveries'         => $checkout['shop_deliveries']         ?? [],
             'territory_zone'         => $territoryZone,
             'payment_options'         => $paymentOptions->forCart($preview['cart'], (float) $checkout['total']),
         ]);
@@ -1439,7 +1437,7 @@ class CheckoutController extends Controller
             'delivery_commune' => $zone === 'abidjan'
                 ? ($commune ?: $existingCommune ?: 'Abidjan')
                 : ($request->input('delivery_commune') ?: $commune),
-            'delivery_quartier' => $quartier ?: $request->input('delivery_quartier'),
+            'delivery_quartier' => $request->input('delivery_quartier') ?: $quartier,
             'delivery_city' => $zone === 'abidjan'
                 ? null
                 : ($city ?: $request->input('delivery_city')),
@@ -2105,7 +2103,7 @@ class CheckoutController extends Controller
         }
 
         $itemName = $selectedIds->isNotEmpty()
-            ? count($orderItemIds) . ' produit(s) sélectionné(s)'
+            ? (count($orderItemIds) > 1 ? count($orderItemIds) . ' produits sélectionnés' : '1 produit sélectionné')
             : 'Reste de la commande';
 
         return $this->startPayDunyaPayment(

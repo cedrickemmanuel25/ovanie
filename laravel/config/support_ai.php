@@ -14,11 +14,11 @@ return [
     |
     | WhatsApp et téléphone humain sont volontairement séparés.
     */
-    'support_phone' => env('OVANIE_SUPPORT_PHONE', '01 61 78 18 18'),
+    'support_phone' => env('OVANIE_SUPPORT_PHONE', '01 61 78 00 00'),
     'whatsapp_public_number' => $whatsappPublicNumber,
 
     /* Uniquement après échec final de Miss Salomé. */
-    'human_escalation_phone' => env('OVANIE_HUMAN_ESCALATION_PHONE', '01 61 78 18 18'),
+    'human_escalation_phone' => env('OVANIE_HUMAN_ESCALATION_PHONE', '01 61 78 00 00'),
     'local_rate_notice' => env('OVANIE_SUPPORT_LOCAL_RATE_NOTICE', 'appel facturé au tarif local'),
 
     'queue' => env('SUPPORT_QUEUE', 'default'),
@@ -78,7 +78,7 @@ return [
         'from_number' => env('SUPPORT_TELEPHONY_FROM_NUMBER'),
         'human_transfer_number' => env(
             'SUPPORT_TELEPHONY_HUMAN_TRANSFER_NUMBER',
-            env('OVANIE_HUMAN_ESCALATION_PHONE', '01 61 78 18 18')
+            env('OVANIE_HUMAN_ESCALATION_PHONE', '01 61 78 00 00')
         ),
         'timeout' => (int) env('SUPPORT_TELEPHONY_TIMEOUT', 20),
         'record_calls' => filter_var(env('SUPPORT_TELEPHONY_RECORD_CALLS', false), FILTER_VALIDATE_BOOL),

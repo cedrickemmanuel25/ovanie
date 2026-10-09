@@ -195,45 +195,47 @@ class AdminOrderController extends Controller
         $order = Order::findOrFail($id);
 
         $request->validate([
-            'status' => 'nullable|string',
-            'payment_status' => 'required|string',
+            'status' => ['nullable', \Illuminate\Validation\Rule::in(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'completed', 'paid'])],
+            'payment_status' => ['required', \Illuminate\Validation\Rule::in(['pending', 'paid', 'failed', 'commission_paid', 'cod_completed', 'verified'])],
         ]);
 
-        if ($request->filled('status')) {
+        $previousStatus = (string) $order->status;
+        $previousPaymentStatus = (string) $order->payment_status;
+        $paymentChanged = $request->payment_status !== $previousPaymentStatus;
+        $statusChosen = $request->filled('status') && $request->status !== $previousStatus;
+        $alreadyHandedOver = in_array($previousStatus, ['shipped', 'delivered', 'completed'], true);
+
+        // Une commande déjà livrée ou finalisée ne peut pas voir son paiement repasser « en attente » ou « échoué » :
+        // cela annulerait la commande et remettrait le stock en vente alors que le client a reçu ses articles.
+        if ($paymentChanged && in_array($previousStatus, ['delivered', 'completed'], true)
+            && in_array($request->payment_status, ['pending', 'failed'], true)) {
+            return back()->with('error', 'Cette commande est déjà livrée : son paiement ne peut plus être remis en attente ni marqué comme échoué.');
+        }
+
+        if ($statusChosen) {
             $order->status = $request->status;
         }
 
-        $order->payment_status = $request->payment_status;
+        $order->payment_status = $request->payment_status === 'verified' ? 'paid' : $request->payment_status;
 
-        switch ($request->payment_status) {
-            case 'paid':
-                $order->status = $order->payment_method === 'cash_on_delivery'
-                    ? 'processing'
-                    : 'confirmed';
+        if ($request->payment_status === 'paid' && $request->hasFile('payment_proof')) {
+            $order->payment_proof = $request->file('payment_proof')->store('payment_proofs', 'local');
+        }
 
-                if ($request->hasFile('payment_proof')) {
-                    $path = $request->file('payment_proof')->store('payment_proofs', 'local');
-                    $order->payment_proof = $path;
-                }
-                break;
+        // Le statut de la commande suit le paiement uniquement quand le paiement vient de changer et que
+        // l'administrateur n'a pas lui-même choisi un statut. Une commande déjà expédiée ne revient pas en arrière.
+        if ($paymentChanged && ! $statusChosen) {
+            $derivedStatus = match ($request->payment_status) {
+                'paid' => $order->payment_method === 'cash_on_delivery' ? 'processing' : 'confirmed',
+                'commission_paid', 'verified' => 'confirmed',
+                'failed' => 'cancelled',
+                'pending' => 'pending',
+                default => null,
+            };
 
-            case 'commission_paid':
-                $order->status = 'confirmed';
-                break;
-
-            case 'failed':
-                $order->status = 'cancelled';
-                break;
-
-            case 'verified':
-                $order->status = 'confirmed';
-                $order->payment_status = 'paid';
-                break;
-
-            case 'pending':
-            default:
-                $order->status = 'pending';
-                break;
+            if ($derivedStatus !== null && ! ($alreadyHandedOver && $derivedStatus !== 'cancelled')) {
+                $order->status = $derivedStatus;
+            }
         }
 
         $order->save();

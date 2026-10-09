@@ -64,9 +64,19 @@ class PublicProductVisibilityService
 
         if (Schema::hasTable('shops')) {
             $query->whereHas('shop', function (Builder $shop) {
-                // Source de vérité unique : la visibilité publique exige exactement
-                // la même préparation commerciale/logistique que l'ajout au panier.
-                $shop->canPublishProducts();
+                // Une boutique déjà validée par OVANIE reste visible dans le catalogue
+                // même si sa nouvelle configuration logistique/reversement doit encore
+                // être régularisée. L'éligibilité à la commande est volontairement
+                // contrôlée plus tard par le checkout avec Shop::canPublishProducts().
+                if (Schema::hasColumn('shops', 'status')) {
+                    $shop->whereIn('status', ['approved', 'active', 'actif']);
+                }
+
+                if (Schema::hasColumn('shops', 'is_active')) {
+                    $shop->where(function (Builder $activeShop) {
+                        $activeShop->whereNull('is_active')->orWhere('is_active', true);
+                    });
+                }
             });
         }
 

@@ -127,6 +127,7 @@ class LogisticsTerritoryController extends Controller
     public function store(Request $request)
     {
         $data = $this->validated($request);
+        $this->ensureNameIsFree($data['name']);
         $communes = $this->selectedCommunes($data['commune_ids']);
         $code = $this->nextCode();
 
@@ -157,6 +158,7 @@ class LogisticsTerritoryController extends Controller
     {
         $this->abortIfDemo($zone);
         $data = $this->validated($request);
+        $this->ensureNameIsFree($data['name'], $zone);
         $communes = $this->selectedCommunes($data['commune_ids']);
 
         DB::transaction(function () use ($zone, $data, $communes) {
@@ -200,6 +202,19 @@ class LogisticsTerritoryController extends Controller
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="zones-livraison-ovanie.csv"',
         ]);
+    }
+
+    /** Deux zones du même nom seraient impossibles à distinguer dans les listes et les filtres. */
+    private function ensureNameIsFree(string $name, ?LogisticsTerritoryZone $except = null): void
+    {
+        $taken = $this->realZonesQuery()
+            ->when($except, fn ($query) => $query->whereKeyNot($except->getKey()))
+            ->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower(trim($name))])
+            ->exists();
+
+        if ($taken) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['name' => 'Une zone porte déjà ce nom. Choisissez un autre nom.']);
+        }
     }
 
     private function validated(Request $request): array

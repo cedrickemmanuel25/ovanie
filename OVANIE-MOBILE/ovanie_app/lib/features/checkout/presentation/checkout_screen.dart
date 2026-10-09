@@ -64,6 +64,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   bool _addressConfirmed = false;
   bool _calculating = false;
+  // Numéro du dernier calcul demandé : seul le plus récent (adresse
+  // actuellement choisie) a le droit de mettre à jour l'écran.
+  int _previewRequest = 0;
   bool _placing = false;
   bool _loadingAddresses = true;
   bool _locating = false;
@@ -74,6 +77,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _error;
   CheckoutPreview? _preview;
   List<CheckoutSavedAddress> _savedAddresses = const [];
+  // 'default' = adresse par défaut, 'new' = nouvelle adresse. Tant que le
+  // client n'a pas choisi, aucun frais de livraison n'est calculé.
+  String? _addressChoice;
   int _stage = 1;
   bool _customCommune = false;
   bool _customQuartier = false;
@@ -184,7 +190,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _cartSyncError = error;
       },
     );
-    unawaited(_loadSavedAddresses(selectDefault: true));
+    unawaited(_loadSavedAddresses());
   }
 
   @override
@@ -327,28 +333,44 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  Future<void> _loadSavedAddresses({bool selectDefault = false}) async {
+  Future<void> _loadSavedAddresses() async {
     try {
       final addresses = await _repository.savedAddresses();
       if (!mounted) return;
-      CheckoutSavedAddress? defaultAddress;
-      for (final address in addresses) {
-        if (address.isDefault) {
-          defaultAddress = address;
-          break;
-        }
-      }
       setState(() {
         _savedAddresses = addresses;
         _loadingAddresses = false;
+        // Aucune adresse enregistrée : il n'y a rien à choisir.
+        if (addresses.isEmpty && _addressChoice == null) _addressChoice = 'new';
       });
-      if (selectDefault && !_addressConfirmed && defaultAddress != null) {
-        _applySavedAddress(defaultAddress, refresh: true);
-      }
     } catch (_) {
       if (!mounted) return;
-      setState(() => _loadingAddresses = false);
+      setState(() {
+        _loadingAddresses = false;
+        _addressChoice ??= 'new';
+      });
     }
+  }
+
+  /// Adresse proposée en premier : celle marquée par défaut, sinon la plus
+  /// récente des adresses enregistrées.
+  CheckoutSavedAddress? get _defaultAddress {
+    for (final address in _savedAddresses) {
+      if (address.isDefault) return address;
+    }
+    return _savedAddresses.isEmpty ? null : _savedAddresses.first;
+  }
+
+  void _chooseDefaultAddress() {
+    final address = _defaultAddress;
+    if (address == null) return;
+    setState(() => _addressChoice = 'default');
+    _applySavedAddress(address);
+  }
+
+  Future<void> _chooseNewAddress() async {
+    setState(() => _addressChoice = 'new');
+    await _beginNewAddressEntry();
   }
 
   CheckoutAddress _payload({String? paymentMethod}) {
@@ -690,7 +712,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _refreshDeliveryPreview() async {
-    if (!_addressConfirmed || _calculating) return;
+    if (!_addressConfirmed) return;
+    // Un nouveau choix d'adresse pendant un calcul ne doit jamais être ignoré :
+    // on relance, et la réponse de l'ancien calcul sera écartée.
+    final request = ++_previewRequest;
     setState(() {
       _calculating = true;
       _error = null;
@@ -699,6 +724,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       await _ensureCartReady();
       final payload = _payload();
       var preview = await _repository.preview(payload);
+      if (request != _previewRequest) return;
       final serverSaysEmpty =
           preview.subtotal <= 0 &&
           preview.deliveryMessage.toLowerCase().contains('panier est vide');
@@ -707,12 +733,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           refreshLocal: false,
         );
         preview = await _repository.preview(payload);
+        if (request != _previewRequest) return;
       }
       if (preview.subtotal <= 0 &&
           preview.deliveryMessage.toLowerCase().contains('panier est vide') &&
           CartStore.instance.lines.isNotEmpty) {
         throw const OvanieApiException(
-          'Votre panier est bien conservé sur ce téléphone, mais sa synchronisation avec OVANIE n’est pas encore terminée. Réessayez dans quelques secondes.',
+          'Votre panier est en cours de mise à jour. Réessayez dans quelques secondes.',
         );
       }
       if (!mounted) return;
@@ -755,13 +782,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       });
       _syncManualAddressControllers();
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || request != _previewRequest) return;
       setState(() {
         _preview = null;
         _error = ApiClient.friendlyError(error);
       });
     } finally {
-      if (mounted) setState(() => _calculating = false);
+      if (mounted && request == _previewRequest) {
+        setState(() => _calculating = false);
+      }
     }
   }
 
@@ -793,6 +822,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _continueFromAddress() async {
+    if (_addressChoice == null) {
+      setState(() {
+        _error =
+            'Choisissez votre adresse par défaut ou ajoutez une nouvelle adresse.';
+      });
+      return;
+    }
     if (!_addressConfirmed) {
       if (_address.trim().isNotEmpty &&
           _commune.trim().isNotEmpty &&
@@ -1092,6 +1128,33 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       style: _CheckoutStyles.panelTitle,
                     ),
                     const SizedBox(height: 10),
+                    if (_loadingAddresses)
+                      const LinearProgressIndicator(minHeight: 2)
+                    else if (_defaultAddress != null) ...[
+                      _AddressChoiceTile(
+                        icon: Icons.home_rounded,
+                        title: _defaultAddress!.isDefault
+                            ? 'Livrer à mon adresse par défaut'
+                            : 'Livrer à mon adresse enregistrée',
+                        subtitle: [
+                          _defaultAddress!.commune,
+                          _defaultAddress!.quartier,
+                          _defaultAddress!.address,
+                        ].where((part) => part.trim().isNotEmpty).join(' • '),
+                        selected: _addressChoice == 'default',
+                        onTap: _chooseDefaultAddress,
+                      ),
+                      const SizedBox(height: 7),
+                      _AddressChoiceTile(
+                        icon: Icons.add_location_alt_rounded,
+                        title: 'Ajouter une nouvelle adresse',
+                        subtitle: 'Rechercher, utiliser ma position ou saisir l’adresse',
+                        selected: _addressChoice == 'new',
+                        onTap: _chooseNewAddress,
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (_addressChoice == 'new') ...[
                     Row(
                       children: [
                         Expanded(
@@ -1132,24 +1195,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    _CheckoutMapPreview(
-                      latitude: _latitude,
-                      longitude: _longitude,
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Adresses enregistrées',
-                      style: _CheckoutStyles.subTitle,
-                    ),
-                    const SizedBox(height: 7),
-                    if (_loadingAddresses)
-                      const LinearProgressIndicator(minHeight: 2)
-                    else if (_savedAddresses.isEmpty)
-                      _EmptySavedAddresses(onTap: _beginNewAddressEntry)
-                    else
+                      const SizedBox(height: 10),
+                    ],
+                    if (_addressChoice != null)
+                      _CheckoutMapPreview(
+                        latitude: _latitude,
+                        longitude: _longitude,
+                      ),
+                    if (_addressChoice == 'default' && _savedAddresses.length > 1) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Autres adresses enregistrées',
+                        style: _CheckoutStyles.subTitle,
+                      ),
+                      const SizedBox(height: 7),
                       ..._savedAddresses
-                          .take(4)
+                          .where((item) => item.id != _defaultAddress?.id)
+                          .take(3)
                           .map(
                             (item) => Padding(
                               padding: const EdgeInsets.only(bottom: 6),
@@ -1160,43 +1222,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               ),
                             ),
                           ),
-                    InkWell(
-                      onTap: _beginNewAddressEntry,
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        height: 39,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: const Color(0xFFD5DDE8),
-                            style: BorderStyle.solid,
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.add_circle_outline_rounded,
-                              color: OvanieColors.orange,
-                              size: 20,
-                            ),
-                            SizedBox(width: 7),
-                            Text(
-                              'Ajouter une nouvelle adresse',
-                              style: TextStyle(
-                                color: OvanieColors.orange,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               ),
+              if (_addressChoice == 'new') ...[
               const SizedBox(height: 8),
               _CheckoutPanel(
                 key: _manualAddressFormKey,
@@ -1208,27 +1238,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       style: _CheckoutStyles.subTitle,
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _CompactTextField(
-                            controller: _name,
-                            label: 'Nom du destinataire',
-                            onChanged: (_) => _markManualAddress(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _CompactTextField(
-                            controller: _phone,
-                            label: 'Téléphone',
-                            keyboardType: TextInputType.phone,
-                            prefixIcon: Icons.phone_outlined,
-                            inputFormatters: const [CiPhoneInputFormatter()],
-                            onChanged: (_) => _markManualAddress(),
-                          ),
-                        ),
-                      ],
+                    _CompactTextField(
+                      controller: _name,
+                      label: 'Nom du destinataire',
+                      onChanged: (_) => _markManualAddress(),
+                    ),
+                    const SizedBox(height: 7),
+                    _CompactTextField(
+                      controller: _phone,
+                      label: 'Téléphone',
+                      keyboardType: TextInputType.phone,
+                      prefixIcon: Icons.phone_outlined,
+                      inputFormatters: const [CiPhoneInputFormatter()],
+                      onChanged: (_) => _markManualAddress(),
                     ),
                     const SizedBox(height: 7),
                     Row(
@@ -1315,6 +1337,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ],
                 ),
               ),
+              ],
               const SizedBox(height: 7),
               const _InfoStrip(
                 text:
@@ -1554,7 +1577,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                             : 'Nous vérifions votre zone de livraison.'),
                                   style: const TextStyle(
                                     color: Color(0xFF526181),
-                                    fontSize: 10.3,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ],
@@ -1578,8 +1601,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   itemCount: _selectedItemsCount,
                 ),
               ),
-              const SizedBox(height: 8),
-              const _TrustStrip(),
               if (_error != null) ...[
                 const SizedBox(height: 8),
                 _CheckoutError(message: _error!),
@@ -1618,59 +1639,30 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               const Text(
-                'Choisissez votre mode de paiement',
+                'Mode de paiement',
                 style: TextStyle(
                   color: OvanieColors.navy,
-                  fontSize: 18.5,
-                  fontWeight: FontWeight.w900,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 4),
-              const Text(
-                'Sélectionnez le mode de paiement qui vous convient.',
-                style: TextStyle(color: Color(0xFF59657B), fontSize: 11.6),
+              const SizedBox(height: 12),
+              _PaymentOptionTile(
+                title: 'Paiement à la livraison',
+                subtitle: 'En espèces, à la réception',
+                icon: Icons.payments_outlined,
+                selected: codSelected,
+                enabled: codEnabled,
+                onTap: _selectCashOnDelivery,
               ),
-              const SizedBox(height: 13),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: _PaymentChoiceCard(
-                        title: 'Paiement à la livraison',
-                        subtitle:
-                            'Payez en espèces à la réception de votre commande.',
-                        bullets: const <String>[
-                          'Aucun paiement en ligne requis',
-                          'Vérifiez vos produits avant de payer',
-                          'Disponible dans toutes nos zones de livraison',
-                        ],
-                        icon: Icons.payments_outlined,
-                        selected: codSelected,
-                        enabled: codEnabled,
-                        online: false,
-                        onTap: _selectCashOnDelivery,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _PaymentChoiceCard(
-                        title: 'Paiement en ligne',
-                        subtitle: 'Payez maintenant de manière sécurisée.',
-                        bullets: const <String>[
-                          'Mobile Money & carte bancaire',
-                          'Confirmation immédiate',
-                          'Transactions sécurisées',
-                        ],
-                        icon: Icons.credit_card_rounded,
-                        selected: onlineSelected,
-                        enabled: onlineEnabled,
-                        online: true,
-                        onTap: _selectOnlinePayment,
-                      ),
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 10),
+              _PaymentOptionTile(
+                title: 'Paiement en ligne',
+                subtitle: 'Mobile Money ou carte bancaire',
+                icon: Icons.credit_card_rounded,
+                selected: onlineSelected,
+                enabled: onlineEnabled,
+                onTap: _selectOnlinePayment,
               ),
               if (onlineSelected) ...[
                 const SizedBox(height: 12),
@@ -1813,8 +1805,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   itemCount: _selectedItemsCount,
                 ),
               ),
-              const SizedBox(height: 10),
-              const _TrustStrip(),
               if (_error != null) ...[
                 const SizedBox(height: 9),
                 _CheckoutError(message: _error!),
@@ -1863,43 +1853,23 @@ class _CheckoutPageHeader extends StatelessWidget {
                 ),
               ),
               const Text(
-                'Checkout',
+                'Finaliser la commande',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: OvanieColors.navy,
-                  fontSize: 23,
-                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               Align(
                 alignment: Alignment.centerRight,
                 child: Padding(
                   padding: const EdgeInsets.only(right: 10),
-                  child: showSecureLabel
-                      ? const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.shield_outlined,
-                              color: OvanieColors.navy,
-                              size: 20,
-                            ),
-                            SizedBox(width: 5),
-                            Text(
-                              'Paiement 100% sécurisé',
-                              style: TextStyle(
-                                color: OvanieColors.navy,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        )
-                      : const Icon(
-                          Icons.shield_outlined,
-                          color: OvanieColors.navy,
-                          size: 26,
-                        ),
+                  child: const Icon(
+                    Icons.lock_outline_rounded,
+                    color: Color(0xFF59657B),
+                    size: 20,
+                  ),
                 ),
               ),
             ],
@@ -2010,7 +1980,7 @@ class _CheckoutProgressBar extends StatelessWidget {
                                 (done || active || (current == 1 && step == 1))
                                 ? OvanieColors.orange
                                 : const Color(0xFF59657B),
-                            fontSize: 10.5,
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -2096,7 +2066,7 @@ class _SearchLikeField extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFF5C6880), fontSize: 10.5),
+              style: const TextStyle(color: Color(0xFF5C6880), fontSize: 12),
             ),
           ),
         ],
@@ -2261,7 +2231,7 @@ class _SavedAddressTile extends StatelessWidget {
                           'Par défaut',
                           style: TextStyle(
                             color: OvanieColors.orange,
-                            fontSize: 8.8,
+                            fontSize: 11,
                           ),
                         ),
                       ),
@@ -2278,7 +2248,7 @@ class _SavedAddressTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF526181),
-                    fontSize: 9.5,
+                    fontSize: 11.5,
                   ),
                 ),
                 if (item.address.trim().isNotEmpty)
@@ -2288,7 +2258,7 @@ class _SavedAddressTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xFF526181),
-                      fontSize: 9.5,
+                      fontSize: 11.5,
                     ),
                   ),
                 if (item.recipientName.trim().isNotEmpty ||
@@ -2299,7 +2269,7 @@ class _SavedAddressTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: OvanieColors.navy,
-                      fontSize: 9.4,
+                      fontSize: 11.5,
                     ),
                   ),
               ],
@@ -2310,37 +2280,6 @@ class _SavedAddressTile extends StatelessWidget {
             Icons.more_vert_rounded,
             color: OvanieColors.navy,
             size: 19,
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _EmptySavedAddresses extends StatelessWidget {
-  final VoidCallback onTap;
-  const _EmptySavedAddresses({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    child: Container(
-      margin: const EdgeInsets.only(bottom: 7),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFD),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: OvanieColors.border),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.location_off_outlined, color: OvanieColors.muted),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Aucune adresse enregistrée. Ajoutez votre adresse de livraison.',
-              style: TextStyle(color: OvanieColors.muted, fontSize: 10.5),
-            ),
           ),
         ],
       ),
@@ -2373,10 +2312,10 @@ class _CompactTextField extends StatelessWidget {
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       onChanged: onChanged,
-      style: const TextStyle(color: OvanieColors.navy, fontSize: 10.8),
+      style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(fontSize: 10.4),
+        labelStyle: const TextStyle(fontSize: 12),
         prefixIcon: prefixIcon == null ? null : Icon(prefixIcon, size: 18),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 11,
@@ -2412,12 +2351,12 @@ class _CompactEditableLocation extends StatelessWidget {
       controller: controller,
       onChanged: onChanged,
       textInputAction: TextInputAction.next,
-      style: const TextStyle(color: OvanieColors.navy, fontSize: 10.8),
+      style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: const TextStyle(fontSize: 10.4),
-        hintStyle: const TextStyle(fontSize: 10.3, color: Color(0xFF9AA5B5)),
+        labelStyle: const TextStyle(fontSize: 12),
+        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9AA5B5)),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 11,
           vertical: 10,
@@ -2666,11 +2605,12 @@ class _CompactLocationDropdown extends StatelessWidget {
                 },
           borderRadius: BorderRadius.circular(8),
           child: InputDecorator(
-            isEmpty: effectiveValue == null,
+            isEmpty: false,
             decoration: InputDecoration(
               labelText: label,
+              floatingLabelBehavior: FloatingLabelBehavior.always,
               enabled: enabled,
-              labelStyle: const TextStyle(fontSize: 10.4),
+              labelStyle: const TextStyle(fontSize: 12),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 11,
                 vertical: 9,
@@ -2698,7 +2638,7 @@ class _CompactLocationDropdown extends StatelessWidget {
                       color: effectiveValue == null
                           ? const Color(0xFF9AA5B5)
                           : OvanieColors.navy,
-                      fontSize: 10.8,
+                      fontSize: 12,
                       fontWeight: effectiveValue == null
                           ? FontWeight.w500
                           : FontWeight.w700,
@@ -2920,7 +2860,7 @@ class _InfoStrip extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(color: OvanieColors.navy, fontSize: 10.5),
+            style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
           ),
         ),
       ],
@@ -2935,6 +2875,7 @@ class _DeliveryQuickStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final distance = preview?.deliveryDistanceKm;
     final vehicle = preview?.recommendedVehicle.trim().isNotEmpty == true
         ? preview!.recommendedVehicle
         : 'À confirmer';
@@ -2950,10 +2891,15 @@ class _DeliveryQuickStats extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // Distance réelle depuis la boutique, sinon la zone de livraison.
           _MiniMetric(
-            icon: Icons.location_on_outlined,
-            label: 'Zone',
-            value: zone,
+            icon: distance != null
+                ? Icons.route_outlined
+                : Icons.location_on_outlined,
+            label: distance != null ? 'Depuis la boutique' : 'Zone',
+            value: distance != null
+                ? '${distance.toStringAsFixed(1).replaceAll('.', ',')} km'
+                : zone,
           ),
           const _MiniDivider(),
           _MiniMetric(
@@ -2997,7 +2943,7 @@ class _MiniMetric extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFF59657B), fontSize: 8.7),
+                style: const TextStyle(color: Color(0xFF59657B), fontSize: 11),
               ),
               const SizedBox(height: 2),
               Text(
@@ -3006,7 +2952,7 @@ class _MiniMetric extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: OvanieColors.navy,
-                  fontSize: 10.4,
+                  fontSize: 12,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -3058,10 +3004,10 @@ class _OrderSummaryCompact extends StatelessWidget {
                 ),
               ),
               Text(
-                '$itemCount articles',
+                '$itemCount article${itemCount > 1 ? 's' : ''}',
                 style: const TextStyle(
                   color: OvanieColors.navy,
-                  fontSize: 10.2,
+                  fontSize: 12,
                 ),
               ),
             ],
@@ -3209,7 +3155,7 @@ class _DeliveryMetric extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF59657B),
-                    fontSize: 7.9,
+                    fontSize: 11,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -3219,7 +3165,7 @@ class _DeliveryMetric extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: OvanieColors.navy,
-                    fontSize: 9.4,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -3266,7 +3212,7 @@ class _ContactRow extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(color: Color(0xFF59657B), fontSize: 9.7),
+              style: const TextStyle(color: Color(0xFF59657B), fontSize: 11.5),
             ),
             const SizedBox(height: 2),
             Text(
@@ -3287,7 +3233,7 @@ class _ContactRow extends StatelessWidget {
         style: TextButton.styleFrom(foregroundColor: OvanieColors.orange),
         iconAlignment: IconAlignment.end,
         icon: const Icon(Icons.chevron_right_rounded, size: 18),
-        label: const Text('Modifier', style: TextStyle(fontSize: 10.5)),
+        label: const Text('Modifier', style: TextStyle(fontSize: 12)),
       ),
     ],
   );
@@ -3313,8 +3259,8 @@ class _ReviewSummary extends StatelessWidget {
               child: Text('Récapitulatif', style: _CheckoutStyles.panelTitle),
             ),
             Text(
-              '$itemCount articles',
-              style: const TextStyle(color: OvanieColors.navy, fontSize: 10),
+              '$itemCount article${itemCount > 1 ? 's' : ''}',
+              style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
             ),
           ],
         ),
@@ -3339,227 +3285,6 @@ class _ReviewSummary extends StatelessWidget {
           strong: true,
         ),
       ],
-    );
-  }
-}
-
-class _TrustStrip extends StatelessWidget {
-  const _TrustStrip();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(9),
-      border: Border.all(color: const Color(0xFFE0E5EC)),
-    ),
-    child: const Row(
-      children: [
-        _TrustItem(
-          icon: Icons.shield_outlined,
-          title: 'Paiement sécurisé',
-          subtitle: 'Transactions 100% sûres',
-        ),
-        _MiniDivider(),
-        _TrustItem(
-          icon: Icons.local_shipping_outlined,
-          title: 'Livraison fiable',
-          subtitle: 'Suivi et respect des délais',
-        ),
-        _MiniDivider(),
-        _TrustItem(
-          icon: Icons.headset_mic_outlined,
-          title: 'Support dédié',
-          subtitle: '7j/7 à votre écoute',
-        ),
-      ],
-    ),
-  );
-}
-
-class _TrustItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  const _TrustItem({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: Row(
-      children: [
-        Icon(icon, color: OvanieColors.navy, size: 22),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: OvanieColors.navy,
-                  fontSize: 9.2,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFF5A667B), fontSize: 7.8),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _PaymentChoiceCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final List<String> bullets;
-  final IconData icon;
-  final bool selected;
-  final bool enabled;
-  final bool online;
-  final VoidCallback onTap;
-
-  const _PaymentChoiceCard({
-    required this.title,
-    required this.subtitle,
-    required this.bullets,
-    required this.icon,
-    required this.selected,
-    required this.enabled,
-    required this.online,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final borderColor = selected
-        ? OvanieColors.orange
-        : const Color(0xFFDCE2EB);
-    final checkColor = selected ? OvanieColors.orange : const Color(0xFF98A4B7);
-
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(11),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        constraints: const BoxConstraints(minHeight: 268),
-        padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFFFFBF8) : Colors.white,
-          borderRadius: BorderRadius.circular(11),
-          border: Border.all(color: borderColor, width: selected ? 1.35 : 1),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Icon(
-                selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_off_rounded,
-                color: selected ? OvanieColors.orange : const Color(0xFF9AA5B5),
-                size: 24,
-              ),
-            ),
-            Opacity(
-              opacity: enabled ? 1 : .45,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: online
-                            ? const Color(0xFFF3F6FF)
-                            : const Color(0xFFFFF3EB),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            icon,
-                            color: online
-                                ? const Color(0xFF244DD8)
-                                : OvanieColors.orange,
-                            size: 37,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    style: const TextStyle(
-                      color: OvanieColors.navy,
-                      fontSize: 14.7,
-                      height: 1.15,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    subtitle,
-                    textAlign: TextAlign.center,
-                    maxLines: 3,
-                    style: const TextStyle(
-                      color: OvanieColors.navy,
-                      fontSize: 10.3,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  for (final bullet in bullets)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.check_circle_outline_rounded,
-                            color: checkColor,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 7),
-                          Expanded(
-                            child: Text(
-                              bullet,
-                              style: const TextStyle(
-                                color: OvanieColors.navy,
-                                fontSize: 9.2,
-                                height: 1.35,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -3592,7 +3317,7 @@ class _PaymentOrderSummary extends StatelessWidget {
               'Voir détails',
               style: TextStyle(
                 color: OvanieColors.orange,
-                fontSize: 10.3,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -3792,7 +3517,7 @@ class _CheckoutError extends StatelessWidget {
         Expanded(
           child: Text(
             message,
-            style: const TextStyle(color: Color(0xFF8B3122), fontSize: 10.5),
+            style: const TextStyle(color: Color(0xFF8B3122), fontSize: 12),
           ),
         ),
       ],
@@ -3882,7 +3607,7 @@ class _OnlineOperatorTile extends StatelessWidget {
                     subtitle,
                     style: const TextStyle(
                       color: Color(0xFF59657B),
-                      fontSize: 9.7,
+                      fontSize: 11.5,
                     ),
                   ),
                 ],
@@ -3920,7 +3645,7 @@ class _VisaBadge extends StatelessWidget {
       'VISA',
       style: TextStyle(
         color: Color(0xFF1434CB),
-        fontSize: 10.5,
+        fontSize: 12,
         fontWeight: FontWeight.w900,
         fontStyle: FontStyle.italic,
       ),
@@ -4040,7 +3765,7 @@ class _PaymentWaitingScreenState extends State<_PaymentWaitingScreen>
     setState(() {
       _waiting = false;
       _message =
-          'Aucune confirmation de paiement n’a été reçue. Aucun succès n’est affiché tant que PayDunya ne l’a pas confirmé. Vous pouvez reprendre le paiement ou vérifier à nouveau le statut.';
+          'Votre paiement n’est pas encore confirmé. Vous pouvez reprendre le paiement ou vérifier à nouveau.';
     });
   }
 
@@ -4111,7 +3836,7 @@ class _PaymentWaitingScreenState extends State<_PaymentWaitingScreen>
       } else if (_attempts > 2) {
         setState(() {
           _message =
-              'Connexion temporairement instable. OVANIE continue de vérifier le statut côté serveur.';
+              'Connexion instable. Nous continuons de vérifier votre paiement.';
         });
       }
     } finally {
@@ -5222,7 +4947,7 @@ class _AddressSheetState extends State<_AddressSheet> {
                                                 'Ma position',
                                                 maxLines: 1,
                                                 style: TextStyle(
-                                                  fontSize: 10.5,
+                                                  fontSize: 12,
                                                   fontWeight: FontWeight.w900,
                                                 ),
                                               ),
@@ -5255,7 +4980,7 @@ class _AddressSheetState extends State<_AddressSheet> {
                                         : _geoStatus,
                                     style: const TextStyle(
                                       color: OvanieColors.muted,
-                                      fontSize: 9.8,
+                                      fontSize: 11.5,
                                       height: 1.35,
                                     ),
                                   ),
@@ -5474,7 +5199,7 @@ class _SheetSectionTitle extends StatelessWidget {
                 subtitle,
                 style: const TextStyle(
                   color: OvanieColors.muted,
-                  fontSize: 10.2,
+                  fontSize: 12,
                   height: 1.35,
                 ),
               ),
@@ -5512,7 +5237,7 @@ class _AddressResultTile extends StatelessWidget {
                 result.displayName,
                 style: const TextStyle(
                   color: OvanieColors.text,
-                  fontSize: 10.8,
+                  fontSize: 12,
                   height: 1.35,
                   fontWeight: FontWeight.w700,
                 ),
@@ -5615,7 +5340,7 @@ class _SelectedLocationCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: OvanieColors.muted,
-                      fontSize: 10.2,
+                      fontSize: 12,
                       height: 1.3,
                     ),
                   ),
@@ -5645,7 +5370,7 @@ class _LocationInfoLine extends StatelessWidget {
         text: TextSpan(
           style: const TextStyle(
             color: OvanieColors.muted,
-            fontSize: 9.8,
+            fontSize: 11.5,
             height: 1.35,
           ),
           children: [
@@ -5683,7 +5408,7 @@ class _InlineAddressError extends StatelessWidget {
         message,
         style: const TextStyle(
           color: Color(0xFFB42318),
-          fontSize: 10,
+          fontSize: 12,
           height: 1.35,
           fontWeight: FontWeight.w700,
         ),
@@ -6231,7 +5956,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: OvanieColors.muted,
-                            fontSize: 10.5,
+                            fontSize: 12,
                           ),
                         ),
                       ),
@@ -6282,6 +6007,156 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddressChoiceTile extends StatelessWidget {
+  const _AddressChoiceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFFFF4EC) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? OvanieColors.orange : const Color(0xFFD5DDE8),
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              color: selected ? OvanieColors.orange : const Color(0xFF94A3B8),
+              size: 21,
+            ),
+            const SizedBox(width: 10),
+            Icon(icon, color: OvanieColors.navy, size: 20),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: OvanieColors.navy,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (subtitle.trim().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentOptionTile extends StatelessWidget {
+  const _PaymentOptionTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1 : .5,
+      child: Material(
+        color: selected ? const Color(0xFFFFF4EC) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? OvanieColors.orange : const Color(0xFFDDE3EC),
+                width: selected ? 1.6 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: selected ? OvanieColors.orange : OvanieColors.navy),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: OvanieColors.navy,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(color: Color(0xFF59657B), fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                  color: selected ? OvanieColors.orange : const Color(0xFFA7B1C2),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

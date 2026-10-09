@@ -108,7 +108,7 @@ class OrderWorkflowService
         $provider = $this->normalizeProvider($provider);
         $status = match ($provider) {
             self::PROVIDER_OVANIE => self::DELIVERY_PENDING,
-            self::PROVIDER_SELLER => self::DELIVERY_PREPARING,
+            self::PROVIDER_SELLER => self::DELIVERY_PENDING,
             self::PROVIDER_PICKUP => self::DELIVERY_NOT_REQUIRED,
             self::PROVIDER_PARTNER => self::DELIVERY_PENDING,
             default => self::DELIVERY_PENDING,
@@ -312,7 +312,7 @@ class OrderWorkflowService
                     $item->refresh(),
                     'delivered',
                     'Livraison effectuée',
-                    'Cette livraison a été remise. Vérifiez les articles reçus puis confirmez la réception depuis votre espace client.'
+                    'Votre livraison a été remise. Un problème avec un article ? Signalez-le sous 48 h depuis votre espace client.'
                 );
             }
         }
@@ -353,7 +353,7 @@ class OrderWorkflowService
         }
 
         if ($this->isVendorVisible($item)) {
-            $this->notify($item->product?->shop?->user, 'Reception client confirmee', 'La ligne de commande peut etre analysee pour reversement.', [
+            $this->notify($item->product?->shop?->user, 'Réception confirmée par le client', 'Le montant de cette commande entre dans votre prochain versement.', [
                 'category' => 'payouts',
                 'order_id' => $item->order_id,
                 'order_item_id' => $item->id,
@@ -607,8 +607,9 @@ class OrderWorkflowService
                     self::DELIVERY_ASSIGNED => $current === self::DELIVERY_READY_FOR_PICKUP,
                     self::DELIVERY_PICKED_UP => $current === self::DELIVERY_ASSIGNED,
                     self::DELIVERY_IN_TRANSIT => $current === self::DELIVERY_PICKED_UP,
+                    // Remise prouvée par le code OTP du client ou par une preuve de livraison.
                     self::DELIVERY_DELIVERED => $current === self::DELIVERY_IN_TRANSIT
-                        && filled($extra['delivery_proof_id'] ?? null),
+                        && (filled($extra['delivery_otp_verified_at'] ?? null) || filled($extra['delivery_proof_id'] ?? null)),
                     self::DELIVERY_FAILED => in_array($current, [
                         self::DELIVERY_READY_FOR_PICKUP,
                         self::DELIVERY_ASSIGNED,
@@ -623,7 +624,7 @@ class OrderWorkflowService
                 self::DELIVERY_IN_TRANSIT => in_array($current, [self::DELIVERY_PENDING, self::DELIVERY_PREPARING], true),
                 self::DELIVERY_DELIVERED => $current === self::DELIVERY_IN_TRANSIT
                     && (filled($extra['delivery_otp_verified_at'] ?? null) || filled($extra['delivery_proof_id'] ?? null)),
-                self::DELIVERY_FAILED => in_array($current, [self::DELIVERY_PREPARING, self::DELIVERY_IN_TRANSIT], true),
+                self::DELIVERY_FAILED => in_array($current, [self::DELIVERY_PENDING, self::DELIVERY_PREPARING, self::DELIVERY_IN_TRANSIT], true),
                 default => false,
             };
         }

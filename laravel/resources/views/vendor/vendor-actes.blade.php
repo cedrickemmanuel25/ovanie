@@ -887,7 +887,7 @@
             <div class="va-help">
                 <span class="va-help-head"><i data-lucide="circle-help"></i>Besoin d’aide ?</span>
                 <p>Contactez notre support au</p>
-                <a href="tel:+2250161780000">01 61 78 00 00</a>
+                <a href="tel:{{ config('public_contact.phone_e164') }}">{{ config('public_contact.phone_display') }}</a>
             </div>
         </aside>
     </div>

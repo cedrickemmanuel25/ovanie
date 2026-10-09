@@ -93,9 +93,9 @@
 @section('scripts')
   <script>
     window.AppUser = {
-      id: {{ auth()->id() ?? 'null' }},
-      name: @json(auth()->user()->name ?? null),
-      email: @json(auth()->user()->email ?? null)
+      id: {{ auth('pro')->id() ?? 'null' }},
+      name: @json(auth('pro')->user()->name ?? null),
+      email: @json(auth('pro')->user()->email ?? null)
     };
   </script>
 

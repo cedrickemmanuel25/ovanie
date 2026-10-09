@@ -214,6 +214,7 @@ class PaymentController extends Controller
             ['payment_id' => $payment->id],
             [
                 'user_id' => $payment->user_id,
+                'pro_user_id' => $payment->pro_user_id ?? ($context['pro_user_id'] ?? null),
                 'company_id' => $context['company_id'] ?? null,
                 'business_request_type' => $context['business_request_type'],
                 'business_request_id' => $context['business_request_id'],
@@ -659,10 +660,8 @@ class PaymentController extends Controller
         }
 
         if (! empty($result['can_release'])) {
-            $this->sendPaymentSms(
-                $order,
-                "OVANIE : paiement confirmé pour la commande {$order->order_number}. Votre commande est en cours de traitement."
-            );
+            // Une seule confirmation client (in-app, push, e-mail, SMS), sans doublon.
+            app(\App\Services\ClientPaymentNotificationService::class)->paymentConfirmed($order->refresh());
 
             $this->notifyPaymentConfirmed($order);
         } else {

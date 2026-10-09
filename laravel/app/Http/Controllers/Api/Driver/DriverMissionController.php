@@ -24,6 +24,7 @@ class DriverMissionController extends Controller
     public function index(Request $request, DriverMissionService $service): JsonResponse
     {
         $driver = $this->driver($request);
+        app(\App\Services\LogisticsShipmentWorkflowService::class)->offerOpenMissionsToDriverThrottled($driver);
         $missions = $service->listForDriver($driver);
 
         $unreadNotifications = 0;
@@ -193,6 +194,9 @@ class DriverMissionController extends Controller
                 'accuracy' => is_numeric($location->accuracy) ? (float) $location->accuracy : null,
             ] : null,
             'route' => $this->serializeRoutePlan($result['route_plan'] ?? []),
+            // Arrivée détectée par le GPS sur cette position (boutique ou client).
+            'auto_arrival' => $result['auto_arrival'] ?? null,
+            'arrival_radius_m' => (int) $service->arrivalRadiusMeters(),
         ]);
     }
 
@@ -242,6 +246,7 @@ class DriverMissionController extends Controller
         $validated = $request->validate([
             'delivery_otp_code' => ['required', 'digits:6'],
             'handover_confirmed' => ['required', 'accepted'],
+            'cash_collected' => ['nullable', 'boolean'],
         ]);
 
         $driver = $this->driver($request);
@@ -250,6 +255,7 @@ class DriverMissionController extends Controller
             $missionNumber,
             $validated['delivery_otp_code'],
             (bool) $validated['handover_confirmed'],
+            (bool) ($validated['cash_collected'] ?? false),
         );
 
         return $this->missionResponse(
@@ -307,6 +313,8 @@ class DriverMissionController extends Controller
             'total_weight_kg' => (float) ($mission['total_weight_kg'] ?? 0),
             'total_volume_m3' => (float) ($mission['total_volume_m3'] ?? 0),
             'net_amount' => (float) ($mission['net_amount'] ?? 0),
+            'gross_amount' => (float) ($mission['gross_amount'] ?? 0),
+            'commission_percent' => (float) ($mission['commission_percent'] ?? 0),
             'vehicle_code' => $mission['vehicle_code'] ?? null,
             'vehicle_label' => $mission['vehicle_label'] ?? null,
             'preparation_percent' => (int) ($mission['preparation_percent'] ?? 0),
@@ -410,6 +418,10 @@ class DriverMissionController extends Controller
         $route['points'] = $this->serializeGeoPoints(data_get($detail, 'route_plan.points', []), $stops);
 
         return array_merge($summary, [
+            // Paiement à la livraison : montant exact à encaisser avant de saisir le code client.
+            'cash_to_collect' => $status === 'delivered'
+                ? 0.0
+                : app(\App\Services\DriverPayoutService::class)->cashToCollect(collect($detail['items'] ?? [])),
             'destination_address' => $detail['destination_address'] ?? $detail['destination'] ?? null,
             'pickup_stops' => $stops->all(),
             'pickup_completed_count' => $stops->where('completed', true)->count(),

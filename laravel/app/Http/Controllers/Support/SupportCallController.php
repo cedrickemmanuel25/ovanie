@@ -130,7 +130,7 @@ class SupportCallController extends Controller
         $data = $request->validate([
             'requester_user_id' => ['nullable', 'exists:users,id'],
             'requester_name' => ['nullable', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:40'],
+            'phone' => ['required', 'string', 'max:40', 'regex:/^\+?[\d\s().-]{8,}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'reason' => ['nullable', 'string', 'max:3000'],
             'preferred_at' => ['nullable', 'date', 'after_or_equal:now'],

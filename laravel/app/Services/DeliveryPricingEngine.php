@@ -32,6 +32,20 @@ class DeliveryPricingEngine
             return $this->unavailable('Boutique introuvable.', 'shop_missing');
         }
 
+        if (! $shop->hasConfirmedLogistics()) {
+            return $this->unavailable(
+                'Le vendeur doit confirmer son mode logistique avant de recevoir de nouvelles commandes.',
+                'shop_logistics_unconfirmed'
+            );
+        }
+
+        if (! $shop->hasConfiguredPayout()) {
+            return $this->unavailable(
+                'Le vendeur doit confirmer son mode de reversement avant de recevoir de nouvelles commandes.',
+                'shop_payout_unconfirmed'
+            );
+        }
+
         if ($request?->input('delivery_destination_type') === 'pickup') {
             return [
                 'available' => true,
@@ -341,56 +355,20 @@ class DeliveryPricingEngine
             );
         }
 
-        $hasCommunePair = filled($destination['origin_commune'])
-            && filled($destination['destination_commune']);
-
-        // Pour le checkout web ET mobile, le tarif configuré dans
-        // Tarification > Tarifs communes est la source obligatoire dès qu'une
-        // commune de départ et une commune d'arrivée sont connues.
-        $fixedRelation = $hasCommunePair
-            ? $this->calculator->fixedDestinationRelation($destination, $vehicle['code'])
-            : null;
-
-        if ($hasCommunePair && ! $fixedRelation) {
-            return $this->unavailable(
-                'Aucun tarif de livraison n’est configuré pour '
-                .trim((string) $destination['origin_commune']).' → '
-                .trim((string) $destination['destination_commune']).' avec le véhicule '.$vehicle['label'].'.',
-                'commune_tariff_missing'
-            );
-        }
-
-        // Le GPS reste utile pour l'ETA et le suivi, mais un tarif fixe commune
-        // -> commune ne doit pas devenir indisponible simplement parce que le
-        // fournisseur d'itinéraire ne répond pas. Dans ce cas, le prix provient
-        // quand même de la matrice et aucune formule au kilomètre n'est utilisée.
+        // La distance réelle (itinéraire GPS, sinon distance entre communes,
+        // sinon ligne droite) est une composante du prix : sans elle, pas de
+        // tarif fiable.
         $route = $this->resolveRoute($items, $request);
-        if (! $route && $fixedRelation) {
-            $route = $this->gridOnlyRoute();
-            $route['duration_minutes'] = data_get($fixedRelation, 'meta.estimated_delay_minutes');
-        }
-
         if (! $route) {
             return $this->unavailable('Distance OVANIE impossible a calculer pour cette adresse.', 'route_unavailable');
         }
 
-        // Les anciennes cartes base/km/kg/m³ ne sont nécessaires que pour les
-        // cas historiques sans paire de communes explicite (ex. tournée
-        // consolidée). Elles ne conditionnent plus un trajet normal tarifé dans
-        // la matrice communale.
-        if (! $hasCommunePair && ! $vehicle['rate_card']) {
-            return $this->unavailable('Référence tarifaire OVANIE indisponible pour ce véhicule.', 'ovanie_reference_rate_missing');
-        }
-
         $calculation = $this->calculator->calculate($items, $route, $destination, $legacyRate);
 
-        if ($hasCommunePair && (
-            ($calculation['rate_source'] ?? null) === 'missing_commune_tariff'
-            || (float) ($calculation['price'] ?? 0) <= 0
-        )) {
+        if (($calculation['rate_source'] ?? null) === 'missing_vehicle_rate' || (float) ($calculation['price'] ?? 0) <= 0) {
             return $this->unavailable(
-                'Le tarif de cette relation n’est pas complètement configuré pour le véhicule requis.',
-                'commune_tariff_missing'
+                'Le tarif du véhicule '.$vehicle['label'].' n’est pas encore configuré dans Tarification (base, km, kg, m³).',
+                'ovanie_vehicle_rate_missing'
             );
         }
 
@@ -759,25 +737,6 @@ class DeliveryPricingEngine
             'provider' => 'haversine',
             'source' => 'haversine',
             'distance_km' => $this->haversineDistanceKm($lat1, $lng1, $lat2, $lng2),
-            'duration_minutes' => null,
-            'traffic_delay_minutes' => null,
-            'no_traffic_duration_minutes' => null,
-            'route_geometry' => null,
-            'raw' => [],
-        ];
-    }
-
-    /**
-     * Route technique utilisée uniquement lorsqu'un tarif fixe commune +
-     * véhicule existe. Aucun coût kilométrique n'est calculé avec cette route.
-     */
-    private function gridOnlyRoute(): array
-    {
-        return [
-            'success' => true,
-            'provider' => 'delivery_grid',
-            'source' => 'fixed_destination_vehicle_grid',
-            'distance_km' => 0.0,
             'duration_minutes' => null,
             'traffic_delay_minutes' => null,
             'no_traffic_duration_minutes' => null,

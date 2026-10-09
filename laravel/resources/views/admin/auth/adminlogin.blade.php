@@ -14,7 +14,7 @@
         <div class="mb-5 text-center">
             <a href="{{ route('home') }}" class="inline-flex" aria-label="Retour à l'accueil OVANIE">
                 <img
-                    src="{{ asset('storage/logos/officiel site.png') }}"
+                    src="{{ asset('images/home/logo-ovanie.png') }}"
                     alt="Logo OVANIE"
                     class="mx-auto h-12 w-auto object-contain sm:h-14"
                 >

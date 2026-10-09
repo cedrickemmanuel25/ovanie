@@ -47,6 +47,10 @@ class DriverPresenceController
             'recorded_at' => now(),
         ]);
 
+        // Arrivée automatique : le signal de présence suffit, même si l'écran
+        // de la mission n'est pas ouvert sur le téléphone.
+        $this->detectArrivals($driver, (float) $data['latitude'], (float) $data['longitude'], isset($data['accuracy']) ? (float) $data['accuracy'] : null);
+
         $driver->load('currentLocation');
 
         return response()->json([
@@ -109,10 +113,39 @@ class DriverPresenceController
 
         $driver->forceFill(['status' => $data['status']])->save();
 
+        // Passage « Disponible » : le livreur reçoit tout de suite les missions
+        // encore ouvertes qu'il peut transporter.
+        if ($data['status'] === 'Disponible') {
+            try {
+                app(\App\Services\LogisticsShipmentWorkflowService::class)->offerOpenMissionsToDriver($driver->fresh());
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
         return response()->json([
             'ok' => true,
             'status' => $driver->status,
             'online' => $driver->hasFreshGpsPresence(),
         ]);
+    }
+
+    private function detectArrivals(DeliveryDriver $driver, float $latitude, float $longitude, ?float $accuracy): void
+    {
+        $missionNumbers = $driver->assignments()
+            ->whereIn('status', ['collecting', 'picked_up', 'in_transit'])
+            ->get()
+            ->map(fn ($assignment) => $assignment->resolved_mission_number)
+            ->filter()
+            ->unique();
+
+        foreach ($missionNumbers as $missionNumber) {
+            try {
+                app(\App\Services\DriverMissionService::class)
+                    ->detectAutomaticArrival($driver, (string) $missionNumber, $latitude, $longitude, $accuracy);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
     }
 }

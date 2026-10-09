@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\AbidjanCommune;
 use App\Models\DeliveryVehicleRateCard;
 use App\Models\LogisticsPricingGrid;
-use App\Models\LogisticsPricingMatrix;
 use App\Models\LogisticsPricingSupplement;
 use App\Models\LogisticsTerritoryZone;
 use Illuminate\Support\Collection;
@@ -70,17 +69,6 @@ class LogisticsPricingWorkspaceService
                 'updated_at' => $rate->updated_at,
             ]);
         })->values();
-    }
-
-    public function matrices(): Collection
-    {
-        if (! Schema::hasTable('logistics_pricing_matrices')) {
-            return collect();
-        }
-
-        return LogisticsPricingMatrix::query()->orderByDesc('updated_at')->get()
-            ->reject(fn (LogisticsPricingMatrix $matrix) => $this->isUiDemo($matrix->meta))
-            ->values();
     }
 
     public function supplements(): Collection
@@ -169,15 +157,6 @@ class LogisticsPricingWorkspaceService
         return (int) round($rates->where('is_active', true)->count() / $rates->count() * 100);
     }
 
-    public function averageMatrixDelayMinutes(): ?int
-    {
-        $minutes = $this->matrices()->where('is_active', true)->flatMap(function (LogisticsPricingMatrix $matrix) {
-            return collect((array) $matrix->estimated_delays)->map(fn ($value) => $this->delayToMinutes($value))->filter();
-        });
-
-        return $minutes->isNotEmpty() ? (int) round($minutes->avg()) : null;
-    }
-
     public function averageSupplementPercent(): ?float
     {
         $percentages = $this->supplements()->where('is_active', true)->where('calculation_type', 'percentage')->pluck('amount');
@@ -189,17 +168,4 @@ class LogisticsPricingWorkspaceService
         return (bool) data_get((array) $meta, 'pricing_ui_seed', false);
     }
 
-    private function delayToMinutes(mixed $value): ?int
-    {
-        if (is_numeric($value)) return (int) $value;
-        $value = mb_strtolower(trim((string) $value));
-        if ($value === '') return null;
-        if (preg_match('/(?:(\d+)\s*h)?\s*(?:(\d+)\s*min)?/u', $value, $m)) {
-            $hours = (int) ($m[1] ?? 0);
-            $minutes = (int) ($m[2] ?? 0);
-            $total = $hours * 60 + $minutes;
-            return $total > 0 ? $total : null;
-        }
-        return null;
-    }
 }

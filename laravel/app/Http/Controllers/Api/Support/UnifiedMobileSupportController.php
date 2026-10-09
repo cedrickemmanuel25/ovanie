@@ -181,7 +181,9 @@ class UnifiedMobileSupportController extends Controller
 
         return response()->json(['data' => [
             ...$this->ticketSummary($ticket),
-            'description' => (string) $ticket->description,
+            // Un ticket ouvert par l'assistante a pour description sa note de transfert interne :
+            // elle est réservée aux conseillers et ne doit pas être montrée au demandeur.
+            'description' => $ticket->created_by_ai ? '' : (string) $ticket->description,
             'requester' => $ticket->requesterProfile ? [
                 'type' => $ticket->requesterProfile->requester_type,
                 'type_label' => $ticket->requesterProfile->type_label,
@@ -192,7 +194,10 @@ class UnifiedMobileSupportController extends Controller
                 'id' => (int) $link->context_id,
                 'primary' => (bool) $link->is_primary,
             ])->values(),
-            'messages' => $ticket->messages->map(fn ($message) => $this->messagePayload($request, $ticket, $message))->values(),
+            // Le premier message reprend la description : les applications l'affichent déjà en tête.
+            'messages' => $ticket->messages
+                ->reject(fn ($message, $index) => $index === 0 && trim((string) $message->body) === trim((string) $ticket->description))
+                ->map(fn ($message) => $this->messagePayload($request, $ticket, $message))->values(),
         ]]);
     }
 

@@ -52,6 +52,7 @@ class ClientPaymentHistoryItem {
     if (op.contains('card') || op.contains('carte')) return 'Carte bancaire';
     if (method.toLowerCase().contains('cash')) return 'Paiement à la livraison';
     if (method.toLowerCase().contains('paydunya')) return 'Paiement en ligne';
+    if (method.toLowerCase().contains('manual') || type.toLowerCase().contains('refund')) return 'Remboursement';
     return cleanOvanieText(method.isEmpty ? 'Paiement OVANIE' : method);
   }
 

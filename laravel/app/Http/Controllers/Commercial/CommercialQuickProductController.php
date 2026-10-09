@@ -162,7 +162,7 @@ class CommercialQuickProductController extends Controller
         $verb = $result['created'] ? 'ajouté' : 'mis à jour';
         $message = match ($result['status']) {
             'actif' => "Produit {$verb} et publié.",
-            'pending_logistics' => "Produit {$verb}, mais non publié : la logistique de la boutique est incomplète.",
+            'pending_logistics' => "Produit {$verb}, mais non publié : la configuration logistique/reversement de la boutique est incomplète.",
             default => $result['missing'] !== []
                 ? "Produit {$verb} en brouillon. À compléter : " . implode(', ', $result['missing']) . '.'
                 : "Produit {$verb} en brouillon.",
@@ -259,9 +259,6 @@ class CommercialQuickProductController extends Controller
 
     private function managedShops(Request $request): Builder
     {
-        return Shop::query()->where(function (Builder $query) use ($request) {
-            $query->where('created_by_commercial_id', $request->user()->id)
-                ->orWhere('managed_by_commercial_id', $request->user()->id);
-        });
+        return Shop::query()->accessibleToCommercial((int) $request->user()->id, 'products');
     }
 }

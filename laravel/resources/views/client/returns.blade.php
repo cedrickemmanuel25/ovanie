@@ -14,7 +14,7 @@
         <section class="cs-card">
             <div class="cs-section-head">
                 <h2>Nouvelle demande</h2>
-                <span class="cs-badge info">{{ $orders->count() }} commande(s) disponible(s)</span>
+                <span class="cs-badge info">{{ $orders->count() }} {{ $orders->count() > 1 ? 'commandes disponibles' : 'commande disponible' }}</span>
             </div>
 
             @if($orders->isNotEmpty())

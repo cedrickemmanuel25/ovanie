@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\AbidjanCommune;
 use App\Models\DeliveryVehicleRateCard;
-use App\Models\LogisticsPricingMatrix;
 use App\Models\LogisticsPricingSimulation;
 use App\Models\LogisticsPricingSupplement;
 use App\Services\Geo\RoutingService;
@@ -13,7 +12,6 @@ use App\Services\LogisticsVehicleResolver;
 use App\Services\OvanieDeliveryPriceCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
@@ -30,204 +28,31 @@ class LogisticsOvaniePricingController extends Controller
 
     public function index(): View
     {
-        $rates = $this->workspace->rateCards();
+        $catalog = collect($this->vehicleResolver->catalog());
         $supplements = $this->workspace->supplements()->where('is_active', true)->values();
-        $zones = $this->workspace->zones();
-        $coveredCommunes = $this->workspace->coveredCommunes();
-        $matrices = $this->workspace->matrices()->where('is_active', true)->values();
-        $matrixCoverage = $this->matrixCoverage($coveredCommunes, $matrices);
-        $vehicleCatalog = collect($this->vehicleResolver->catalog());
 
         return view('logistics.ovanie-pricing', [
-            'rates' => $rates,
+            'rates' => $this->workspace->rateCards(),
             'vehicles' => LogisticsPricingWorkspaceService::VEHICLES,
             'supplements' => $supplements,
-            'zoneCount' => $zones->count(),
-            'coveredCommuneCount' => $coveredCommunes->count(),
             'supplementCount' => $supplements->count(),
-            'matrixCount' => $matrices->count(),
-            'matrixCoveragePercent' => $matrixCoverage['percent'],
-            'matrixCoveredRouteCount' => $matrixCoverage['covered'],
-            'matrixRequiredRouteCount' => $matrixCoverage['required'],
-            'activeVehicleCount' => $vehicleCatalog->where('is_active', true)->count(),
-            'configuredVehicleCount' => $vehicleCatalog->where('configured', true)->count(),
+            'coveredCommuneCount' => $this->workspace->coveredCommunes()->count(),
+            'activeVehicleCount' => $catalog->where('is_active', true)->count(),
+            'pricedVehicleCount' => $this->pricedVehicleCodes()->count(),
         ]);
     }
 
     public function vehicles(): View
     {
-        $rates = $this->workspace->rateCards();
         $catalog = collect($this->vehicleResolver->catalog());
 
         return view('logistics.pricing.vehicles', [
-            'rates' => $rates,
+            'rates' => $this->workspace->rateCards(),
             'vehicles' => LogisticsPricingWorkspaceService::VEHICLES,
             'vehicleCatalog' => $catalog,
             'activeVehicleCount' => $catalog->where('is_active', true)->count(),
-            'configuredVehicleCount' => $catalog->where('configured', true)->count(),
+            'pricedVehicleCount' => $this->pricedVehicleCodes()->count(),
             'activeSupplementCount' => $this->workspace->supplements()->where('is_active', true)->count(),
-        ]);
-    }
-
-    /**
-     * Liste globale des tarifs commune -> commune.
-     *
-     * Cette page est volontairement séparée de la saisie afin que l'équipe
-     * logistique puisse auditer ce qui est configuré sans afficher en même
-     * temps les 13 x 5 champs de modification d'une commune de départ.
-     */
-    public function communes(Request $request): View
-    {
-        $zones = $this->workspace->zones();
-        $communes = $this->workspace->coveredCommunes();
-        $matrices = $this->workspace->matrices();
-        $activeVehicleCodes = $this->activeVehicleCodes();
-        $relationOverview = $this->relationOverview($communes, $matrices, $zones, $activeVehicleCodes);
-
-        $relationStatus = trim((string) $request->query('relation_status', 'configured'));
-        $allowedStatuses = ['configured', 'covered', 'incomplete', 'unconfigured', 'inactive', 'all'];
-        if (! in_array($relationStatus, $allowedStatuses, true)) {
-            $relationStatus = 'configured';
-        }
-
-        $relationSearch = trim((string) $request->query('relation_search', ''));
-        $listOriginZone = trim((string) $request->query('list_origin_zone', ''));
-        $listDestinationZone = trim((string) $request->query('list_destination_zone', ''));
-        $listOrigin = (int) $request->query('list_origin', 0);
-        $listDestination = (int) $request->query('list_destination', 0);
-
-        $relationRows = $relationOverview['rows']->filter(function (array $row) use ($relationStatus, $relationSearch, $listOriginZone, $listDestinationZone, $listOrigin, $listDestination) {
-            $statusMatches = match ($relationStatus) {
-                'configured' => in_array($row['status'], ['covered', 'incomplete', 'inactive'], true),
-                'all' => true,
-                default => $row['status'] === $relationStatus,
-            };
-
-            if (! $statusMatches) return false;
-            if ($listOrigin > 0 && (int) $row['origin']->id !== $listOrigin) return false;
-            if ($listDestination > 0 && (int) $row['destination']->id !== $listDestination) return false;
-            if ($listOriginZone !== '' && ! in_array($listOriginZone, $row['origin_zone_codes'], true)) return false;
-            if ($listDestinationZone !== '' && ! in_array($listDestinationZone, $row['destination_zone_codes'], true)) return false;
-
-            if ($relationSearch !== '') {
-                $haystack = mb_strtolower(
-                    $row['origin']->name.' '.$row['destination']->name.' '
-                    .implode(' ', $row['origin_zone_names']).' '
-                    .implode(' ', $row['destination_zone_names'])
-                );
-                if (! str_contains($haystack, mb_strtolower($relationSearch))) return false;
-            }
-
-            return true;
-        })->values();
-
-        return view('logistics.pricing.communes', [
-            'zones' => $zones,
-            'communes' => $communes,
-            'vehicles' => LogisticsPricingWorkspaceService::VEHICLES,
-            'activeVehicleCodes' => $activeVehicleCodes,
-            'coverage' => $relationOverview['coverage'],
-            'relationStats' => $relationOverview['stats'],
-            'relationRows' => $relationRows,
-            'relationStatus' => $relationStatus,
-            'relationSearch' => $relationSearch,
-            'listOriginZone' => $listOriginZone,
-            'listDestinationZone' => $listDestinationZone,
-            'listOrigin' => $listOrigin,
-            'listDestination' => $listDestination,
-        ]);
-    }
-
-    /**
-     * Saisie en masse des tarifs d'une seule commune de départ.
-     * Les zones et communes sont toujours lues depuis Territoire.
-     */
-    public function configureCommunes(Request $request): View
-    {
-        $zones = $this->workspace->zones();
-        $communes = $this->workspace->coveredCommunes();
-        $matrices = $this->workspace->matrices();
-        $activeVehicleCodes = $this->activeVehicleCodes();
-        $relationOverview = $this->relationOverview($communes, $matrices, $zones, $activeVehicleCodes);
-
-        $requestedZone = trim((string) $request->query('origin_zone', ''));
-        $originZone = $zones->firstWhere('code', $requestedZone) ?: $zones->first();
-        $coveredIds = $communes->pluck('id')->map(fn ($id) => (int) $id);
-        $originCommunes = $originZone
-            ? $originZone->communes
-                ->filter(fn (AbidjanCommune $commune) => $commune->is_active && $coveredIds->contains((int) $commune->id))
-                ->values()
-            : $communes;
-
-        if ($originCommunes->isEmpty()) {
-            $originCommunes = $communes;
-        }
-
-        $requestedOriginId = (int) $request->query('origin', 0);
-        $selectedOrigin = $originCommunes->firstWhere('id', $requestedOriginId)
-            ?: $communes->firstWhere('id', $requestedOriginId)
-            ?: $originCommunes->first()
-            ?: $communes->first();
-
-        // Une commune transmise dans l'URL peut appartenir à une autre zone :
-        // la zone visible est alors réalignée sur la source Territoire.
-        if ($selectedOrigin && (! $originZone || ! $originZone->communes->contains('id', $selectedOrigin->id))) {
-            $originZone = $zones->first(fn ($zone) => $zone->communes->contains('id', $selectedOrigin->id)) ?: $originZone;
-            if ($originZone) {
-                $originCommunes = $originZone->communes
-                    ->filter(fn (AbidjanCommune $commune) => $commune->is_active && $coveredIds->contains((int) $commune->id))
-                    ->values();
-            }
-        }
-
-        $matrixByDestination = collect();
-        if ($selectedOrigin) {
-            $matrixByDestination = $matrices
-                ->filter(fn (LogisticsPricingMatrix $row) => mb_strtolower(trim($row->origin_commune)) === mb_strtolower(trim($selectedOrigin->name)))
-                ->keyBy(fn (LogisticsPricingMatrix $row) => mb_strtolower(trim($row->destination_commune)));
-        }
-
-        $zoneNamesByCommune = $relationOverview['zone_names_by_commune'];
-        $zoneCodesByCommune = $relationOverview['zone_codes_by_commune'];
-
-        $destinationRows = $communes->map(function (AbidjanCommune $commune) use ($matrixByDestination, $zoneNamesByCommune, $zoneCodesByCommune) {
-            $matrix = $matrixByDestination->get(mb_strtolower(trim($commune->name)));
-
-            return [
-                'commune' => $commune,
-                'matrix' => $matrix,
-                'zone_names' => $zoneNamesByCommune[(int) $commune->id] ?? [],
-                'zone_codes' => $zoneCodesByCommune[(int) $commune->id] ?? [],
-            ];
-        })->values();
-
-        $selectedOriginRows = $selectedOrigin
-            ? $relationOverview['rows']->filter(fn (array $row) => (int) $row['origin']->id === (int) $selectedOrigin->id)
-            : collect();
-
-        $originProgress = [
-            'total' => $selectedOriginRows->count(),
-            'configured' => $selectedOriginRows->filter(fn (array $row) => in_array($row['status'], ['covered', 'incomplete', 'inactive'], true))->count(),
-            'covered' => $selectedOriginRows->where('status', 'covered')->count(),
-            'incomplete' => $selectedOriginRows->where('status', 'incomplete')->count(),
-            'inactive' => $selectedOriginRows->where('status', 'inactive')->count(),
-            'unconfigured' => $selectedOriginRows->where('status', 'unconfigured')->count(),
-        ];
-        $originProgress['percent'] = $originProgress['total'] > 0
-            ? (int) round($originProgress['covered'] / $originProgress['total'] * 100)
-            : 0;
-
-        return view('logistics.pricing.communes-configure', [
-            'zones' => $zones,
-            'communes' => $communes,
-            'originZone' => $originZone,
-            'originCommunes' => $originCommunes,
-            'selectedOrigin' => $selectedOrigin,
-            'destinationRows' => $destinationRows,
-            'vehicles' => LogisticsPricingWorkspaceService::VEHICLES,
-            'activeVehicleCodes' => $activeVehicleCodes,
-            'originProgress' => $originProgress,
-            'highlightDestination' => (int) $request->query('destination', 0),
         ]);
     }
 
@@ -256,30 +81,43 @@ class LogisticsOvaniePricingController extends Controller
             'vehicles' => LogisticsPricingWorkspaceService::VEHICLES,
             'communes' => $this->workspace->coveredCommunes(),
             'activeSupplementCount' => $this->workspace->supplements()->where('is_active', true)->where('automatic', true)->count(),
-            'configuredRateCount' => $this->activeVehicleCodes()->count(),
-            'activeMatrixCount' => $this->workspace->matrices()->where('is_active', true)->count(),
+            'pricedVehicleCount' => $this->pricedVehicleCodes()->count(),
             'simulationsToday' => $simulationsToday,
-            'coveredCommuneCount' => $this->workspace->coveredCommunes()->count(),
         ]);
     }
 
+    /**
+     * Enregistre les tarifs d'un véhicule utilisés par la formule :
+     * base + distance × prix/km + poids × prix/kg + volume × prix/m³.
+     */
     public function storeVehicleTariff(Request $request): RedirectResponse
     {
         $vehicles = LogisticsPricingWorkspaceService::VEHICLES;
         $data = $request->validate([
             'vehicle_code' => ['required', Rule::in(array_keys($vehicles))],
             'vehicle_label' => ['nullable', 'string', 'max:80'],
+            'base_fee' => ['required', 'numeric', 'min:0', 'max:10000000'],
+            'price_per_km' => ['required', 'numeric', 'min:0', 'max:1000000'],
+            'price_per_kg' => ['required', 'numeric', 'min:0', 'max:1000000'],
+            'price_per_m3' => ['required', 'numeric', 'min:0', 'max:10000000'],
             'max_weight_kg' => ['nullable', 'numeric', 'min:0.01'],
             'max_volume_m3' => ['nullable', 'numeric', 'min:0.0001'],
             'description' => ['nullable', 'string', 'max:500'],
             'is_active' => ['required', 'boolean'],
+        ], [
+            'base_fee.required' => 'Renseignez le tarif de base (0 si aucun).',
+            'price_per_km.required' => 'Renseignez le prix par km (0 si aucun).',
+            'price_per_kg.required' => 'Renseignez le prix par kg (0 si aucun).',
+            'price_per_m3.required' => 'Renseignez le prix par m³ (0 si aucun).',
         ]);
+
+        if ((bool) $data['is_active'] && (float) $data['base_fee'] + (float) $data['price_per_km']
+            + (float) $data['price_per_kg'] + (float) $data['price_per_m3'] <= 0) {
+            return back()->withErrors(['base_fee' => 'Un véhicule actif doit avoir au moins un tarif supérieur à 0.'])->withInput();
+        }
 
         $vehicle = $vehicles[$data['vehicle_code']];
 
-        // Cette table reste utilisée comme configuration de capacité/statut afin
-        // de préserver la compatibilité du projet. Les anciens champs monétaires
-        // ne sont plus édités ici et ne participent pas au prix commune -> commune.
         DeliveryVehicleRateCard::query()->updateOrCreate(
             ['vehicle_code' => $data['vehicle_code']],
             [
@@ -287,180 +125,31 @@ class LogisticsOvaniePricingController extends Controller
                 'min_weight_kg' => 0,
                 'max_weight_kg' => $data['max_weight_kg'] ?? $vehicle['max_weight_kg'],
                 'max_volume_m3' => $data['max_volume_m3'] ?? $vehicle['max_volume_m3'],
+                'base_fee' => round((float) $data['base_fee'], 2),
+                'price_per_km' => round((float) $data['price_per_km'], 2),
+                'price_per_kg' => round((float) $data['price_per_kg'], 2),
+                'price_per_m3' => round((float) $data['price_per_m3'], 2),
+                // Formule stricte : ni minimum, ni plafond, ni marge.
+                'handling_fee' => 0,
+                'unloading_fee' => 0,
+                'fragile_fee' => 0,
+                'urgent_fee' => 0,
+                'traffic_surcharge_fee' => 0,
+                'intra_commune_min_fee' => 0,
+                'min_fee' => null,
+                'max_fee' => null,
+                'margin_type' => 'none',
+                'margin_value' => 0,
                 'is_active' => (bool) $data['is_active'],
                 'meta' => [
                     'description' => $data['description'] ?? null,
-                    'source' => 'pricing_vehicle_capacity_page',
-                    'pricing_mode' => 'commune_matrix',
+                    'source' => 'pricing_vehicle_page',
+                    'pricing_mode' => 'distance_weight_volume_formula',
                 ],
             ]
         );
 
-        return back()->with('success', 'Véhicule et capacités enregistrés.');
-    }
-
-    public function storeMatrix(Request $request): RedirectResponse
-    {
-        $vehicles = LogisticsPricingWorkspaceService::VEHICLES;
-        $data = $request->validate([
-            'origin_commune' => ['required', 'string', 'max:120'],
-            'destination_commune' => ['required', 'string', 'max:120'],
-            'vehicle_prices' => ['required', 'array'],
-            'vehicle_prices.*' => ['nullable', 'integer', 'min:0'],
-            'apply_reverse' => ['nullable', 'boolean'],
-            'is_active' => ['nullable', 'boolean'],
-        ]);
-
-        $this->assertCoveredCommune($data['origin_commune']);
-        $this->assertCoveredCommune($data['destination_commune']);
-
-        $prices = [];
-        foreach (array_keys($vehicles) as $code) {
-            $prices[$code] = max(0, (int) round((float) data_get($data, 'vehicle_prices.'.$code, 0)));
-        }
-        abort_unless(collect($prices)->contains(fn ($price) => $price > 0), 422, 'Renseignez au moins un prix véhicule pour ce trajet.');
-
-        $payload = [
-            'region' => 'Abidjan',
-            'vehicle_prices' => $prices,
-            'estimated_delays' => [],
-            'rules' => ['pricing_mode' => 'fixed_commune_vehicle'],
-            'description' => null,
-            'is_active' => $request->boolean('is_active', true),
-            'meta' => ['created_from' => 'pricing_communes_page'],
-        ];
-
-        LogisticsPricingMatrix::query()->updateOrCreate(
-            ['region' => 'Abidjan', 'origin_commune' => $data['origin_commune'], 'destination_commune' => $data['destination_commune']],
-            $payload
-        );
-
-        if ($data['origin_commune'] !== $data['destination_commune'] && $request->boolean('apply_reverse')) {
-            LogisticsPricingMatrix::query()->updateOrCreate(
-                ['region' => 'Abidjan', 'origin_commune' => $data['destination_commune'], 'destination_commune' => $data['origin_commune']],
-                array_merge($payload, ['meta' => ['created_from' => 'pricing_communes_page', 'mirrored_from' => $data['origin_commune'].' -> '.$data['destination_commune']]])
-            );
-        }
-
-        return back()->with('success', 'Tarif du trajet enregistré.');
-    }
-
-    public function storeMatrixBulk(Request $request): RedirectResponse
-    {
-        $vehicleCodes = array_keys(LogisticsPricingWorkspaceService::VEHICLES);
-        $data = $request->validate([
-            'origin_commune_id' => ['required', 'integer'],
-            'origin_zone' => ['nullable', 'string', 'max:80'],
-            'prices' => ['nullable', 'array'],
-            'prices.*' => ['nullable', 'array'],
-            'prices.*.*' => ['nullable', 'integer', 'min:0'],
-            'active' => ['nullable', 'array'],
-            'active.*' => ['nullable', 'boolean'],
-            'mirror' => ['nullable', 'array'],
-            'mirror.*' => ['nullable', 'boolean'],
-        ]);
-
-        $covered = $this->workspace->coveredCommunes()->keyBy(fn (AbidjanCommune $commune) => (int) $commune->id);
-        $origin = $covered->get((int) $data['origin_commune_id']);
-        abort_unless($origin, 422, 'La commune de départ doit appartenir à une zone active de Territoire.');
-
-        $pricesInput = (array) ($data['prices'] ?? []);
-        $activeInput = (array) ($data['active'] ?? []);
-        $mirrorInput = (array) ($data['mirror'] ?? []);
-        $saved = 0;
-        $removed = 0;
-        $mirrored = 0;
-
-        DB::transaction(function () use ($covered, $origin, $vehicleCodes, $pricesInput, $activeInput, $mirrorInput, &$saved, &$removed, &$mirrored) {
-            foreach ($covered as $destinationId => $destination) {
-                $submitted = (array) ($pricesInput[(string) $destinationId] ?? $pricesInput[$destinationId] ?? []);
-                $prices = [];
-                foreach ($vehicleCodes as $code) {
-                    $prices[$code] = max(0, (int) round((float) ($submitted[$code] ?? 0)));
-                }
-
-                $hasPrice = collect($prices)->contains(fn ($price) => $price > 0);
-                $query = LogisticsPricingMatrix::query()->where([
-                    'region' => 'Abidjan',
-                    'origin_commune' => $origin->name,
-                    'destination_commune' => $destination->name,
-                ]);
-
-                if (! $hasPrice) {
-                    $removed += $query->delete();
-                    if ($origin->id !== $destination->id && (bool) ($mirrorInput[(string) $destinationId] ?? $mirrorInput[$destinationId] ?? false)) {
-                        $removed += LogisticsPricingMatrix::query()->where([
-                            'region' => 'Abidjan',
-                            'origin_commune' => $destination->name,
-                            'destination_commune' => $origin->name,
-                        ])->delete();
-                    }
-                    continue;
-                }
-
-                $isActive = (bool) ($activeInput[(string) $destinationId] ?? $activeInput[$destinationId] ?? false);
-                $payload = [
-                    'vehicle_prices' => $prices,
-                    'estimated_delays' => [],
-                    'rules' => ['pricing_mode' => 'fixed_commune_vehicle'],
-                    'description' => null,
-                    'is_active' => $isActive,
-                    'meta' => ['created_from' => 'pricing_communes_bulk_table'],
-                ];
-
-                LogisticsPricingMatrix::query()->updateOrCreate(
-                    ['region' => 'Abidjan', 'origin_commune' => $origin->name, 'destination_commune' => $destination->name],
-                    $payload
-                );
-                $saved++;
-
-                if ($origin->id !== $destination->id && (bool) ($mirrorInput[(string) $destinationId] ?? $mirrorInput[$destinationId] ?? false)) {
-                    LogisticsPricingMatrix::query()->updateOrCreate(
-                        ['region' => 'Abidjan', 'origin_commune' => $destination->name, 'destination_commune' => $origin->name],
-                        array_merge($payload, [
-                            'meta' => [
-                                'created_from' => 'pricing_communes_bulk_table',
-                                'mirrored_from' => $origin->name.' -> '.$destination->name,
-                            ],
-                        ])
-                    );
-                    $mirrored++;
-                }
-            }
-        });
-
-        $activeVehicleCodes = $this->activeVehicleCodes();
-        $originMatrices = LogisticsPricingMatrix::query()
-            ->where('region', 'Abidjan')
-            ->where('origin_commune', $origin->name)
-            ->get();
-
-        $complete = 0;
-        $incomplete = 0;
-        foreach ($originMatrices as $matrix) {
-            $prices = (array) $matrix->vehicle_prices;
-            $positive = $activeVehicleCodes->filter(fn ($code) => (float) ($prices[$code] ?? 0) > 0)->count();
-            if ($positive === 0) continue;
-            if ($matrix->is_active && $activeVehicleCodes->isNotEmpty() && $positive === $activeVehicleCodes->count()) {
-                $complete++;
-            } else {
-                $incomplete++;
-            }
-        }
-
-        if ($saved === 0 && $removed === 0) {
-            $message = 'Aucun trajet tarifé : renseignez au moins un montant avant d’enregistrer.';
-        } else {
-            $message = $saved.' trajet(s) enregistré(s) pour '.$origin->name.' : '.$complete.' complet(s), '.$incomplete.' à compléter';
-            if ($mirrored > 0) $message .= ', '.$mirrored.' trajet(s) inverse(s) copiés';
-            if ($removed > 0) $message .= ', '.$removed.' ligne(s) vide(s) supprimée(s)';
-            $message .= '.';
-        }
-
-        return redirect()->route('logistics.ovanie-pricing.communes.configure', [
-            'origin_zone' => $data['origin_zone'] ?? null,
-            'origin' => $origin->id,
-        ])->with('success', $message);
+        return back()->with('success', 'Tarifs du véhicule '.$vehicle['label'].' enregistrés.');
     }
 
     public function storeSupplement(Request $request): RedirectResponse
@@ -514,6 +203,9 @@ class LogisticsOvaniePricingController extends Controller
             ->implode(' / ');
 
         $calculationType = $data['calculation_type'];
+        if ($calculationType === 'percentage' && (float) $data['amount'] > 100) {
+            return back()->withErrors(['amount' => 'Un supplément en pourcentage ne peut pas dépasser 100 %.'])->withInput();
+        }
         $amount = $calculationType === 'fixed'
             ? (int) round((float) $data['amount'])
             : round((float) $data['amount'], 2);
@@ -548,6 +240,7 @@ class LogisticsOvaniePricingController extends Controller
         $data = $request->validate([
             'origin_commune_id' => ['required', 'integer'],
             'destination_commune_id' => ['required', 'integer'],
+            'distance_km' => ['nullable', 'numeric', 'min:0', 'max:2000'],
             'weight_kg' => ['required', 'numeric', 'min:0'],
             'volume_m3' => ['required', 'numeric', 'min:0'],
             'fragile' => ['nullable', 'boolean'],
@@ -555,9 +248,6 @@ class LogisticsOvaniePricingController extends Controller
             'unloading' => ['nullable', 'boolean'],
             'urgency' => ['nullable', Rule::in(['standard', 'express', 'priority'])],
         ]);
-
-        $coveredIds = $this->workspace->coveredCommunes()->pluck('id');
-        abort_unless($coveredIds->contains((int) $data['origin_commune_id']) && $coveredIds->contains((int) $data['destination_commune_id']), 422, 'Le trajet doit utiliser deux communes couvertes par OVANIE Logistics.');
 
         $origin = AbidjanCommune::query()->findOrFail((int) $data['origin_commune_id']);
         $destination = AbidjanCommune::query()->findOrFail((int) $data['destination_commune_id']);
@@ -570,46 +260,33 @@ class LogisticsOvaniePricingController extends Controller
         $vehicleCode = $vehicleResolved['code'];
         $vehicle = LogisticsPricingWorkspaceService::VEHICLES[$vehicleCode];
 
-        $route = null;
-        if ($origin->latitude !== null && $origin->longitude !== null && $destination->latitude !== null && $destination->longitude !== null) {
-            $candidate = $this->routing->route((float) $origin->latitude, (float) $origin->longitude, (float) $destination->latitude, (float) $destination->longitude);
-            if ($candidate['success'] ?? false) {
-                $route = $candidate;
-            }
+        $route = $this->simulationRoute($origin, $destination, $data['distance_km'] ?? null);
+        if (! $route) {
+            return back()->withErrors(['simulation' => 'Distance impossible à déterminer : renseignez la distance en km.'])->withInput();
         }
 
-        $pricingContext = [
-            'origin_commune' => $origin->name,
-            'destination_commune' => $destination->name,
-            'destination_city' => 'Abidjan',
-            'delivery_zone' => $destination->name,
+        $options = [
             'fragile' => $request->boolean('fragile'),
             'handling' => $request->boolean('handling'),
             'unloading' => $request->boolean('unloading'),
-            'urgent' => ($data['urgency'] ?? 'standard') !== 'standard',
+            'urgency' => $data['urgency'] ?? 'standard',
+        ];
+        $pricingContext = [
+            'fragile' => $options['fragile'],
+            'handling' => $options['handling'],
+            'unloading' => $options['unloading'],
+            'urgent' => $options['urgency'] !== 'standard',
             'package_count' => 1,
         ];
 
-        $fixedRelation = $this->deliveryPriceCalculator->fixedDestinationRelation($pricingContext, $vehicleCode);
-        if (! $route && ! $fixedRelation) {
-            return back()->withErrors(['simulation' => 'Aucun tarif de trajet n’est configuré pour cette relation de communes et ce véhicule.'])->withInput();
-        }
-
-        $pricing = $this->deliveryPriceCalculator->calculateMetrics(
-            $weight,
-            $volume,
-            $route ?: [],
-            $pricingContext,
-        );
+        $pricing = $this->deliveryPriceCalculator->calculateMetrics($weight, $volume, $route, $pricingContext);
 
         if ((float) ($pricing['price'] ?? 0) <= 0) {
-            return back()->withErrors(['simulation' => 'Aucun tarif opérationnel n’est disponible pour ce trajet et le véhicule recommandé.'])->withInput();
+            return back()->withErrors(['simulation' => 'Le véhicule '.$vehicle['label'].' n’a pas encore de tarif (base, km, kg, m³). Renseignez-le dans Véhicules & tarifs.'])->withInput();
         }
 
-        $durationMinutes = isset($pricing['duration_minutes']) && $pricing['duration_minutes'] !== null
-            ? (int) $pricing['duration_minutes']
-            : null;
-        $routePoints = collect((array) data_get($route ?: [], 'route_geometry.coordinates', []))
+        $durationMinutes = isset($pricing['duration_minutes']) ? (int) $pricing['duration_minutes'] : null;
+        $routePoints = collect((array) data_get($route, 'route_geometry.coordinates', []))
             ->filter(fn ($point) => is_array($point) && count($point) >= 2)
             ->map(fn ($point) => [(float) $point[1], (float) $point[0]])
             ->values()->all();
@@ -617,43 +294,33 @@ class LogisticsOvaniePricingController extends Controller
         $priceLines = collect((array) ($pricing['components'] ?? []))
             ->filter(fn ($value) => abs((float) $value) > 0.0001)
             ->map(fn ($value, $key) => [
-                'label' => $this->pricingComponentLabel((string) $key),
+                'label' => $this->pricingComponentLabel((string) $key, $pricing),
                 'value' => round((float) $value),
             ])
             ->values()
             ->all();
 
-        $result = [
+        $result = array_merge([
             'origin' => $origin->name,
             'destination' => $destination->name,
             'origin_commune_id' => $origin->id,
             'destination_commune_id' => $destination->id,
             'weight_kg' => $weight,
             'volume_m3' => $volume,
-            'fragile' => $request->boolean('fragile'),
-            'handling' => $request->boolean('handling'),
-            'unloading' => $request->boolean('unloading'),
-            'urgency' => $data['urgency'] ?? 'standard',
+            'distance_input' => $data['distance_km'] ?? null,
             'vehicle_code' => $vehicleCode,
             'vehicle_label' => $vehicle['label'],
             'vehicle_image' => $vehicle['image'],
-            'distance_km' => $route ? round((float) ($pricing['distance_km'] ?? $route['distance_km']), 1) : null,
+            'distance_km' => round((float) ($pricing['distance_km'] ?? 0), 1),
+            'distance_source' => $route['source'] ?? null,
             'duration_minutes' => $durationMinutes,
             'duration' => $this->formatDuration($durationMinutes),
             'price_total' => (int) round((float) $pricing['price']),
             'pricing_source' => (string) ($pricing['rate_source'] ?? 'vehicle_rate_card'),
             'price_lines' => $priceLines,
             'route_points' => $routePoints,
-            'alternatives' => $this->realAlternatives($vehicleCode, $weight, $volume, $origin->name, $destination->name, $route, [
-                'fragile' => $request->boolean('fragile'),
-                'handling' => $request->boolean('handling'),
-                'unloading' => $request->boolean('unloading'),
-                'urgency' => $data['urgency'] ?? 'standard',
-                'weight_kg' => $weight,
-                'volume_m3' => $volume,
-                'package_count' => 1,
-            ]),
-        ];
+            'alternatives' => $this->realAlternatives($vehicleCode, $weight, $volume, $route, $pricingContext),
+        ], $options);
 
         if (Schema::hasTable('logistics_pricing_simulations')) {
             LogisticsPricingSimulation::query()->create([
@@ -670,39 +337,63 @@ class LogisticsOvaniePricingController extends Controller
                 'price_total' => $result['price_total'],
                 'pricing_source' => $result['pricing_source'],
                 'components' => $pricing['components'] ?? [],
-                'options' => [
-                    'fragile' => $request->boolean('fragile'),
-                    'handling' => $request->boolean('handling'),
-                    'unloading' => $request->boolean('unloading'),
-                    'urgency' => $data['urgency'] ?? 'standard',
-                ],
+                'options' => $options,
             ]);
         }
 
         return redirect()->route('logistics.ovanie-pricing.simulator')->with('pricing_simulation', $result);
     }
 
+    /**
+     * Distance du simulateur : valeur saisie, sinon itinéraire routier entre
+     * les centres des communes, sinon ligne droite (comme le checkout).
+     */
+    private function simulationRoute(AbidjanCommune $origin, AbidjanCommune $destination, mixed $manualKm): ?array
+    {
+        $empty = ['duration_minutes' => null, 'traffic_delay_minutes' => null, 'route_geometry' => null];
+
+        if ($manualKm !== null && $manualKm !== '') {
+            return $empty + ['success' => true, 'source' => 'manual', 'distance_km' => (float) $manualKm];
+        }
+
+        $hasCoordinates = $origin->latitude !== null && $origin->longitude !== null
+            && $destination->latitude !== null && $destination->longitude !== null;
+        if (! $hasCoordinates) {
+            return null;
+        }
+
+        $route = $this->routing->route((float) $origin->latitude, (float) $origin->longitude, (float) $destination->latitude, (float) $destination->longitude);
+        if ($route['success'] ?? false) {
+            return $route + ['source' => $route['provider'] ?? 'routing'];
+        }
+
+        $lat1 = deg2rad((float) $origin->latitude);
+        $lat2 = deg2rad((float) $destination->latitude);
+        $dLat = $lat2 - $lat1;
+        $dLng = deg2rad((float) $destination->longitude - (float) $origin->longitude);
+        $a = sin($dLat / 2) ** 2 + cos($lat1) * cos($lat2) * sin($dLng / 2) ** 2;
+
+        return $empty + ['success' => true, 'source' => 'haversine', 'distance_km' => round(6371 * 2 * atan2(sqrt($a), sqrt(1 - $a)), 2)];
+    }
+
     public function export(Request $request)
     {
         $type = $request->string('type')->toString() ?: 'vehicles';
         if ($type === 'vehicles') {
-            $rows = collect($this->vehicleResolver->catalog());
-            $csv = "Véhicule;Charge maximale (kg);Volume maximal (m3);Statut;Configuration\n";
-            foreach ($rows as $row) {
+            $rates = $this->workspace->rateCards()->keyBy('vehicle_code');
+            $csv = "Véhicule;Tarif de base (FCFA);Prix/km;Prix/kg;Prix/m3;Charge max (kg);Volume max (m3);Statut\n";
+            foreach ($this->vehicleResolver->catalog() as $row) {
+                $rate = $rates->get($row['code']);
                 $csv .= implode(';', [
                     $row['label'],
+                    $rate?->base_fee ?? '',
+                    $rate?->price_per_km ?? '',
+                    $rate?->price_per_kg ?? '',
+                    $rate?->price_per_m3 ?? '',
                     $row['max_weight_kg'] ?? '',
                     $row['max_volume_m3'] ?? '',
                     $row['is_active'] ? 'Actif' : 'Inactif',
-                    $row['configured'] ? 'Personnalisée' : 'Valeurs OVANIE par défaut',
                 ])."\n";
-            }
-        } elseif ($type === 'communes') {
-            $rows = $this->workspace->matrices();
-            $csv = "Départ;Destination;Moto;Tricycle;Pickup;Camion 3T;Camion 10T;Statut\n";
-            foreach ($rows as $row) {
-                $prices = (array) $row->vehicle_prices;
-                $csv .= implode(';', [$row->origin_commune, $row->destination_commune, $prices['moto'] ?? 0, $prices['tricycle'] ?? 0, $prices['pickup'] ?? 0, $prices['camion_3t'] ?? 0, $prices['camion_10t'] ?? 0, $row->is_active ? 'Actif' : 'Inactif'])."\n";
             }
         } elseif ($type === 'supplements') {
             $rows = $this->workspace->supplements();
@@ -720,167 +411,26 @@ class LogisticsOvaniePricingController extends Controller
         ]);
     }
 
-    private function assertCoveredCommune(string $name): void
-    {
-        abort_unless(
-            $this->workspace->coveredCommunes()->contains(fn (AbidjanCommune $commune) => mb_strtolower($commune->name) === mb_strtolower($name)),
-            422,
-            'La commune sélectionnée n’est pas dans une zone de livraison OVANIE active.'
-        );
-    }
-
-    private function relationOverview($communes, $matrices, $zones, $activeVehicleCodes): array
-    {
-        $zoneNamesByCommune = [];
-        $zoneCodesByCommune = [];
-        $coveredIds = $communes->pluck('id')->map(fn ($id) => (int) $id);
-
-        foreach ($zones as $zone) {
-            foreach ($zone->communes as $commune) {
-                $communeId = (int) $commune->id;
-                if (! $commune->is_active || ! $coveredIds->contains($communeId)) {
-                    continue;
-                }
-                $zoneNamesByCommune[$communeId] ??= [];
-                $zoneCodesByCommune[$communeId] ??= [];
-                $zoneNamesByCommune[$communeId][] = $zone->name;
-                $zoneCodesByCommune[$communeId][] = $zone->code;
-                $zoneNamesByCommune[$communeId] = array_values(array_unique($zoneNamesByCommune[$communeId]));
-                $zoneCodesByCommune[$communeId] = array_values(array_unique($zoneCodesByCommune[$communeId]));
-            }
-        }
-
-        $matrixMap = $matrices->keyBy(function (LogisticsPricingMatrix $row) {
-            return mb_strtolower(trim($row->origin_commune)).'|'.mb_strtolower(trim($row->destination_commune));
-        });
-
-        $rows = collect();
-        $stats = [
-            'required' => $communes->count() * $communes->count(),
-            'configured' => 0,
-            'covered' => 0,
-            'incomplete' => 0,
-            'inactive' => 0,
-            'unconfigured' => 0,
-        ];
-
-        foreach ($communes as $origin) {
-            foreach ($communes as $destination) {
-                $key = mb_strtolower(trim($origin->name)).'|'.mb_strtolower(trim($destination->name));
-                $matrix = $matrixMap->get($key);
-                $prices = (array) ($matrix?->vehicle_prices ?? []);
-                $positiveCount = $activeVehicleCodes->filter(fn ($code) => (float) ($prices[$code] ?? 0) > 0)->count();
-                $hasAnyPrice = collect($prices)->contains(fn ($price) => (float) $price > 0);
-
-                if (! $matrix || ! $hasAnyPrice) {
-                    $status = 'unconfigured';
-                } elseif (! (bool) $matrix->is_active) {
-                    $status = 'inactive';
-                } elseif ($activeVehicleCodes->isNotEmpty() && $positiveCount === $activeVehicleCodes->count()) {
-                    $status = 'covered';
-                } else {
-                    $status = 'incomplete';
-                }
-
-                if ($hasAnyPrice) {
-                    $stats['configured']++;
-                }
-                $stats[$status]++;
-
-                $rows->push([
-                    'origin' => $origin,
-                    'destination' => $destination,
-                    'matrix' => $matrix,
-                    'prices' => $prices,
-                    'status' => $status,
-                    'positive_vehicle_count' => $positiveCount,
-                    'required_vehicle_count' => $activeVehicleCodes->count(),
-                    'origin_zone_names' => $zoneNamesByCommune[(int) $origin->id] ?? [],
-                    'origin_zone_codes' => $zoneCodesByCommune[(int) $origin->id] ?? [],
-                    'destination_zone_names' => $zoneNamesByCommune[(int) $destination->id] ?? [],
-                    'destination_zone_codes' => $zoneCodesByCommune[(int) $destination->id] ?? [],
-                ]);
-            }
-        }
-
-        $stats['percent'] = $stats['required'] > 0
-            ? (int) round($stats['covered'] / $stats['required'] * 100)
-            : 0;
-
-        return [
-            'rows' => $rows,
-            'stats' => $stats,
-            'coverage' => [
-                'required' => $stats['required'],
-                'covered' => $stats['covered'],
-                'percent' => $stats['percent'],
-            ],
-            'zone_names_by_commune' => $zoneNamesByCommune,
-            'zone_codes_by_commune' => $zoneCodesByCommune,
-        ];
-    }
-
-    private function matrixCoverage($communes, $matrices): array
-    {
-        $names = $communes->pluck('name')->values();
-        $required = $names->count() * $names->count();
-        if ($required === 0) {
-            return ['required' => 0, 'covered' => 0, 'percent' => 0];
-        }
-
-        $activeVehicleCodes = $this->activeVehicleCodes();
-        $covered = 0;
-        foreach ($names as $origin) {
-            foreach ($names as $destination) {
-                $exists = $matrices->contains(function (LogisticsPricingMatrix $row) use ($origin, $destination, $activeVehicleCodes) {
-                    $exact = mb_strtolower($row->origin_commune) === mb_strtolower($origin)
-                        && mb_strtolower($row->destination_commune) === mb_strtolower($destination);
-                    if (! $exact || $activeVehicleCodes->isEmpty()) return false;
-                    $prices = (array) $row->vehicle_prices;
-                    return $activeVehicleCodes->every(fn ($code) => (float) ($prices[$code] ?? 0) > 0);
-                });
-                if ($exists) $covered++;
-            }
-        }
-
-        return ['required' => $required, 'covered' => $covered, 'percent' => (int) round($covered / $required * 100)];
-    }
-
-    private function activeVehicleCodes()
+    /**
+     * Véhicules actifs disposant d'au moins un tarif de formule.
+     */
+    private function pricedVehicleCodes()
     {
         $rates = $this->workspace->rateCards()->keyBy('vehicle_code');
 
         return collect(array_keys(LogisticsPricingWorkspaceService::VEHICLES))
             ->filter(function (string $code) use ($rates) {
                 $rate = $rates->get($code);
-                return ! $rate || (bool) $rate->is_active;
+
+                return $rate && $rate->is_active && OvanieDeliveryPriceCalculator::hasFormulaRates($rate);
             })
             ->values();
     }
 
-    private function realAlternatives(
-        string $selected,
-        float $weight,
-        float $volume,
-        string $origin,
-        string $destination,
-        ?array $route,
-        array $context = []
-    ): array {
+    private function realAlternatives(string $selected, float $weight, float $volume, array $route, array $pricingContext): array
+    {
         $allowedCodes = collect($this->vehicleResolver->codesFrom($selected))
             ->reject(fn ($code) => $code === $selected);
-
-        $pricingContext = [
-            'origin_commune' => $origin,
-            'destination_commune' => $destination,
-            'destination_city' => 'Abidjan',
-            'delivery_zone' => $destination,
-            'fragile' => (bool) ($context['fragile'] ?? false),
-            'handling' => (bool) ($context['handling'] ?? false),
-            'unloading' => (bool) ($context['unloading'] ?? false),
-            'urgent' => ($context['urgency'] ?? 'standard') !== 'standard',
-            'package_count' => max(1, (int) ($context['package_count'] ?? 1)),
-        ];
 
         $items = [];
         foreach (LogisticsPricingWorkspaceService::VEHICLES as $code => $vehicle) {
@@ -888,16 +438,7 @@ class LogisticsOvaniePricingController extends Controller
                 continue;
             }
 
-            $pricing = $this->deliveryPriceCalculator->calculateMetrics(
-                $weight,
-                $volume,
-                $route ?: [],
-                $pricingContext,
-                null,
-                null,
-                $code,
-            );
-
+            $pricing = $this->deliveryPriceCalculator->calculateMetrics($weight, $volume, $route, $pricingContext, null, null, $code);
             $price = (float) ($pricing['price'] ?? 0);
             if ($price <= 0) {
                 continue;
@@ -915,21 +456,22 @@ class LogisticsOvaniePricingController extends Controller
         return collect($items)->sortBy('price')->values()->all();
     }
 
-    private function pricingComponentLabel(string $key): string
+    private function pricingComponentLabel(string $key, array $pricing = []): string
     {
         if (str_starts_with($key, 'supplement_')) {
             $code = substr($key, strlen('supplement_'));
             $supplement = $this->workspace->supplements()->firstWhere('code', $code);
-            return 'Supplément : '.($supplement?->label ?: str($code)->replace('_', ' ')->title());
+
+            return 'Frais : '.($supplement?->label ?: str($code)->replace('_', ' ')->title());
         }
 
+        $number = fn (float $value, int $decimals) => rtrim(rtrim(number_format($value, $decimals, ',', ' '), '0'), ',');
+
         return match ($key) {
-            'commune_route_fee' => 'Tarif du trajet commune → commune',
             'base_fee' => 'Tarif de base',
-            'distance_fee' => 'Distance',
-            'weight_fee' => 'Poids',
-            'volume_fee' => 'Volume',
-            'ovanie_margin' => 'Marge logistique',
+            'distance_fee' => 'Distance ('.$number((float) ($pricing['distance_km'] ?? 0), 1).' km)',
+            'weight_fee' => 'Poids ('.$number((float) ($pricing['weight_kg'] ?? 0), 2).' kg)',
+            'volume_fee' => 'Volume ('.$number((float) ($pricing['volume_m3'] ?? 0), 3).' m³)',
             default => str($key)->replace('_', ' ')->title()->toString(),
         };
     }

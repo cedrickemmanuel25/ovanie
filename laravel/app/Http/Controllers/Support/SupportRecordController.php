@@ -71,7 +71,7 @@ class SupportRecordController extends Controller
         $records = $query->paginate(25)->withQueryString();
         $records->getCollection()->transform(fn ($o) => [
             'id' => $o->id, 'primary' => $o->order_number, 'secondary' => $o->client?->email,
-            'status' => $o->status, 'detail' => number_format((float) $o->total_amount, 0, ',', ' ') . ' FCFA · Paiement ' . ($o->payment_status ?? '—'),
+            'status' => $o->status, 'detail' => number_format((float) $o->total_amount, 0, ',', ' ') . ' FCFA · ' . app(\App\Services\ClientPaymentPresentationService::class)->statusLabel($o->payment_status),
             'created_at' => $o->created_at, 'ticket_query' => ['order_id' => $o->id, 'requester_user_id' => $o->client_id],
         ]);
         return view('support.records.index', ['records' => $records, 'title' => 'Commandes', 'type' => 'order']);
@@ -86,7 +86,7 @@ class SupportRecordController extends Controller
         $records = $query->paginate(25)->withQueryString();
         $records->getCollection()->transform(fn ($p) => [
             'id' => $p->id, 'primary' => $p->reference ?: ('Paiement #' . $p->id), 'secondary' => $p->user?->email,
-            'status' => $p->status, 'detail' => number_format((float) $p->amount, 0, ',', ' ') . ' FCFA · ' . ($p->method ?? $p->operator ?? '—'),
+            'status' => $p->status, 'detail' => number_format((float) $p->amount, 0, ',', ' ') . ' FCFA · ' . app(\App\Services\ClientPaymentPresentationService::class)->methodLabel($p->method ?? $p->operator),
             'created_at' => $p->created_at, 'ticket_query' => ['payment_id' => $p->id, 'order_id' => $p->order_id, 'requester_user_id' => $p->user_id],
         ]);
         return view('support.records.index', ['records' => $records, 'title' => 'Paiements', 'type' => 'payment']);

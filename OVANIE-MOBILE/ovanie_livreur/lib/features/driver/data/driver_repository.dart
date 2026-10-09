@@ -95,7 +95,7 @@ class DriverRepository {
       return OtpSentResult(expiresIn: expiresIn);
     }
     throw const OvanieApiException(
-      'Réponse de connexion inattendue du serveur. Veuillez réessayer.',
+      'Connexion impossible pour le moment. Veuillez réessayer.',
     );
   }
 
@@ -117,7 +117,7 @@ class DriverRepository {
       return OtpSentResult(expiresIn: expiresIn);
     }
     throw const OvanieApiException(
-      'Réponse de connexion inattendue du serveur. Veuillez réessayer.',
+      'Connexion impossible pour le moment. Veuillez réessayer.',
     );
   }
 

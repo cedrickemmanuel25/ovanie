@@ -123,7 +123,7 @@ class CommercialProductController extends Controller
             ? 'Le produit a été enregistré comme brouillon.'
             : ($shop->canPublishProducts()
                 ? 'Le produit a été publié.'
-                : 'Le produit est complet, mais reste non publié tant que la logistique de la boutique n’est pas configurée.');
+                : 'Le produit est complet, mais reste non publié tant que la logistique et le reversement requis de la boutique ne sont pas confirmés.');
 
         return redirect()->route('commercial.products.index', ['shop_id' => $shop->id])->with('success', $message);
     }
@@ -226,7 +226,7 @@ class CommercialProductController extends Controller
 
     private function managedShops(Request $request)
     {
-        return Shop::query()->where(fn ($q) => $q->where('created_by_commercial_id',$request->user()->id)->orWhere('managed_by_commercial_id',$request->user()->id));
+        return Shop::query()->accessibleToCommercial((int) $request->user()->id, 'products');
     }
 
     private function messages(): array

@@ -4,6 +4,13 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 
 use App\Http\Controllers\Auth\UserAuthController;
+use App\Http\Controllers\Auth\ProAuthController;
+use App\Http\Controllers\Auth\ProPasswordResetController;
+use App\Http\Controllers\Auth\ProOnboardingController;
+use App\Http\Controllers\Auth\ProAccountController;
+use App\Http\Controllers\Auth\ProTeamController;
+use App\Http\Controllers\Auth\ProInvitationController;
+use App\Http\Controllers\Auth\ProPublicationController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
@@ -33,6 +40,7 @@ use App\Http\Controllers\VendorDeliverySettingsController;
 use App\Http\Controllers\VendorReturnController;
 use App\Http\Controllers\VendorShopStatusController;
 use App\Http\Controllers\VendorShopProfileController;
+use App\Http\Controllers\VendorShopConfigurationController;
 use App\Http\Controllers\ShopController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\AppelOffreController;
@@ -100,6 +108,7 @@ use App\Http\Controllers\Support\SupportHandoffController;
 use App\Http\Controllers\Support\SupportCallbackController;
 use App\Http\Controllers\Support\SupportKnowledgeController;
 use App\Http\Controllers\Support\SupportAiAuditController;
+use App\Http\Controllers\Support\SupportShopConfigurationMissionController;
 use App\Http\Controllers\Commercial\CommercialDashboardController;
 use App\Http\Controllers\Commercial\CommercialLeadController;
 use App\Http\Controllers\Commercial\CommercialRecordController;
@@ -108,8 +117,10 @@ use App\Http\Controllers\Commercial\CommercialProductController;
 use App\Http\Controllers\Commercial\CommercialQuickProductController;
 use App\Http\Controllers\Commercial\CommercialShopController;
 use App\Http\Controllers\Commercial\CommercialProspectingController;
+use App\Http\Controllers\Commercial\CommercialShopConfigurationMissionController;
 use App\Http\Controllers\Admin\AdminStaffController;
 use App\Http\Controllers\Admin\AdminProspectingMissionController;
+use App\Http\Controllers\Admin\AdminShopConfigurationAssignmentController;
 use App\Http\Controllers\Internal\DepartmentHandoffController;
 use App\Http\Middleware\VendorMiddleware;
 use App\Http\Middleware\HasShopMiddleware;
@@ -121,6 +132,135 @@ use App\Http\Middleware\HasShopMiddleware;
 | ROUTES PUBLIQUES
 |--------------------------------------------------------------------------
 */
+
+/*
+|--------------------------------------------------------------------------
+| OVANIE Pro — sous-domaine canonique
+|--------------------------------------------------------------------------
+|
+| OVANIE Pro est une vitrine distincte, mais reste servie par le même
+| Laravel et la même base de données. Les noms de routes Business pointent
+| volontairement vers pro.ovanie.com afin que tous les liens générés depuis
+| le backend utilisent le sous-domaine professionnel.
+|
+*/
+Route::domain(config('ovanie.pro_domain', 'pro.ovanie.com'))->group(function () {
+    Route::prefix('compte')->name('pro.')->middleware(\App\Http\Middleware\EnsureProSessionIsValid::class)->group(function () {
+        // ACC-15 : connexion par e-mail ou téléphone.
+        Route::get('/connexion', [ProAuthController::class, 'showLogin'])->name('login');
+        Route::post('/connexion', [ProAuthController::class, 'login'])->middleware('throttle:5,1')->name('login.submit');
+
+        // ACC-01 / ACC-02 : choix du parcours puis compte personnel commun.
+        Route::get('/inscription', [ProAuthController::class, 'choice'])->name('register.choice');
+        Route::get('/inscription/{accountType}', [ProAuthController::class, 'showRegister'])
+            ->whereIn('accountType', ['simple', 'pro'])
+            ->name('register.form');
+        Route::post('/inscription/{accountType}', [ProAuthController::class, 'register'])
+            ->whereIn('accountType', ['simple', 'pro'])
+            ->middleware('throttle:5,1')
+            ->name('register.submit');
+
+        Route::middleware('auth:pro')->group(function () {
+            // ACC-03 à ACC-12 : qualification, formulaire propre au profil, espaces de travail.
+            Route::get('/qualification', [ProOnboardingController::class, 'showQualification'])->name('register.qualification');
+            Route::post('/qualification', [ProOnboardingController::class, 'saveQualification'])->name('register.qualification.submit');
+            Route::get('/professionnel/{profile}', [ProOnboardingController::class, 'showProfessionalForm'])->name('register.professional.form');
+            Route::post('/professionnel/{profile}', [ProOnboardingController::class, 'saveProfessionalForm'])->middleware('throttle:10,1')->name('register.professional.submit');
+            Route::get('/roles', [ProOnboardingController::class, 'showRoles'])->name('roles.edit');
+            Route::post('/roles', [ProOnboardingController::class, 'saveRoles'])->name('roles.update');
+
+            // ACC-18 / ACC-19 : mon compte.
+            Route::get('/mon-espace', [ProAccountController::class, 'show'])->name('account');
+            Route::put('/mon-espace', [ProAccountController::class, 'update'])->name('account.update');
+            Route::put('/mon-espace/mot-de-passe', [ProAccountController::class, 'updatePassword'])->middleware('throttle:5,1')->name('account.password');
+            Route::post('/mon-espace/sessions', [ProAccountController::class, 'logoutOtherSessions'])->middleware('throttle:5,1')->name('account.sessions');
+            Route::post('/deconnexion', [ProAuthController::class, 'logout'])->name('logout');
+
+            // ACC-13 : collaborateurs de l'organisation (administrateur uniquement).
+            Route::get('/entreprise/{organization}/equipe', [ProTeamController::class, 'index'])->name('team.index');
+            Route::post('/entreprise/{organization}/invitations', [ProTeamController::class, 'invite'])->middleware('throttle:10,1')->name('team.invite');
+            Route::post('/entreprise/{organization}/invitations/{invitation}/renvoyer', [ProTeamController::class, 'resend'])->middleware('throttle:10,1')->name('team.resend');
+            Route::post('/entreprise/{organization}/invitations/{invitation}/annuler', [ProTeamController::class, 'cancel'])->name('team.cancel');
+            Route::put('/entreprise/{organization}/membres/{membership}', [ProTeamController::class, 'updateMember'])->name('team.member.update');
+        });
+
+        // Compte simple : publier une offre ou un besoin (choix, compte, formulaire, vérification).
+        Route::get('/publier', [ProPublicationController::class, 'start'])->name('publish.start');
+        Route::post('/publier', [ProPublicationController::class, 'choose'])->name('publish.choose');
+        Route::get('/publier/{type}/compte', [ProPublicationController::class, 'account'])->whereIn('type', ['offre', 'besoin'])->name('publish.account');
+        Route::post('/publier/{type}/compte', [ProPublicationController::class, 'register'])->whereIn('type', ['offre', 'besoin'])->middleware('throttle:5,1')->name('publish.register');
+        Route::middleware('auth:pro')->whereIn('type', ['offre', 'besoin'])->whereNumber('publication')->group(function () {
+            Route::get('/publier/{type}/nouveau', [ProPublicationController::class, 'form'])->name('publish.form');
+            Route::post('/publier/{type}/nouveau', [ProPublicationController::class, 'save'])->middleware('throttle:20,1')->name('publish.store');
+            Route::get('/publier/{type}/{publication}/modifier', [ProPublicationController::class, 'form'])->name('publish.edit');
+            Route::post('/publier/{type}/{publication}/modifier', [ProPublicationController::class, 'save'])->middleware('throttle:20,1')->name('publish.update');
+            Route::get('/publier/{type}/{publication}/verification', [ProPublicationController::class, 'review'])->name('publish.review');
+            Route::post('/publier/{type}/{publication}/publier', [ProPublicationController::class, 'publish'])->middleware('throttle:10,1')->name('publish.publish');
+        });
+
+        // ACC-14 : collaborateur invité (lien à usage unique).
+        Route::get('/invitation', [ProInvitationController::class, 'entry'])->name('invitation');
+        Route::post('/invitation', [ProInvitationController::class, 'lookup'])->middleware('throttle:10,1')->name('invitation.lookup');
+        Route::get('/invitation/{token}', [ProInvitationController::class, 'show'])->name('invitation.show');
+        Route::post('/invitation/{token}', [ProInvitationController::class, 'accept'])->middleware('throttle:10,1')->name('invitation.accept');
+        Route::post('/invitation/{token}/refuser', [ProInvitationController::class, 'refuse'])->middleware('throttle:10,1')->name('invitation.refuse');
+
+        // ACC-16 / ACC-17 : réinitialisation sécurisée et réponse neutre.
+        Route::get('/mot-de-passe-oublie', [ProPasswordResetController::class, 'requestForm'])->name('password.request');
+        Route::post('/mot-de-passe-oublie', [ProPasswordResetController::class, 'sendResetLink'])->middleware('throttle:5,1')->name('password.email');
+        Route::get('/reinitialiser/{challenge?}', [ProPasswordResetController::class, 'resetForm'])->name('password.reset');
+        Route::post('/reinitialiser', [ProPasswordResetController::class, 'reset'])->middleware('throttle:5,1')->name('password.update');
+        Route::post('/reinitialiser/renvoyer', [ProPasswordResetController::class, 'resend'])->middleware('throttle:3,1')->name('password.resend');
+        Route::post('/reinitialiser/verifier', [ProPasswordResetController::class, 'verifyCode'])->middleware('throttle:10,1')->name('password.verify');
+    });
+
+    Route::get('/', [BusinessCatalogController::class, 'catalog'])
+        ->name('catalog.business');
+
+    // Fiche publique d'une offre ou d'un besoin publié par un membre OVANIE Pro.
+    Route::get('/annonces/{publication}', [ProPublicationController::class, 'showPublic'])
+        ->whereNumber('publication')
+        ->name('pro.announcements.show');
+
+    Route::get('/appel-offre', [AppelOffreController::class, 'create'])
+        ->name('appel.offre');
+    Route::post('/appel-offre', [AppelOffreController::class, 'store'])
+        ->name('appel.offre.store');
+    Route::get('/appel-offre/{id}', [AppelOffreController::class, 'show'])
+        ->name('appel.offre.show');
+
+    Route::get('/devis', [DevisWebController::class, 'create'])
+        ->name('devis.create');
+
+    Route::post('/business/pay', [BusinessController::class, 'pay'])
+        ->middleware(['auth', 'throttle:30,1'])
+        ->name('business.pay');
+
+    Route::get('/business/pay/success', [BusinessController::class, 'paySuccess'])
+        ->middleware(['auth', 'throttle:30,1'])
+        ->name('business.pay.success');
+
+    Route::get('/business/pay/cancel', [BusinessController::class, 'payCancel'])
+        ->middleware(['auth', 'throttle:30,1'])
+        ->name('business.pay.cancel');
+
+    // Le catalogue e-commerce appartient au domaine principal OVANIE.
+    // Sur OVANIE Pro, /catalog ne doit jamais servir une seconde copie de la même page.
+    Route::get('/catalog/{category?}', function (\Illuminate\Http\Request $request, ?string $category = null) {
+        $mainDomain = strtolower(trim((string) config('ovanie.main_domain', 'ovanie.com')));
+        $mainDomain = preg_replace('/^www\./', '', $mainDomain) ?: 'ovanie.com';
+
+        $path = '/catalog' . ($category ? '/' . ltrim($category, '/') : '');
+        $target = 'https://' . $mainDomain . $path;
+
+        if ($request->getQueryString()) {
+            $target .= '?' . $request->getQueryString();
+        }
+
+        return redirect()->away($target, 301);
+    })->name('pro.catalog.redirect');
+});
+
 Route::get('/', [ProductController::class, 'home'])->name('home');
 Route::view('/comment-acheter', 'public.service-info', ['page' => 'buy'])->name('how-to-buy');
 Route::view('/livraison', 'public.service-info', ['page' => 'delivery'])->name('delivery.info');
@@ -175,8 +315,11 @@ Route::get('/catalog/{category?}', [ProductController::class, 'catalog'])->name(
 Route::post('/cart/add-negotiated', [ProductController::class, 'addNegotiatedToCart'])
     ->middleware('auth')
     ->name('cart.addNegotiated');
-Route::get('/catalog-business', [BusinessCatalogController::class, 'catalog'])
-    ->name('catalog.business');
+// Ancienne URL OVANIE Pro conservée pour les favoris/liens existants.
+// Les filtres de recherche sont conservés pendant la redirection.
+Route::get('/catalog-business', function (\Illuminate\Http\Request $request) {
+    return redirect()->to(route('catalog.business', $request->query()), 301);
+})->name('catalog.business.legacy');
 Route::view('/guide-acheteur', 'public.buyer-guide')->name('buyer.guide');
 Route::view('/faq', 'public.faq')->name('faq');
 Route::view('/centre-aide', 'public.help-pages', ['page' => 'help'])->name('help.center');
@@ -225,11 +368,19 @@ Route::post('/newsletter/subscribe', [NewsletterSubscriptionController::class, '
     ->middleware('throttle:10,1')
     ->name('newsletter.subscribe');
 
-Route::get('/appel-offre', [AppelOffreController::class, 'create'])->name('appel.offre');
-Route::post('/appel-offre', [AppelOffreController::class, 'store'])->name('appel.offre.store');
-Route::get('/appel-offre/{id}', [AppelOffreController::class, 'show'])->name('appel.offre.show');
+// Compatibilité des anciennes URL du domaine principal. Les nouveaux liens
+// générés par Laravel utilisent les routes canoniques du sous-domaine Pro.
+Route::get('/appel-offre', function (\Illuminate\Http\Request $request) {
+    return redirect()->to(route('appel.offre', $request->query()), 301);
+})->name('appel.offre.legacy');
+Route::post('/appel-offre', [AppelOffreController::class, 'store'])
+    ->name('appel.offre.store.legacy');
+Route::get('/appel-offre/{id}', [AppelOffreController::class, 'show'])
+    ->name('appel.offre.show.legacy');
 
-Route::get('/devis', [DevisWebController::class, 'create'])->name('devis.create');
+Route::get('/devis', function (\Illuminate\Http\Request $request) {
+    return redirect()->to(route('devis.create', $request->query()), 301);
+})->name('devis.create.legacy');
 Route::get('/calculator', [CalculatorController::class, 'index'])->name('calculator.index');
 Route::post('/calculator/estimate', [CalculatorController::class, 'estimate'])
     ->middleware('throttle:30,1')
@@ -258,7 +409,7 @@ Route::get('/__local/v60', function (\Illuminate\Http\Request $request) {
         || str_starts_with($host, '192.168.')
         || str_starts_with($host, '10.');
 
-    abort_unless($allowed, 404);
+    abort_unless($allowed && app()->isLocal(), 404);
 
     $request->session()->put('ovanie_v60_probe', now()->toIso8601String());
 
@@ -391,14 +542,17 @@ Route::middleware('auth')->group(function () {
     | ESPACE VENDEUR OVANIE
     |--------------------------------------------------------------------------
     | Nouvelle convention production : /vendeur avec noms vendor.*
-    | Ancienne convention : /daniel avec noms daniel.* pour compatibilité.
     | L'ouverture de boutique est automatique : pas de blocage shop.approved.
     */
 
-    Route::middleware([VendorMiddleware::class, HasShopMiddleware::class])
+    Route::middleware([VendorMiddleware::class, HasShopMiddleware::class, \App\Http\Middleware\EnsureVendorShopConfigured::class])
         ->prefix('vendeur')
         ->name('vendor.')
         ->group(function () {
+            Route::get('/configuration-boutique', [VendorShopConfigurationController::class, 'index'])->name('configuration.index');
+            Route::post('/configuration-boutique/logistique', [VendorShopConfigurationController::class, 'logistics'])->name('configuration.logistics');
+            Route::post('/configuration-boutique/reversement', [VendorShopConfigurationController::class, 'payout'])->name('configuration.payout');
+
             Route::get('/dashboard', [VendorDashboardController::class, 'index'])->name('dashboard');
             Route::view('/vendeur-actes', 'vendor.vendor-actes')->name('vendeur-actes');
             Route::view('/cgu', 'vendor.cgu')->name('cgu');
@@ -476,30 +630,6 @@ Route::middleware('auth')->group(function () {
 
         });
 
-    // Ancien espace /daniel : conservé seulement en redirection pour éviter les doublons.
-    // L'espace vendeur officiel est maintenant /vendeur avec noms de routes vendor.*.
-    Route::prefix('daniel')->name('daniel.')->group(function () {
-        Route::get('/dashboard', fn () => redirect()->route('vendor.dashboard'))->name('dashboard');
-        Route::get('/vendeur-actes', fn () => redirect()->route('vendor.vendeur-actes'))->name('vendeur-actes');
-        Route::get('/cgu', fn () => redirect()->route('vendor.cgu'))->name('cgu');
-        Route::get('/shop-status', fn () => redirect()->route('vendor.shop-status'))->name('shop-status');
-        Route::get('/shop-profile', fn () => redirect()->route('vendor.shop.profile'))->name('shop.profile');
-        Route::get('/shop-profile/edit', fn () => redirect()->route('vendor.shop.edit'))->name('shop.edit');
-        Route::get('/payment-method', fn () => redirect()->route('vendor.payment-method'))->name('payment-method');
-        Route::get('/shop-documents', fn () => redirect()->route('vendor.shop.documents'))->name('shop.documents');
-        Route::get('/products', fn () => redirect()->route('vendor.products'))->name('products');
-        Route::get('/products/create', fn () => redirect()->route('vendor.add_product'))->name('add_product');
-        Route::get('/orders', fn () => redirect()->route('vendor.orders'))->name('orders');
-        Route::get('/payments', fn () => redirect()->route('vendor.payments'))->name('payments');
-        Route::get('/payouts', fn () => redirect()->route('vendor.payouts.index'))->name('payouts.index');
-        Route::get('/returns', fn () => redirect()->route('vendor.returns.index'))->name('returns.index');
-        Route::get('/disputes', fn () => redirect()->route('vendor.disputes.index'))->name('disputes.index');
-        Route::get('/reviews', fn () => redirect()->route('vendor.reviews.index'))->name('reviews.index');
-        Route::get('/orders/{order}', fn ($order) => redirect()->route('vendor.orders.show', $order))->name('orders.show');
-        Route::get('/products/{product}/edit', fn ($product) => redirect()->route('vendor.products.edit', $product))->name('products.edit');
-    });
-
-
     Route::get('/demande-devis', function () { return view('devis'); })->name('devis.form');
     Route::post('/demande-devis', [DevisController::class, 'store'])->name('devis.store');
 
@@ -509,6 +639,25 @@ Route::middleware('auth')->group(function () {
     Route::get('/shops/{shop}/edit', [ShopController::class, 'edit'])->name('shops.edit');
     Route::put('/shops/{shop}', [ShopController::class, 'update'])->name('shops.update');
 });
+
+/*
+|--------------------------------------------------------------------------
+| COMPATIBILITÉ ANCIEN LIEN CONFIGURE-MISSION
+|--------------------------------------------------------------------------
+| Certains écrans/favoris historiques utilisent encore /configure-mission.
+| On conserve cette URL et on redirige l'utilisateur interne vers son vrai
+| espace au lieu d'afficher une 404.
+*/
+Route::middleware(['auth:admin', 'internal'])->get('/configure-mission', function () {
+    $user = auth('admin')->user();
+
+    return match ($user?->role) {
+        'support' => redirect()->route('support.configuration-missions.index'),
+        'commercial' => redirect()->route('commercial.configuration-missions.index'),
+        'admin' => redirect()->route('admin.shop-configuration-missions.index'),
+        default => abort(403, 'Cet espace de mission n’est pas disponible pour votre rôle.'),
+    };
+})->name('staff.configuration-missions.legacy');
 
 /*
 |--------------------------------------------------------------------------
@@ -534,6 +683,24 @@ Route::middleware(['auth:admin', 'internal', 'staff:support'])->prefix('support'
     Route::get('/retours', [SupportRecordController::class, 'returns'])->name('returns.index');
     Route::get('/litiges', [SupportRecordController::class, 'disputes'])->name('disputes.index');
     Route::get('/messages-entrants', [SupportRecordController::class, 'messages'])->name('messages.index');
+
+    // Catalogue produits : mêmes écrans que l'administration (ajout et modification), sans suppression.
+    Route::get('/produits', [AdminProductController::class, 'index'])->name('products.index');
+    Route::get('/produits/create', [AdminProductController::class, 'create'])->name('products.create');
+    Route::post('/produits', [AdminProductController::class, 'store'])->name('products.store');
+    Route::get('/produits/{product}', [AdminProductController::class, 'show'])->name('products.show');
+    Route::get('/produits/{product}/edit', [AdminProductController::class, 'edit'])->name('products.edit');
+    Route::put('/produits/{product}', [AdminProductController::class, 'update'])->name('products.update');
+
+    // Missions de régularisation boutiques visibles par le Support.
+    Route::get('/missions-boutiques', [SupportShopConfigurationMissionController::class, 'index'])
+        ->name('configuration-missions.index');
+
+    // Compatibilité avec les anciens liens /configure-mission et /configuration-mission.
+    Route::get('/configure-mission', fn () => redirect()->route('support.configuration-missions.index'))
+        ->name('configuration-missions.legacy-configure');
+    Route::get('/configuration-mission', fn () => redirect()->route('support.configuration-missions.index'))
+        ->name('configuration-missions.legacy-configuration');
 
     Route::get('/centre-ia/agents', [SupportAiAgentController::class, 'index'])->name('ai-agents.index');
     Route::put('/centre-ia/agents/{agent}', [SupportAiAgentController::class, 'update'])->name('ai-agents.update');
@@ -606,6 +773,34 @@ Route::middleware(['auth:admin', 'internal', 'staff:commercial'])->prefix('comme
     Route::get('/vendeurs', [CommercialRecordController::class, 'vendors'])->name('vendors.index');
     Route::get('/vendeurs/create', [CommercialAccountController::class, 'createVendor'])->name('vendors.create');
     Route::post('/vendeurs', [CommercialAccountController::class, 'storeVendor'])->name('vendors.store');
+
+    // Missions boutiques affectées au commercial par l'administration.
+    Route::get('/missions-boutiques', [CommercialShopConfigurationMissionController::class, 'index'])
+        ->name('configuration-missions.index');
+
+    // Compatibilité avec les anciens liens /configure-mission et /configuration-mission.
+    Route::get('/configure-mission', fn () => redirect()->route('commercial.configuration-missions.index'))
+        ->name('configuration-missions.legacy-configure');
+    Route::get('/configuration-mission', fn () => redirect()->route('commercial.configuration-missions.index'))
+        ->name('configuration-missions.legacy-configuration');
+    Route::get('/missions-boutiques/{assignment}', [CommercialShopConfigurationMissionController::class, 'show'])
+        ->whereNumber('assignment')
+        ->name('configuration-missions.show');
+    Route::post('/missions-boutiques/{assignment}/commencer', [CommercialShopConfigurationMissionController::class, 'start'])
+        ->whereNumber('assignment')
+        ->name('configuration-missions.start');
+    Route::put('/missions-boutiques/{assignment}/logistique', [CommercialShopConfigurationMissionController::class, 'logistics'])
+        ->whereNumber('assignment')
+        ->name('configuration-missions.logistics');
+    Route::put('/missions-boutiques/{assignment}/reversement', [CommercialShopConfigurationMissionController::class, 'payout'])
+        ->whereNumber('assignment')
+        ->name('configuration-missions.payout');
+    Route::post('/missions-boutiques/{assignment}/produits-termines', [CommercialShopConfigurationMissionController::class, 'productsDone'])
+        ->whereNumber('assignment')
+        ->name('configuration-missions.products-done');
+    Route::post('/missions-boutiques/{assignment}/terminer', [CommercialShopConfigurationMissionController::class, 'complete'])
+        ->whereNumber('assignment')
+        ->name('configuration-missions.complete');
 
     // Compatibilité avec les anciens liens déjà présents dans le projet.
     Route::get('/comptes/create', [CommercialAccountController::class, 'create'])->name('accounts.create');
@@ -702,6 +897,21 @@ Route::prefix('cart')->name('cart.')->group(function () {
     Route::get('/cart-data', [CartController::class, 'apiCart'])->name('apiCart');
 });
 
+// Jeton CSRF frais pour les pages restées ouvertes longtemps (voir
+// public/js/session-keepalive.js) : évite l'erreur 419 à la connexion.
+Route::get('/csrf-token', function (\Illuminate\Http\Request $request) {
+    return response()
+        ->json(['token' => $request->session()->token()])
+        ->header('Cache-Control', 'no-store, private');
+})->middleware('throttle:60,1,csrf-token:')->name('csrf-token');
+
+// Synchronisation web ↔ mobile (voir App\Support\LiveSync et public/js/live-sync.js).
+Route::get('/live-sync', \App\Http\Controllers\LiveSyncController::class)
+    // Compteur dédié (préfixe) : sinon ces appels réguliers partagent le
+    // compteur par IP de la connexion (throttle:5,1) et la bloquent (429).
+    ->middleware('throttle:240,1,live-sync:')
+    ->name('live-sync');
+
 Route::get('/cart/count', function (\Illuminate\Http\Request $request) {
     if (! auth()->check()) {
         $count = app(\App\Services\GuestCartService::class)->count($request);
@@ -748,6 +958,8 @@ Route::get('/order/success/{order}', [CheckoutController::class, 'success'])
     ->middleware(['auth', 'throttle:30,1'])
     ->name('order.success');
 
+// Adresse courte de l’espace vendeur.
+Route::redirect('/vendeur', '/vendeur/dashboard');
 Route::get('/mes-commandes', [OrderController::class, 'index'])
     ->middleware('auth')
     ->name('orders.index');
@@ -774,7 +986,7 @@ Route::get('/products/json', [ProductController::class, 'json']);
 | CLIENT
 |--------------------------------------------------------------------------
 */
-Route::middleware('auth')->prefix('client')->name('client.')->group(function () {
+Route::middleware([\App\Http\Middleware\EnsureClientSpace::class, 'auth'])->prefix('client')->name('client.')->group(function () {
     Route::get('/dashboard', [ClientAccountController::class, 'dashboard'])->name('dashboard');
     Route::view('/cgu', 'client.cgu')->name('cgu');
 
@@ -908,6 +1120,7 @@ Route::middleware(['auth:admin', 'internal', 'staff:logistique', \App\Http\Middl
     Route::get('/livreurs/{driver}/documents/{document}', [\App\Http\Controllers\LogisticsDirectoryController::class, 'document'])->name('drivers.document');
     Route::patch('/livreurs/{driver}', [\App\Http\Controllers\LogisticsDirectoryController::class, 'updateDriver'])->name('drivers.update');
     Route::post('/livreurs/{driver}/access', [\App\Http\Controllers\LogisticsDirectoryController::class, 'access'])->name('drivers.access');
+    Route::post('/livreurs/{driver}/especes-recues', [\App\Http\Controllers\LogisticsDirectoryController::class, 'settleDriverCash'])->name('drivers.cash-settle');
     Route::delete('/livreurs/{driver}', [\App\Http\Controllers\LogisticsDirectoryController::class, 'destroyDriver'])->name('drivers.destroy');
     Route::get('/livreurs/{driver}/dossier', [\App\Http\Controllers\LogisticsDirectoryController::class, 'driverReview'])->name('drivers.review');
     Route::post('/livreurs/{driver}/dossier/valider', [\App\Http\Controllers\LogisticsDirectoryController::class, 'approveDriver'])->name('drivers.review.approve');
@@ -922,6 +1135,7 @@ Route::middleware(['auth:admin', 'internal', 'staff:logistique', \App\Http\Middl
     Route::patch('/retours/{return}/approuver', [LogisticsController::class, 'approveReturn'])->name('returns.approve');
     Route::patch('/retours/{return}/rejeter', [LogisticsController::class, 'rejectReturn'])->name('returns.reject');
     Route::patch('/retours/{return}/transmettre-decision', [LogisticsController::class, 'publishReturnDecision'])->name('returns.publish-decision');
+    Route::get('/boutiques-livraison-propre', [\App\Http\Controllers\LogisticsSellerDeliveryController::class, 'index'])->name('seller-delivery');
     Route::get('/zones', [LogisticsTerritoryController::class, 'index'])->name('zones');
     Route::get('/zones/export', [LogisticsTerritoryController::class, 'export'])->name('zones.export');
     Route::post('/zones', [LogisticsTerritoryController::class, 'store'])->name('zones.store');
@@ -931,18 +1145,16 @@ Route::middleware(['auth:admin', 'internal', 'staff:logistique', \App\Http\Middl
     Route::delete('/zones/{zone}', [LogisticsTerritoryController::class, 'destroy'])->name('zones.destroy');
     Route::get('/tarification', [LogisticsOvaniePricingController::class, 'index'])->name('ovanie-pricing.index');
     Route::get('/tarification/vehicules', [LogisticsOvaniePricingController::class, 'vehicles'])->name('ovanie-pricing.vehicles');
-    Route::get('/tarification/communes', [LogisticsOvaniePricingController::class, 'communes'])->name('ovanie-pricing.communes');
-    Route::get('/tarification/communes/configurer', [LogisticsOvaniePricingController::class, 'configureCommunes'])->name('ovanie-pricing.communes.configure');
     Route::get('/tarification/supplements', [LogisticsOvaniePricingController::class, 'supplements'])->name('ovanie-pricing.supplements');
     Route::get('/tarification/simulateur', [LogisticsOvaniePricingController::class, 'simulator'])->name('ovanie-pricing.simulator');
     Route::get('/tarification/export', [LogisticsOvaniePricingController::class, 'export'])->name('ovanie-pricing.export');
-    Route::post('/tarification/grilles', [LogisticsOvaniePricingController::class, 'storeGrid'])->name('ovanie-pricing.grids.store');
     Route::post('/tarification/tarifs-vehicules', [LogisticsOvaniePricingController::class, 'storeVehicleTariff'])->name('ovanie-pricing.vehicle-tariffs.store');
-    Route::post('/tarification/matrices', [LogisticsOvaniePricingController::class, 'storeMatrix'])->name('ovanie-pricing.matrices.store');
-    Route::post('/tarification/matrices/lot', [LogisticsOvaniePricingController::class, 'storeMatrixBulk'])->name('ovanie-pricing.matrices.bulk');
     Route::post('/tarification/supplements', [LogisticsOvaniePricingController::class, 'storeSupplement'])->name('ovanie-pricing.supplements.store');
     Route::post('/tarification/calculer', [LogisticsOvaniePricingController::class, 'calculate'])->name('ovanie-pricing.calculate');
     Route::get('/tarification-ovanie', fn () => redirect()->route('logistics.ovanie-pricing.index'))->name('ovanie-pricing.legacy');
+    // Anciennes pages « Tarifs communes » : la livraison est désormais calculée
+    // par formule (base + km + kg + m³) à partir des tarifs de chaque véhicule.
+    Route::get('/tarification/communes/{any?}', fn () => redirect()->route('logistics.ovanie-pricing.vehicles'))->where('any', '.*')->name('ovanie-pricing.communes-legacy');
     Route::get('/tournees', [\App\Http\Controllers\LogisticsTourController::class, 'index'])->name('tours.index');
     Route::get('/tournees/creer', [\App\Http\Controllers\LogisticsTourController::class, 'create'])->name('tours.create');
     Route::post('/tournees/previsualiser', [\App\Http\Controllers\LogisticsTourController::class, 'preview'])->name('tours.preview');
@@ -1056,18 +1268,44 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('products/create', [AdminProductController::class, 'create'])->name('products.create');
         Route::post('products', [AdminProductController::class, 'store'])->name('products.store');
         Route::get('products/{product}/edit', [AdminProductController::class, 'edit'])->name('products.edit');
-        Route::get('products/{product}', [AdminProductController::class, 'show']);
+        Route::get('products/{product}', [AdminProductController::class, 'show'])->name('products.show');
         Route::put('products/{product}', [AdminProductController::class, 'update'])->name('products.update');
         Route::delete('products/{product}', [AdminProductController::class, 'destroy'])->name('products.destroy');
         Route::post('products/{product}/notify-vendor', [AdminProductController::class, 'notifyVendor']);
 
         Route::get('shops', [AdminShopController::class, 'index'])->name('shops.index');
-        Route::get('shops/{shop}', [AdminShopController::class, 'show'])->name('shops.show');
-        Route::get('shops/{shop}/download-dossier', [AdminShopController::class, 'downloadDossier'])
+
+        // Affectation et suivi des missions de régularisation boutiques.
+        // IMPORTANT : ces routes statiques doivent rester AVANT shops/{shop}.
+        // Sinon « configuration-missions » ou « configure-mission » peut être
+        // interprété comme l'identifiant d'une boutique et provoquer une 404.
+        Route::get('shops/configuration-missions', [AdminShopConfigurationAssignmentController::class, 'index'])
+            ->name('shop-configuration-missions.index');
+        Route::get('shops/configure-mission', fn () => redirect()->route('admin.shop-configuration-missions.index'))
+            ->name('shop-configuration-missions.legacy-shops-configure');
+        Route::get('configure-mission', fn () => redirect()->route('admin.shop-configuration-missions.index'))
+            ->name('shop-configuration-missions.legacy-configure');
+        Route::get('configuration-mission', fn () => redirect()->route('admin.shop-configuration-missions.index'))
+            ->name('shop-configuration-missions.legacy-configuration');
+        Route::post('shops/{shop}/configuration-missions', [AdminShopConfigurationAssignmentController::class, 'store'])
+            ->whereNumber('shop')
+            ->name('shop-configuration-missions.store');
+        Route::delete('shop-configuration-missions/{assignment}', [AdminShopConfigurationAssignmentController::class, 'cancel'])
+            ->whereNumber('assignment')
+            ->name('shop-configuration-missions.cancel');
+        Route::get('shops/{shop}/operational-configuration', [AdminShopController::class, 'operationalConfiguration'])
+            ->whereNumber('shop')
+            ->name('shops.operational-configuration');
+        Route::put('shops/{shop}/operational-configuration', [AdminShopController::class, 'updateOperationalConfiguration'])
+            ->whereNumber('shop')
+            ->name('shops.operational-configuration.update');
+        Route::get('shops/{shop}', [AdminShopController::class, 'show'])->whereNumber('shop')->name('shops.show');
+        Route::get('shops/{shop}/download-dossier', [AdminShopController::class, 'downloadDossier'])->whereNumber('shop')
             ->name('shops.downloadDossier');
-        Route::post('shops/{shop}/status', [AdminShopController::class, 'updateStatus'])->name('shops.updateStatus');
-        Route::post('shops/{shop}/commercial-manager', [AdminShopController::class, 'updateCommercialManager'])->name('shops.updateCommercialManager');
-        Route::delete('shops/{shop}', [AdminShopController::class, 'destroy'])->name('shops.destroy');
+        Route::post('shops/{shop}/status', [AdminShopController::class, 'updateStatus'])->whereNumber('shop')->name('shops.updateStatus');
+        Route::post('shops/{shop}/commercial-manager', [AdminShopController::class, 'updateCommercialManager'])->whereNumber('shop')->name('shops.updateCommercialManager');
+        Route::post('shops/{shop}/require-configuration', [AdminShopController::class, 'requireConfiguration'])->whereNumber('shop')->name('shops.requireConfiguration');
+        Route::delete('shops/{shop}', [AdminShopController::class, 'destroy'])->whereNumber('shop')->name('shops.destroy');
 
         Route::get('shops/{shop}/documents/{document}', [AdminShopDocumentController::class, 'show'])
             ->whereIn('document', [
@@ -1128,6 +1366,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::get('messages', [SubmissionController::class, 'index'])->name('messages.index');
         Route::get('users', fn() => view('admin.users.index'))->name('users.index');
+        Route::post('users', [\App\Http\Controllers\Admin\AdminUserController::class, 'save'])->name('users.store');
+        Route::put('users/{user}', [\App\Http\Controllers\Admin\AdminUserController::class, 'update'])->whereNumber('user')->name('users.update');
+        Route::delete('users/{user}', [\App\Http\Controllers\Admin\AdminUserController::class, 'destroy'])->whereNumber('user')->name('users.destroy');
 
         Route::get('/commissions', [\App\Http\Controllers\Admin\AdminCommissionController::class, 'index'])
             ->name('commissions.index');
@@ -1156,7 +1397,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('settings', [SettingsController::class, 'edit'])->name('settings.edit');
         Route::put('settings/update', [SettingsController::class, 'update'])->name('settings.update');
 
-        Route::resource('banners', BannerController::class);
+        Route::resource('banners', BannerController::class)->only(['index', 'create', 'store', 'destroy']);
         Route::resource('home-ads', HomeAdController::class)->except(['show']);
         Route::resource('delivery-services', DeliveryServiceController::class)->except(['show']);
         Route::get('logistics/distance-matrix', [DeliveryDistanceMatrixController::class, 'index'])
@@ -1178,17 +1419,20 @@ Route::prefix('admin')->name('admin.')->group(function () {
     });
 });
 
+// Fallbacks de compatibilité pour d'anciens formulaires/callbacks qui
+// cibleraient encore ovanie.com/business/pay. Les routes nommées canoniques
+// sont déclarées plus haut sur pro.ovanie.com.
 Route::post('/business/pay', [BusinessController::class, 'pay'])
     ->middleware(['auth', 'throttle:30,1'])
-    ->name('business.pay');
+    ->name('business.pay.legacy');
 
 Route::get('/business/pay/success', [BusinessController::class, 'paySuccess'])
     ->middleware(['auth', 'throttle:30,1'])
-    ->name('business.pay.success');
+    ->name('business.pay.success.legacy');
 
 Route::get('/business/pay/cancel', [BusinessController::class, 'payCancel'])
     ->middleware(['auth', 'throttle:30,1'])
-    ->name('business.pay.cancel');
+    ->name('business.pay.cancel.legacy');
 
 Route::post('/banner-click/{id}', [BannerController::class, 'click']);
 Route::post('/suggestion', [PublicSubmissionController::class, 'store'])->name('suggestion.store');

@@ -3,8 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\DeliveryVehicleRateCard;
-use App\Models\LogisticsPricingMatrix;
-use App\Services\CommuneRelationResolver;
+use App\Models\LogisticsPricingSupplement;
 use App\Services\LogisticsVehicleResolver;
 use App\Services\OvanieDeliveryPriceCalculator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -14,9 +13,9 @@ class LogisticsPricingEditorsTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function motoRate(): void
+    private function motoRate(array $overrides = []): DeliveryVehicleRateCard
     {
-        DeliveryVehicleRateCard::query()->updateOrCreate(['vehicle_code' => 'moto'], [
+        return DeliveryVehicleRateCard::query()->updateOrCreate(['vehicle_code' => 'moto'], array_merge([
             'vehicle_label' => 'Moto',
             'min_weight_kg' => 0,
             'max_weight_kg' => 20,
@@ -25,125 +24,76 @@ class LogisticsPricingEditorsTest extends TestCase
             'price_per_km' => 200,
             'price_per_kg' => 100,
             'price_per_m3' => 50,
-            'fragile_fee' => 0,
-            'handling_fee' => 0,
-            'unloading_fee' => 0,
-            'urgent_fee' => 0,
-            'traffic_surcharge_fee' => 0,
-            'min_fee' => 500,
-            'margin_type' => 'none',
-            'margin_value' => 0,
             'is_active' => true,
             'meta' => [],
-        ]);
+        ], $overrides));
     }
 
-    public function test_commune_matrix_is_the_primary_price_for_a_vehicle(): void
+    private function price(float $weight, float $volume, float $km, array $destination = []): array
+    {
+        return app(OvanieDeliveryPriceCalculator::class)->calculateMetrics(
+            $weight,
+            $volume,
+            ['distance_km' => $km],
+            $destination,
+            null,
+            null,
+            'moto'
+        );
+    }
+
+    public function test_price_is_base_plus_distance_weight_and_volume(): void
     {
         $this->motoRate();
-        LogisticsPricingMatrix::query()->create([
-            'region' => 'Abidjan',
-            'origin_commune' => 'Cocody',
-            'destination_commune' => 'Adjamé',
-            'vehicle_prices' => ['moto' => 2500],
+
+        // 500 + 5 km × 200 + 2 kg × 100 + 0,02 m³ × 50 = 1 701
+        $result = $this->price(2, 0.02, 5);
+
+        $this->assertSame(1701.0, $result['price']);
+        $this->assertSame('vehicle_rate_card', $result['rate_source']);
+        $this->assertEquals(500.0, $result['components']['base_fee']);
+        $this->assertEquals(1000.0, $result['components']['distance_fee']);
+        $this->assertEquals(200.0, $result['components']['weight_fee']);
+        $this->assertEquals(1.0, $result['components']['volume_fee']);
+    }
+
+    public function test_formula_is_strict_without_minimum_or_maximum(): void
+    {
+        $this->motoRate(['min_fee' => 5000, 'max_fee' => 800, 'margin_type' => 'percentage', 'margin_value' => 50]);
+
+        $this->assertSame(1701.0, $this->price(2, 0.02, 5)['price']);
+    }
+
+    public function test_active_supplement_is_added_as_an_optional_fee(): void
+    {
+        $this->motoRate();
+        LogisticsPricingSupplement::query()->create([
+            'code' => 'fragile',
+            'label' => 'Produit fragile',
+            'category' => 'Fragile',
+            'calculation_type' => 'fixed',
+            'amount' => 300,
+            'scope' => 'Par livraison',
+            'conditions' => ['fragile' => true],
+            'minimum_threshold' => 0,
+            'compatible_with_others' => true,
+            'automatic' => true,
             'is_active' => true,
+            'meta' => ['created_from' => 'pricing_supplements_page'],
         ]);
 
-        $result = app(OvanieDeliveryPriceCalculator::class)->calculateMetrics(
-            2,
-            0.02,
-            ['distance_km' => 5],
-            ['origin_commune' => 'Cocody', 'destination_commune' => 'Adjamé'],
-            null,
-            null,
-            'moto'
-        );
-
-        $this->assertSame(2500.0, $result['price']);
-        $this->assertSame('logistics_pricing_matrix', $result['rate_source']);
-        $this->assertSame(2500.0, (float) $result['components']['commune_route_fee']);
+        $this->assertSame(1701.0, $this->price(2, 0.02, 5)['price']);
+        $withFee = $this->price(2, 0.02, 5, ['fragile' => true]);
+        $this->assertSame(2001.0, $withFee['price']);
+        $this->assertEquals(300.0, $withFee['components']['supplement_fragile']);
     }
 
-    public function test_same_commune_tariff_is_supported(): void
+    public function test_vehicle_without_rates_cannot_price_a_delivery(): void
     {
-        $this->motoRate();
-        LogisticsPricingMatrix::query()->create([
-            'region' => 'Abidjan',
-            'origin_commune' => 'Cocody',
-            'destination_commune' => 'Cocody',
-            'vehicle_prices' => ['moto' => 1500],
-            'is_active' => true,
-        ]);
-
-        $result = app(OvanieDeliveryPriceCalculator::class)->calculateMetrics(
-            3,
-            0.01,
-            [],
-            ['origin_commune' => 'Cocody', 'destination_commune' => 'Cocody'],
-            null,
-            null,
-            'moto'
-        );
-
-        $this->assertSame(1500.0, $result['price']);
-        $this->assertSame('logistics_pricing_matrix', $result['rate_source']);
-    }
-
-    public function test_missing_commune_tariff_does_not_fall_back_to_distance_formula(): void
-    {
-        $this->motoRate();
-
-        $result = app(OvanieDeliveryPriceCalculator::class)->calculateMetrics(
-            2,
-            0.02,
-            ['distance_km' => 5],
-            ['origin_commune' => 'Cocody', 'destination_commune' => 'Abobo'],
-            null,
-            null,
-            'moto'
-        );
+        $result = $this->price(2, 0.02, 5);
 
         $this->assertSame(0.0, $result['price']);
-        $this->assertSame('missing_commune_tariff', $result['rate_source']);
-    }
-
-    public function test_exact_direction_has_priority_over_reverse_fallback(): void
-    {
-        LogisticsPricingMatrix::query()->create([
-            'region' => 'Abidjan', 'origin_commune' => 'Cocody', 'destination_commune' => 'Adjamé',
-            'vehicle_prices' => ['moto' => 2500], 'is_active' => true,
-        ]);
-        LogisticsPricingMatrix::query()->create([
-            'region' => 'Abidjan', 'origin_commune' => 'Adjamé', 'destination_commune' => 'Cocody',
-            'vehicle_prices' => ['moto' => 3000], 'is_active' => true,
-        ]);
-
-        $relation = app(CommuneRelationResolver::class)->resolve('Adjamé', 'Cocody', 'Abidjan', 'Cocody', 'moto');
-        $this->assertSame(3000.0, (float) $relation['fixed_tariff']);
-    }
-    public function test_commune_matrix_works_without_vehicle_price_configuration(): void
-    {
-        LogisticsPricingMatrix::query()->create([
-            'region' => 'Abidjan',
-            'origin_commune' => 'Cocody',
-            'destination_commune' => 'Abobo',
-            'vehicle_prices' => ['moto' => 2200],
-            'is_active' => true,
-        ]);
-
-        $result = app(OvanieDeliveryPriceCalculator::class)->calculateMetrics(
-            5,
-            0.03,
-            [],
-            ['origin_commune' => 'Cocody', 'destination_commune' => 'Abobo'],
-            null,
-            null,
-            'moto'
-        );
-
-        $this->assertSame(2200.0, $result['price']);
-        $this->assertSame('logistics_pricing_matrix', $result['rate_source']);
-        $this->assertNull($result['rate_card_id']);
+        $this->assertSame('missing_vehicle_rate', $result['rate_source']);
     }
 
     public function test_default_vehicle_capacities_are_available_without_configuration(): void
@@ -152,23 +102,5 @@ class LogisticsPricingEditorsTest extends TestCase
 
         $this->assertSame('moto', $vehicle['code']);
         $this->assertTrue($vehicle['is_active']);
-        $this->assertNull($vehicle['rate_card']);
     }
-
-    public function test_reverse_direction_is_not_used_implicitly(): void
-    {
-        LogisticsPricingMatrix::query()->create([
-            'region' => 'Abidjan',
-            'origin_commune' => 'Cocody',
-            'destination_commune' => 'Adjamé',
-            'vehicle_prices' => ['moto' => 2500],
-            'is_active' => true,
-        ]);
-
-        $relation = app(CommuneRelationResolver::class)->resolve('Adjamé', 'Cocody', 'Abidjan', 'Cocody', 'moto');
-
-        $this->assertNull($relation['fixed_tariff']);
-        $this->assertSame('dynamic', $relation['pricing_mode']);
-    }
-
 }

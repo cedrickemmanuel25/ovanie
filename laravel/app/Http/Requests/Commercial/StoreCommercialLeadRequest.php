@@ -20,7 +20,7 @@ class StoreCommercialLeadRequest extends FormRequest
             'business_request_id' => ['nullable', 'exists:business_requests,id'],
             'devis_id' => ['nullable', 'exists:devis,id'],
             'appel_offre_id' => ['nullable', 'exists:appel_offres,id'],
-            'assigned_to' => ['nullable', 'exists:users,id'],
+            'assigned_to' => ['nullable', Rule::exists('users', 'id')->whereIn('role', ['admin', 'support', 'logistique', 'commercial'])],
             'source' => ['required', 'string', 'max:50'],
             'lead_type' => ['required', Rule::in(['buyer', 'vendor', 'business', 'partner'])],
             'status' => ['required', Rule::in(['new', 'qualified', 'proposal', 'negotiation', 'won', 'lost', 'cancelled'])],

@@ -45,7 +45,7 @@ class CheckoutSummaryService
                     'shop_id' => $shopId,
                     'shop' => $shop,
                     'shop_name' => $shop?->name ?? 'Boutique',
-                    'logistics_type' => $shop?->logistics_type ?? 'ovanie',
+                    'logistics_type' => $shop?->logistics_type,
                     'vendor_score' => $shop?->rating ?? $shop?->score ?? null,
                     'items' => $items->values(),
                     'items_count' => (int) $items->sum('quantity'),
@@ -75,6 +75,7 @@ class CheckoutSummaryService
             ->filter(fn (array $group) => empty($group['delivery_available']) || ! empty($group['delivery_quote_required']))
             ->map(fn (array $group) => [
                 'shop_id' => (int) $group['shop_id'],
+                'shop_name' => (string) ($group['shop_name'] ?? ''),
                 'issue_code' => $group['delivery_issue_code']
                     ?? data_get($group, 'selected_carrier.issue_code')
                     ?? 'delivery_unavailable',
@@ -96,6 +97,12 @@ class CheckoutSummaryService
             'delivery_quote_required' => $deliveryQuoteRequired,
             'delivery_issues' => $deliveryIssues->all(),
             'client_delivery_message' => $this->clientDeliveryMessage($deliveryIssues),
+            // Distance boutique -> point de livraison (la plus longue si
+            // plusieurs boutiques ; tournée complète si elle est consolidée).
+            'delivery_distance_km' => $groups
+                ->map(fn (array $group) => data_get($group, 'selected_carrier.meta.distance_km'))
+                ->filter(fn ($km) => is_numeric($km))
+                ->max(),
             'total' => $total,
             'commission' => $commission,
             'total_weight_kg' => (float) $groups->sum('weight_kg'),
@@ -385,20 +392,9 @@ class CheckoutSummaryService
             return $groups;
         }
 
-        // La matrice commune -> commune est désormais la référence commerciale
-        // du checkout. Lorsqu'un panier comporte plusieurs boutiques OVANIE,
-        // chaque groupe a déjà reçu son prix officiel selon sa commune de départ,
-        // la destination et le véhicule requis. Une consolidation opérationnelle
-        // peut toujours être organisée en logistique, mais elle ne doit plus
-        // remplacer ces prix par l'ancienne formule base/km/kg/m³.
-        $usesCommuneMatrix = $ovanieGroups->contains(function (array $group) {
-            return data_get($group, 'selected_carrier.meta.calculation.rate_source') === 'logistics_pricing_matrix';
-        });
-
-        if ($usesCommuneMatrix) {
-            return $groups;
-        }
-
+        // Plusieurs boutiques OVANIE : une seule tournée (collectes puis
+        // livraison) est tarifée avec la même formule base/km/kg/m³, puis
+        // répartie entre les boutiques au prorata de leur sous-total.
         $quote = $this->pricingEngine->quoteConsolidated($ovanieGroups, $request);
 
         if (! $quote || empty($quote['available']) || ! empty($quote['quote_required'])) {
@@ -490,6 +486,20 @@ class CheckoutSummaryService
 
         $codes = $issues->pluck('issue_code')->filter()->unique();
 
+        // Véhicule OVANIE sans tarif (base, km, kg, m³) : l'adresse est valide,
+        // c'est la tarification OVANIE qui n'est pas encore renseignée.
+        if ($codes->count() === 1 && $codes->first() === 'ovanie_vehicle_rate_missing') {
+            $shops = $issues->pluck('shop_name')->filter()->unique()->implode(', ');
+
+            return 'La livraison OVANIE n’est pas encore disponible pour '
+                .($shops !== '' ? 'la boutique '.$shops : 'certains articles')
+                .'. Retirez ses articles du panier ou réessayez plus tard.';
+        }
+
+        if ($codes->intersect(['shop_payout_unconfirmed', 'shop_logistics_unconfirmed', 'shop_missing'])->isNotEmpty()) {
+            return 'Un vendeur de votre panier finalise la configuration de sa boutique et ne peut pas encore recevoir de commande. Retirez ses articles pour continuer.';
+        }
+
         if ($codes->contains('product_logistics_missing')) {
             return 'La livraison de certains articles n’est pas encore configurée. Modifiez votre panier ou contactez OVANIE.';
         }
@@ -501,7 +511,7 @@ class CheckoutSummaryService
             'ovanie_rate_missing',
             'ovanie_reference_rate_missing',
             'ovanie_vehicle_unavailable',
-            'commune_tariff_missing',
+            'ovanie_vehicle_rate_missing',
         ])->isNotEmpty()) {
             return 'Aucun tarif de livraison compatible n’est disponible pour l’ensemble de ce panier à cette adresse.';
         }

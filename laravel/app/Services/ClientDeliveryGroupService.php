@@ -89,7 +89,7 @@ class ClientDeliveryGroupService
                 'delivery_fee' => $deliveryFee,
                 'total' => $groupTotal,
                 'status' => $status,
-                'status_label' => $this->publicStatusLabel($status),
+                'status_label' => $this->publicStatusLabel($status, $groupItems),
                 'is_delivered' => $isDelivered,
                 'is_paid' => $isPaid,
                 'amount_due' => $isPaid ? 0.0 : $groupTotal,
@@ -277,8 +277,19 @@ class ClientDeliveryGroupService
         return (float) ($item->subtotal ?? ((float) $item->price * max(1, (int) $item->quantity)));
     }
 
-    private function publicStatusLabel(?string $status): string
+    private function publicStatusLabel(?string $status, ?Collection $items = null): string
     {
+        // Tant que le vendeur n'a rien validé, on ne parle pas encore de préparation.
+        if (in_array($status, [null, '', OrderWorkflowService::DELIVERY_PENDING], true) && $items) {
+            $vendorStatuses = $items->map(fn (OrderItem $item) => $item->vendor_status ?: 'pending');
+            if ($vendorStatuses->every(fn ($s) => $s === 'pending')) {
+                return 'En attente de confirmation du vendeur';
+            }
+            if ($vendorStatuses->every(fn ($s) => $s === 'accepted')) {
+                return 'Commande confirmée par le vendeur';
+            }
+        }
+
         return match ($status) {
             OrderWorkflowService::DELIVERY_PREPARING => 'Préparation en cours',
             OrderWorkflowService::DELIVERY_READY_FOR_PICKUP => 'Prête pour la livraison',

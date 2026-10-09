@@ -4,7 +4,7 @@
 <section class="cs-page-head">
     <div>
         <h1>Notifications</h1>
-        <p>{{ $unreadCount }} notification(s) non lue(s)</p>
+        <p>{{ $unreadCount }} {{ $unreadCount > 1 ? 'notifications non lues' : 'notification non lue' }}</p>
     </div>
     <form method="POST" action="{{ route('client.notifications.readAll') }}">
         @csrf

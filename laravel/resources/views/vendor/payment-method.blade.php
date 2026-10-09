@@ -753,6 +753,15 @@
                 <input type="hidden" name="business_email" value="{{ old('business_email', $shop->business_email) }}">
 
                 <div class="pm-field">
+                    <label class="pm-label" for="paymentMode">Calendrier de reversement <span class="pm-required">*</span></label>
+                    <select class="pm-input" id="paymentMode" name="payment_mode" required>
+                        <option value="post_delivery" @selected(old('payment_mode', $shop->payment_mode) === 'post_delivery')>Après livraison — reversement programmé sous 72 h</option>
+                        <option value="weekly" @selected(old('payment_mode', $shop->payment_mode) === 'weekly')>Reversement hebdomadaire</option>
+                    </select>
+                    @error('payment_mode')<p class="pm-error">{{ $message }}</p>@enderror
+                </div>
+
+                <div class="pm-field">
                     <span class="pm-label">Opérateur de mobile money <span class="pm-required">*</span></span>
 
                     <div class="pm-operators">

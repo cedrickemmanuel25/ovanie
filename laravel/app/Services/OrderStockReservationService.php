@@ -6,6 +6,7 @@ use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -24,12 +25,19 @@ class OrderStockReservationService
 
         foreach ($order->items as $item) {
             $product = Product::query()->whereKey($item->product_id)->lockForUpdate()->first();
+            $variant = $item->product_variant_id
+                ? ProductVariant::query()->whereKey($item->product_variant_id)->lockForUpdate()->first()
+                : null;
+            $available = (int) ($variant?->stock ?? $product?->stock ?? 0);
 
-            if (! $product || (int) $product->stock < (int) $item->quantity) {
-                throw new RuntimeException('Stock insuffisant pour le produit ' . ($product?->name ?? ('#' . $item->product_id)) . '.');
+            if (! $product || $available < (int) $item->quantity) {
+                $label = $item->variant_label_snapshot ? ' (' . $item->variant_label_snapshot . ')' : '';
+                throw new RuntimeException('Stock insuffisant pour le produit ' . ($product?->name ?? ('#' . $item->product_id)) . $label . '.');
             }
 
-            $product->decrement('stock', (int) $item->quantity);
+            if ($variant) $variant->decrement('stock', (int) $item->quantity);
+            else $product->decrement('stock', (int) $item->quantity);
+            if ($variant) $product->forceFill(['stock' => (int) $product->variants()->where('is_active', true)->sum('stock')])->save();
         }
 
         data_set($meta, 'stock_reservation', [
@@ -71,11 +79,14 @@ class OrderStockReservationService
             }
 
             foreach ($lockedOrder->items as $item) {
-                Product::query()
-                    ->whereKey($item->product_id)
-                    ->lockForUpdate()
-                    ->first()
-                    ?->increment('stock', (int) $item->quantity);
+                if ($item->product_variant_id) {
+                    $variant = ProductVariant::query()->whereKey($item->product_variant_id)->lockForUpdate()->first();
+                    $variant?->increment('stock', (int) $item->quantity);
+                    $product = Product::find($item->product_id);
+                    if ($product) $product->forceFill(['stock' => (int) $product->variants()->where('is_active', true)->sum('stock')])->save();
+                } else {
+                    Product::query()->whereKey($item->product_id)->lockForUpdate()->first()?->increment('stock', (int) $item->quantity);
+                }
             }
 
             data_set($meta, 'stock_reservation.status', 'released');
@@ -102,7 +113,8 @@ class OrderStockReservationService
                 continue;
             }
 
-            $existing = $cart->items()->where('product_id', $productId)->first();
+            $variantId = $orderItem->product_variant_id ? (int) $orderItem->product_variant_id : null;
+            $existing = $cart->items()->where('product_id', $productId)->where('product_variant_id', $variantId)->first();
 
             if ($existing) {
                 $existing->quantity = (int) $existing->quantity + (int) $orderItem->quantity;
@@ -113,6 +125,9 @@ class OrderStockReservationService
             CartItem::create([
                 'cart_id' => $cart->id,
                 'product_id' => $productId,
+                'product_variant_id' => $variantId,
+                'variant_label_snapshot' => $orderItem->variant_label_snapshot,
+                'variant_image_snapshot' => $orderItem->variant_image_snapshot,
                 'original_product_id' => $productId,
                 'fulfillment_product_id' => $productId,
                 'original_shop_id' => $product->shop_id,

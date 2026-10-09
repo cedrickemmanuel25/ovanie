@@ -6,7 +6,7 @@
     <!-- Logo -->
     <div class="text-center mb-4">
         <a href="{{ route('home') }}">
-            <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE Logo" class="h-10 mx-auto mb-1">
+            <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE Logo" class="h-10 mx-auto mb-1">
         </a>
     </div>
 
@@ -70,8 +70,10 @@
         <!-- Options -->
         <div class="flex items-center justify-between mb-5">
             <label class="flex items-center cursor-pointer">
-                <input type="checkbox" name="remember" class="w-4 h-4 text-[#2563EB] bg-white border-gray-300 rounded focus:ring-blue-500">
-                <span class="ml-2 text-xs text-gray-600">Se souvenir de moi</span>
+                {{-- Coché par défaut : connexion conservée 1 an (décocher sur un ordinateur partagé). --}}
+                <input type="hidden" name="remember" value="0">
+                <input type="checkbox" name="remember" value="1" @checked(old('remember', '1') === '1') class="w-4 h-4 text-[#2563EB] bg-white border-gray-300 rounded focus:ring-blue-500">
+                <span class="ml-2 text-xs text-gray-600">Rester connecté</span>
             </label>
             @if (Route::has('password.request'))
                 <a href="{{ route('password.request') }}" class="text-xs text-[#2563EB] font-medium hover:underline">Mot de passe oublié ?</a>

@@ -174,57 +174,14 @@ class LogisticsShipmentWorkflowService
             }
 
             foreach ($eligible as $driver) {
-                foreach ($lockedItems as $lockedItem) {
-                    $pricing = $this->priceForItem($lockedItem);
-
-                    DeliveryAssignment::create([
-                        'mission_number' => $missionNumber,
-                        'order_id' => $lockedItem->order_id,
-                        'order_item_id' => $lockedItem->id,
-                        'driver_id' => $driver->id,
-                        'status' => 'offered',
-                        'pickup_address' => $lockedItem->shipment?->pickup_address,
-                        'delivery_address' => $lockedItem->shipment?->delivery_address,
-                        'price_amount' => $pricing['gross'],
-                        'driver_commission_percent' => $pricing['commission_percent'],
-                        'driver_net_amount' => $pricing['net'],
-                        'meta' => array_filter([
-                            'mission_number' => $missionNumber,
-                            'required_vehicle_code' => $requiredCode,
-                            'offer_phase' => collect($lockedItems)->every(
-                                fn (OrderItem $line) => $line->delivery_status === OrderWorkflowService::DELIVERY_READY_FOR_PICKUP
-                            ) ? 'ready_for_pickup' : 'vendor_preparing',
-                            'vendor_preparation_required' => collect($lockedItems)->contains(
-                                fn (OrderItem $line) => $line->delivery_status !== OrderWorkflowService::DELIVERY_READY_FOR_PICKUP
-                            ),
-                        ]),
-                    ]);
-                }
+                $this->createDriverOffer($driver, $lockedItems, $missionNumber, $requiredCode);
             }
 
             // Un seul push par mission et par livreur, avec le gain total de
             // la mission (somme des lignes), pas le prix d'un seul produit.
             DB::afterCommit(function () use ($eligible, $missionNumber) {
                 foreach ($eligible as $driver) {
-                    $missionNet = DeliveryAssignment::query()
-                        ->where('mission_number', $missionNumber)
-                        ->where('driver_id', $driver->id)
-                        ->where('status', 'offered')
-                        ->get()
-                        ->sortByDesc('id')
-                        ->unique('order_item_id')
-                        ->sum(fn (DeliveryAssignment $assignment) => (float) ($assignment->driver_net_amount ?? 0));
-                    $netLabel = number_format((float) $missionNet, 0, ',', ' ') . ' FCFA';
-
-                    $this->driverPush->sendToDriver(
-                        $driver,
-                        'Nouvelle mission à réserver',
-                        "Une livraison future vous est proposée pour {$netLabel}. La préparation vendeur peut être en cours : réservez la mission maintenant, puis attendez le signal de collecte.",
-                        [
-                            'category' => 'mission_offered',
-                            'mission_number' => $missionNumber,
-                        ]
-                    );
+                    $this->pushMissionOffer($driver, $missionNumber);
                 }
             });
 
@@ -234,6 +191,198 @@ class LogisticsShipmentWorkflowService
         return $drivers->count();
     }
 
+
+    /**
+     * Propose à un livreur disponible les missions OVANIE encore ouvertes,
+     * comme une application VTC : un livreur qui passe « Disponible » (ou qui
+     * ouvre l'app) voit immédiatement les courses en attente qu'il peut
+     * transporter, même s'il n'était pas disponible au moment de la commande.
+     *
+     * Idempotent : aucune nouvelle offre si ce livreur a déjà reçu (ou refusé)
+     * la mission, ou si un autre livreur l'a déjà réservée.
+     *
+     * @return int Nombre de missions nouvellement proposées.
+     */
+    public function offerOpenMissionsToDriver(DeliveryDriver $driver): int
+    {
+        if (! $this->isDriverAvailable($driver)) {
+            return 0;
+        }
+
+        $openItems = OrderItem::query()
+            ->with(['shipment', 'product.shop'])
+            ->where('delivery_provider', OrderWorkflowService::PROVIDER_OVANIE)
+            ->whereIn('delivery_status', [
+                OrderWorkflowService::DELIVERY_PENDING,
+                OrderWorkflowService::DELIVERY_PREPARING,
+                OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
+            ])
+            ->when(Schema::hasColumn('order_items', 'vendor_visible_at'), fn ($query) => $query->whereNotNull('vendor_visible_at'))
+            ->whereDoesntHave('deliveryAssignments', fn ($query) => $query->whereIn('status', self::RESERVED_ASSIGNMENT_STATUSES))
+            ->orderBy('id')
+            ->limit(200)
+            ->get();
+
+        $handled = [];
+        $offeredMissions = [];
+
+        foreach ($openItems as $item) {
+            if (isset($handled[$item->id])) {
+                continue;
+            }
+
+            $group = $this->consolidation->groupForItem($item);
+            $groupItemIds = collect($group['items'] ?? [])->pluck('id')->filter()->map(fn ($id) => (int) $id)->unique()->values();
+            if ($groupItemIds->isEmpty()) {
+                $groupItemIds = collect([(int) $item->id]);
+            }
+            foreach ($groupItemIds as $id) {
+                $handled[$id] = true;
+            }
+
+            $requiredCode = (string) ($group['vehicle_code'] ?? $this->requiredVehicleCode($item));
+            if (! $this->driverCanHandle($driver, $requiredCode)) {
+                continue;
+            }
+
+            $missionNumber = (string) ($group['mission_number'] ?? sprintf('OVL-%05d-01', (int) $item->order_id));
+
+            $created = DB::transaction(function () use ($driver, $groupItemIds, $missionNumber, $requiredCode) {
+                $lockedItems = OrderItem::query()
+                    ->with(['shipment', 'product.shop'])
+                    ->whereIn('id', $groupItemIds->all())
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                $stillOpen = $lockedItems->isNotEmpty() && $lockedItems->every(fn (OrderItem $line) => in_array($line->delivery_status, [
+                    OrderWorkflowService::DELIVERY_PENDING,
+                    OrderWorkflowService::DELIVERY_PREPARING,
+                    OrderWorkflowService::DELIVERY_READY_FOR_PICKUP,
+                ], true));
+
+                if (! $stillOpen) {
+                    return false;
+                }
+
+                $alreadyReserved = DeliveryAssignment::query()
+                    ->whereIn('order_item_id', $groupItemIds->all())
+                    ->whereIn('status', self::RESERVED_ASSIGNMENT_STATUSES)
+                    ->exists();
+                $alreadyOfferedToDriver = DeliveryAssignment::query()
+                    ->whereIn('order_item_id', $groupItemIds->all())
+                    ->where('driver_id', $driver->id)
+                    ->exists();
+
+                if ($alreadyReserved || $alreadyOfferedToDriver) {
+                    return false;
+                }
+
+                $this->createDriverOffer($driver, $lockedItems, $missionNumber, $requiredCode);
+
+                return true;
+            });
+
+            if ($created) {
+                $offeredMissions[] = $missionNumber;
+            }
+        }
+
+        if ($offeredMissions !== []) {
+            DB::afterCommit(function () use ($driver, $offeredMissions) {
+                foreach (array_unique($offeredMissions) as $missionNumber) {
+                    $this->pushMissionOffer($driver, $missionNumber);
+                }
+            });
+        }
+
+        return count(array_unique($offeredMissions));
+    }
+
+    /**
+     * Version appelée à chaque rafraîchissement de l'app livreur : au plus une
+     * recherche toutes les $seconds secondes par livreur, et jamais bloquante.
+     */
+    public function offerOpenMissionsToDriverThrottled(DeliveryDriver $driver, int $seconds = 15): int
+    {
+        if (! \Illuminate\Support\Facades\Cache::add('driver-open-offers:'.$driver->id, 1, $seconds)) {
+            return 0;
+        }
+
+        try {
+            return $this->offerOpenMissionsToDriver($driver);
+        } catch (\Throwable $e) {
+            Log::warning('OVANIE Logistics : proposition des missions ouvertes impossible.', [
+                'driver_id' => $driver->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return 0;
+        }
+    }
+
+    private const RESERVED_ASSIGNMENT_STATUSES = [
+        'accepted', 'assigned', 'collecting', 'picked_up', 'in_transit', 'arrived', 'delivered',
+    ];
+
+    /**
+     * Crée l'offre complète d'une mission (une ligne par article) pour un livreur.
+     */
+    private function createDriverOffer(DeliveryDriver $driver, $lockedItems, string $missionNumber, string $requiredCode): void
+    {
+        $allReady = collect($lockedItems)->every(
+            fn (OrderItem $line) => $line->delivery_status === OrderWorkflowService::DELIVERY_READY_FOR_PICKUP
+        );
+
+        foreach ($lockedItems as $lockedItem) {
+            $pricing = $this->priceForItem($lockedItem);
+
+            DeliveryAssignment::create([
+                'mission_number' => $missionNumber,
+                'order_id' => $lockedItem->order_id,
+                'order_item_id' => $lockedItem->id,
+                'driver_id' => $driver->id,
+                'status' => 'offered',
+                'pickup_address' => $lockedItem->shipment?->pickup_address,
+                'delivery_address' => $lockedItem->shipment?->delivery_address,
+                'price_amount' => $pricing['gross'],
+                'driver_commission_percent' => $pricing['commission_percent'],
+                'driver_net_amount' => $pricing['net'],
+                'meta' => array_filter([
+                    'mission_number' => $missionNumber,
+                    'required_vehicle_code' => $requiredCode,
+                    'offer_phase' => $allReady ? 'ready_for_pickup' : 'vendor_preparing',
+                    'vendor_preparation_required' => ! $allReady,
+                ]),
+            ]);
+        }
+    }
+
+    /**
+     * Un seul push par mission et par livreur, avec le gain net total.
+     */
+    private function pushMissionOffer(DeliveryDriver $driver, string $missionNumber): void
+    {
+        $missionNet = DeliveryAssignment::query()
+            ->where('mission_number', $missionNumber)
+            ->where('driver_id', $driver->id)
+            ->where('status', 'offered')
+            ->get()
+            ->sortByDesc('id')
+            ->unique('order_item_id')
+            ->sum(fn (DeliveryAssignment $assignment) => (float) ($assignment->driver_net_amount ?? 0));
+        $netLabel = number_format((float) $missionNet, 0, ',', ' ') . ' FCFA';
+
+        $this->driverPush->sendToDriver(
+            $driver,
+            'Nouvelle mission à réserver',
+            "Une livraison vous est proposée : vous recevrez {$netLabel} après la livraison (commission OVANIE déduite). Réservez-la maintenant, puis attendez le signal de collecte.",
+            [
+                'category' => 'mission_offered',
+                'mission_number' => $missionNumber,
+            ]
+        );
+    }
 
     /**
      * Informe le livreur qui a déjà réservé la mission qu'un point vendeur est
@@ -446,7 +595,7 @@ class LogisticsShipmentWorkflowService
             $this->driverPush->sendToDriver(
                 $driver,
                 'Nouvelle mission',
-                "Une livraison vous a été attribuée pour {$netLabel}. Ouvrez l'app pour l'accepter.",
+                "Nouvelle livraison : vous recevrez {$netLabel} après la livraison (commission OVANIE déduite). Ouvrez l'app pour l'accepter.",
                 [
                     'category' => 'mission_assigned',
                     'mission_number' => $assignment->resolved_mission_number,
@@ -461,7 +610,7 @@ class LogisticsShipmentWorkflowService
      * au checkout par OvanieDeliveryPriceCalculator), duquel on retient la
      * commission OVANIE pour obtenir le montant net que touche le livreur.
      */
-    private function priceForItem(OrderItem $item): array
+    public function priceForItem(OrderItem $item): array
     {
         $gross = round((float) $item->delivery_price, 0);
         $commissionPercent = (float) Setting::getValue('logistics_driver_commission_percent', 15);
@@ -757,7 +906,9 @@ class LogisticsShipmentWorkflowService
         // (onboarding_status = active), même si le compte est déjà is_active.
         return (bool) $driver->is_active
             && $driver->onboarding_status === DeliveryDriver::ONBOARDING_ACTIVE
-            && ! $this->isUnavailable($driver);
+            && ! $this->isUnavailable($driver)
+            // Trop d'espèces non déposées : plus de nouvelle mission jusqu'au dépôt.
+            && ! app(DriverPayoutService::class)->cashLimitReached($driver);
     }
 
     private function ensureAndSendOtp(OrderItem $item): void

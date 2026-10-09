@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
 
 class OrderController extends Controller
 {
@@ -16,6 +17,14 @@ class OrderController extends Controller
     public function index()
     {
         $user = Auth::user();
+
+        // Ancienne page brute : chaque profil est renvoyé vers son vrai espace commandes.
+        if ($user?->role === 'client' && Route::has('client.orders')) {
+            return redirect()->route('client.orders', array_filter(['q' => request('q')]));
+        }
+        if ($user?->role === 'vendor' && Route::has('vendor.orders')) {
+            return redirect()->route('vendor.orders');
+        }
 
         $query = Order::latest();
 

@@ -27,50 +27,69 @@ class MissionOverviewBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = progressValue ?? mission.preparationPercent;
+    final facts = <String>[
+      '${mission.pickupCount} collecte${mission.pickupCount > 1 ? 's' : ''}',
+      '${mission.itemCount} article${mission.itemCount > 1 ? 's' : ''}',
+      missionWeight(mission.totalWeightKg),
+      if ((mission.vehicleLabel ?? '').trim().isNotEmpty) mission.vehicleLabel!.trim(),
+    ];
+    final time = missionTime(mission.pickupScheduledAt);
     return MissionSurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Mission ${mission.missionNumber}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: MissionPalette.navy,
-              fontSize: 20,
-              height: 1.12,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -.4,
-            ),
-          ),
-          if ((mission.orderNumber ?? '').trim().isNotEmpty) ...[
-            const SizedBox(height: 3),
-            Text(
-              'Commande ${mission.orderNumber}',
-              style: const TextStyle(
-                color: MissionPalette.slate,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  (mission.orderNumber ?? '').trim().isNotEmpty
+                      ? mission.orderNumber!.trim()
+                      : 'Mission ${mission.missionNumber}',
+                  style: const TextStyle(
+                    color: MissionPalette.navy,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-            ),
-          ],
-          const SizedBox(height: 17),
-          _MetricsColumns(mission: mission),
-          const SizedBox(height: 16),
-          Text(
-            progressTitle,
-            style: const TextStyle(
-              color: MissionPalette.slate,
-              fontSize: 13.5,
-              fontWeight: FontWeight.w800,
-            ),
+              if (time.trim().isNotEmpty && time.trim() != '—')
+                Text(time, style: const TextStyle(color: MissionPalette.slate, fontSize: 13.5)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.location_on_rounded, size: 20, color: Color(0xFFE5484D)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  mission.displayDestination,
+                  style: const TextStyle(
+                    color: MissionPalette.navy,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
-          MissionProgress(
-            value: progress,
-            trailingLabel: progressTrailingLabel,
+          Text(
+            facts.join('  ·  '),
+            style: const TextStyle(color: MissionPalette.slate, fontSize: 13.5),
           ),
-          if (progressCompletedText != null) ...[
+          if (progress < 100) ...[
+            const SizedBox(height: 14),
+            Text(
+              progressTitle,
+              style: const TextStyle(color: MissionPalette.slate, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            MissionProgress(value: progress, trailingLabel: progressTrailingLabel),
+          ],
+          if (progressCompletedText != null && progress < 100) ...[
             const SizedBox(height: 12),
             MissionTintMessage(text: progressCompletedText!),
           ],
@@ -84,91 +103,125 @@ class MissionOverviewBlock extends StatelessWidget {
   }
 }
 
-class _MetricsColumns extends StatelessWidget {
-  const _MetricsColumns({required this.mission});
+/// Grille d'informations commune à tous les écrans Mission : destination sur
+/// toute la largeur, puis tuiles en 2 colonnes (3 sur grand écran).
+class MissionMetricGrid extends StatelessWidget {
+  const MissionMetricGrid({super.key, required this.tiles, this.destination});
 
-  final DriverMissionDetail mission;
+  final List<MissionMetricTile> tiles;
+  final String? destination;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final left = Column(
+        const gap = 8.0;
+        final columns = constraints.maxWidth >= 520 ? 3 : 2;
+        final tileWidth = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            MissionInfoRow(
-              icon: Icons.schedule_rounded,
-              label: 'Heure prévue',
-              value: missionTime(mission.pickupScheduledAt),
-            ),
-            MissionInfoRow(
-              icon: Icons.location_on_rounded,
-              label: 'Destination',
-              value: mission.displayDestination,
-            ),
-            MissionInfoRow(
-              icon: Icons.inventory_2_outlined,
-              label: 'Points de collecte',
-              value: '${mission.pickupCount} point${mission.pickupCount > 1 ? 's' : ''}',
-            ),
-            MissionInfoRow(
-              icon: Icons.receipt_long_outlined,
-              label: 'Articles',
-              value: '${mission.itemCount} article${mission.itemCount > 1 ? 's' : ''}',
-            ),
-          ],
-        );
-        final right = Column(
-          children: [
-            MissionInfoRow(
-              icon: Icons.scale_outlined,
-              label: 'Poids total',
-              labelWidth: 62,
-              value: missionWeight(mission.totalWeightKg),
-            ),
-            MissionInfoRow(
-              icon: Icons.view_in_ar_outlined,
-              label: 'Volume',
-              labelWidth: 62,
-              value: missionVolume(mission.totalVolumeM3),
-            ),
-            MissionInfoRow(
-              icon: Icons.local_shipping_rounded,
-              label: 'Véhicule prévu',
-              labelWidth: 62,
-              value: (mission.vehicleLabel ?? 'Véhicule').trim(),
-            ),
-          ],
-        );
-
-        if (constraints.maxWidth < 570) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 6, child: left),
-              Container(
-                width: 1,
-                height: 118,
-                margin: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                color: const Color(0xFFDCE3EB),
-              ),
-              Expanded(flex: 5, child: right),
+            if (destination != null) ...[
+              MissionDestinationTile(destination: destination!),
+              const SizedBox(height: gap),
             ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: left),
-            Container(
-              width: 1,
-              height: 118,
-              margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
-              color: const Color(0xFFDCE3EB),
+            Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final tile in tiles) SizedBox(width: tileWidth, child: tile),
+              ],
             ),
-            Expanded(child: right),
           ],
         );
       },
+    );
+  }
+}
+
+class MissionMetricTile extends StatelessWidget {
+  const MissionMetricTile(this.icon, this.label, this.value, {super.key});
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F8F7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 19, color: OvanieColors.green),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: MissionPalette.slate, fontSize: 11.5, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: MissionPalette.navy, fontSize: 14, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MissionDestinationTile extends StatelessWidget {
+  const MissionDestinationTile({super.key, required this.destination});
+
+  final String destination;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F8F7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.location_on_rounded, size: 20, color: Color(0xFFF23E3E)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Destination',
+                  style: TextStyle(color: MissionPalette.slate, fontSize: 11.5, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  destination,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: MissionPalette.navy, fontSize: 14, height: 1.25, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -535,7 +588,7 @@ class _CollectingStopRow extends StatelessWidget {
                                 backgroundColor: OvanieColors.green,
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-                                textStyle: const TextStyle(fontSize: 10.8, fontWeight: FontWeight.w900),
+                                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
                               ),
                             ),
                           ),
@@ -722,7 +775,7 @@ class _RouteNodeWidget extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: MissionPalette.navy,
-            fontSize: 10.8,
+            fontSize: 12,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -733,7 +786,7 @@ class _RouteNodeWidget extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: MissionPalette.slate,
-            fontSize: 9.5,
+            fontSize: 11.5,
             height: 1.1,
             fontWeight: FontWeight.w500,
           ),

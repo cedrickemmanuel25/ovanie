@@ -63,6 +63,13 @@ class CommercialShopLocationService
     {
         $missing = [];
 
+        if (! $shop->hasConfirmedLogistics()) {
+            $missing[] = 'choix du mode logistique';
+        }
+        if (! $shop->hasConfiguredPayout()) {
+            $missing[] = 'configuration du reversement vendeur';
+        }
+
         if (! filled($shop->commune)) {
             $missing[] = 'commune';
         }
@@ -92,7 +99,7 @@ class CommercialShopLocationService
                     && is_numeric($shop->longitude)
                     && in_array($shop->geo_status, [Shop::GEO_STATUS_RELIABLE, Shop::GEO_STATUS_VERIFIED], true)
                 ),
-            'logistics_ready' => $shop->logistics_status === Shop::LOGISTICS_READY,
+            'logistics_ready' => $shop->hasConfirmedLogistics() && $shop->logistics_status === Shop::LOGISTICS_READY,
             'publication_ready' => $shop->canPublishProducts(),
             'missing' => array_values(array_unique($missing)),
         ];

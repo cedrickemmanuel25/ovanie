@@ -807,7 +807,7 @@ class ClientAccountController extends Controller
                     $data['commune'] = $resolved['commune']
                         ?: app(\App\Services\Geo\AbidjanLocalityRegistry::class)->canonicalCommune($data['commune'] ?? null)
                         ?: ($data['commune'] ?? 'Abidjan');
-                    $data['quartier'] = $resolved['quartier'] ?? $data['quartier'] ?? null;
+                    $data['quartier'] = filled($data['quartier'] ?? null) ? $data['quartier'] : ($resolved['quartier'] ?? null);
                 }
             }
         } catch (\Throwable $e) {

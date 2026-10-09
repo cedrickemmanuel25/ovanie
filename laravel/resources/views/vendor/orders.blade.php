@@ -831,7 +831,7 @@
                                     >
                                     <span>
                                         <span class="oc-product-name">
-                                            {{ \Illuminate\Support\Str::limit($product?->name ?? 'Produit supprimé', 30) }}
+                                            {{ \Illuminate\Support\Str::limit($product?->name ?? 'Produit supprimé', 30) }}@if($firstItem?->variant_label_snapshot)<small style="display:block;color:#64748b;font-weight:700">{{ $firstItem->variant_label_snapshot }}</small>@endif
                                             @if ($shopItems->count() > 1)
                                                 +{{ $shopItems->count() - 1 }}
                                             @endif

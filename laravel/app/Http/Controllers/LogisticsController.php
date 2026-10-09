@@ -1499,7 +1499,10 @@ class LogisticsController extends Controller
         $response = trim((string) ($decision['response'] ?? $return->vendor_response ?? ''));
         $productName = $return->orderItem?->product?->name ?: $return->product_name ?: 'Produit';
         $address = (string) ($collection['address'] ?? $return->order?->delivery_address ?? 'Adresse à confirmer');
-        $slot = trim((string) (($collection['date'] ?? '').' '.($collection['slot'] ?? '')));
+        $slotDate = filled($collection['date'] ?? null)
+            ? rescue(fn () => \Carbon\Carbon::parse($collection['date'])->format('d/m/Y'), (string) $collection['date'], false)
+            : '';
+        $slot = trim($slotDate.' '.($collection['slot'] ?? ''));
         $refundAmount = $decisionType === 'refund'
             ? (float) ($return->refund_amount ?: $refundService->calculateRefundAmount($return))
             : 0.0;

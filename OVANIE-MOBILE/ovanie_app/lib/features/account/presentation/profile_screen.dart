@@ -352,10 +352,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text(
                 'Mon profil',
-                style: TextStyle(color: _navy, fontSize: 27, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -0.4),
+                style: TextStyle(color: _navy, fontSize: 22, fontWeight: FontWeight.w800),
               ),
-              SizedBox(height: 7),
-              Text('Gérez vos informations personnelles', style: TextStyle(color: _muted, fontSize: 13.2, height: 1.3)),
             ],
           ),
         ),
@@ -383,8 +381,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Row(
               children: [
                 Container(
-                  width: 88,
-                  height: 88,
+                  width: 60,
+                  height: 60,
                   alignment: Alignment.center,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
@@ -392,29 +390,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   child: Text(
                     _initials(profile),
-                    style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800),
+                    style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w700),
                   ),
                 ),
-                const SizedBox(width: 20),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name.isEmpty ? 'Client OVANIE' : name, style: const TextStyle(color: _navy, fontSize: 20.5, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: OvanieColors.orange, borderRadius: BorderRadius.circular(6)),
-                        child: const Text('Client', style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
-                      ),
-                      if (profile.phone.trim().isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _compactContact(Icons.phone_outlined, profile.phone.trim()),
-                      ],
-                      if (profile.email.trim().isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        _compactContact(Icons.mail_outline_rounded, profile.email.trim()),
-                      ],
+                      Text(name.isEmpty ? 'Client OVANIE' : name, style: const TextStyle(color: _navy, fontSize: 18, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      const Text('Modifier mes informations', style: TextStyle(color: OvanieColors.blue, fontSize: 14, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
@@ -423,17 +409,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
         const _SectionTitle('Informations personnelles'),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _ProfileGroup(
           children: [
             _ProfileRow(
               icon: Icons.person_outline_rounded,
               iconColor: const Color(0xFF1464EB),
               iconBackground: const Color(0xFFEEF4FF),
-              title: 'Informations personnelles',
-              subtitle: 'Nom, prénom, date de naissance, etc.',
+              title: 'Nom complet',
+              subtitle: name.isEmpty ? 'Non renseigné' : name,
               onTap: _editProfile,
             ),
             _ProfileRow(
@@ -457,55 +443,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
               iconColor: OvanieColors.orange,
               iconBackground: const Color(0xFFFFF3E9),
               title: 'Mot de passe',
-              subtitle: 'Modifier votre mot de passe',
               onTap: _openSecurity,
               divider: false,
             ),
           ],
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
         const _SectionTitle('Préférences'),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _ProfileGroup(
           children: [
             _ProfileRow(
               icon: Icons.notifications_none_rounded,
               iconColor: const Color(0xFF7038F5),
               iconBackground: const Color(0xFFF3EFFF),
-              title: 'Préférences de notifications',
-              subtitle: 'Gérez les types de notifications que vous recevez',
+              title: 'Notifications',
               onTap: _openNotificationPreferences,
-            ),
-            _ProfileRow(
-              icon: Icons.language_rounded,
-              iconColor: const Color(0xFF246BE9),
-              iconBackground: const Color(0xFFEEF4FF),
-              title: 'Langue',
-              subtitle: 'Français',
-              onTap: () => _showSimpleChoice('Langue', 'Français'),
-            ),
-            _ProfileRow(
-              icon: Icons.dark_mode_outlined,
-              iconColor: _navy,
-              iconBackground: const Color(0xFFF2F4F8),
-              title: 'Thème',
-              subtitle: 'Clair',
-              onTap: () => _showSimpleChoice('Thème', 'Clair'),
               divider: false,
             ),
           ],
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
         const _SectionTitle('Sécurité'),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _ProfileGroup(
           children: [
             _ProfileRow(
               icon: Icons.verified_user_outlined,
               iconColor: const Color(0xFF10A94D),
               iconBackground: const Color(0xFFECFAF1),
-              title: 'Authentification à deux facteurs',
-              subtitle: 'Renforcez la sécurité de votre compte',
+              title: 'Double authentification',
               trailingText: 'Désactivée',
               trailingTextColor: OvanieColors.orange,
               onTap: _openSecurity,
@@ -514,8 +481,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: Icons.desktop_windows_outlined,
               iconColor: const Color(0xFF246BE9),
               iconBackground: const Color(0xFFEEF4FF),
-              title: 'Sessions actives',
-              subtitle: 'Gérez vos sessions sur tous vos appareils',
+              title: 'Appareils connectés',
               onTap: _openSecurity,
             ),
             _ProfileRow(
@@ -523,7 +489,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               iconColor: const Color(0xFFED1B24),
               iconBackground: const Color(0xFFFFEEEE),
               title: 'Supprimer mon compte',
-              subtitle: 'Supprimer définitivement votre compte et vos données',
               onTap: _openDeleteAccount,
               divider: false,
             ),
@@ -608,9 +573,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
         const _SectionTitle('Informations personnelles'),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _ProfileGroup(
           children: [
             _ProfileRow(
@@ -640,9 +605,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
         const _SectionTitle('Préférences'),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _ProfileGroup(
           children: [
             _ProfileRow(
@@ -656,9 +621,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
         const _SectionTitle('Sécurité'),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _ProfileGroup(
           children: [
             _ProfileRow(
@@ -704,7 +669,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         text,
-        style: const TextStyle(color: Color(0xFF071B53), fontSize: 16, fontWeight: FontWeight.w900),
+        style: const TextStyle(color: Color(0xFF6E7B90), fontSize: 13.5, fontWeight: FontWeight.w600),
       );
 }
 
@@ -718,7 +683,6 @@ class _ProfileGroup extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(11),
           border: Border.all(color: const Color(0xFFE2E7F0)),
-          boxShadow: const [BoxShadow(color: Color(0x07000000), blurRadius: 10, offset: Offset(0, 3))],
         ),
         child: Column(children: children),
       );
@@ -756,7 +720,7 @@ class _ProfileRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 76),
+          constraints: const BoxConstraints(minHeight: 56),
           margin: const EdgeInsets.symmetric(horizontal: 0),
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
           decoration: BoxDecoration(
@@ -764,22 +728,17 @@ class _ProfileRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(color: iconBackground, borderRadius: BorderRadius.circular(10)),
-                child: Icon(icon, color: iconColor, size: 25),
-              ),
+              Icon(icon, color: iconColor, size: 22),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(title, style: const TextStyle(color: Color(0xFF071B53), fontSize: 14.2, height: 1.22, fontWeight: FontWeight.w800)),
+                    Text(title, style: const TextStyle(color: Color(0xFF071B53), fontSize: 15, fontWeight: FontWeight.w500)),
                     if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(subtitle!, style: const TextStyle(color: Color(0xFF53658F), fontSize: 12.2, height: 1.25)),
+                      const SizedBox(height: 2),
+                      Text(subtitle!, style: const TextStyle(color: Color(0xFF6E7B90), fontSize: 13.5)),
                     ],
                   ],
                 ),
@@ -788,7 +747,7 @@ class _ProfileRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   trailingText!,
-                  style: TextStyle(color: trailingTextColor ?? const Color(0xFF53658F), fontSize: 12.2, fontWeight: FontWeight.w500),
+                  style: TextStyle(color: trailingTextColor ?? const Color(0xFF53658F), fontSize: 13.5, fontWeight: FontWeight.w500),
                 ),
               ],
               if (showChevron) ...[
@@ -808,48 +767,6 @@ class _HelpCard extends StatelessWidget {
   const _HelpCard({required this.onTap});
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFAFCFF),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFCEDFFF)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: const Icon(Icons.contact_support_outlined, color: Color(0xFF1464EB), size: 28),
-            ),
-            const SizedBox(width: 14),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Besoin d’aide sur votre compte ?', style: TextStyle(color: Color(0xFF071B53), fontSize: 13.8, fontWeight: FontWeight.w900)),
-                  SizedBox(height: 4),
-                  Text('Notre équipe est là pour vous accompagner.', style: TextStyle(color: Color(0xFF53658F), fontSize: 12.0)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            SizedBox(
-              height: 40,
-              child: FilledButton(
-                onPressed: onTap,
-                style: FilledButton.styleFrom(
-                  backgroundColor: OvanieColors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 17),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-                ),
-                child: const Text('Nous contacter', style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.w900)),
-              ),
-            ),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
+

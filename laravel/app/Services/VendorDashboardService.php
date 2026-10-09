@@ -764,11 +764,31 @@ class VendorDashboardService
     {
         $alerts = [];
 
-        if (! $shop->canPublishProducts()) {
+        if (! $shop->hasConfirmedLogistics()) {
+            $alerts[] = [
+                'type' => 'warning',
+                'title' => 'Mode logistique à confirmer',
+                'message' => 'Choisissez OVANIE Logistics ou votre propre logistique pour les prochaines commandes.',
+                'route' => 'vendor.delivery.index',
+                'label' => 'Configurer la livraison',
+            ];
+        }
+
+        if (! $shop->hasConfiguredPayout()) {
+            $alerts[] = [
+                'type' => 'warning',
+                'title' => 'Reversement vendeur à configurer',
+                'message' => 'Confirmez votre calendrier de reversement et le compte Mobile Money qui recevra vos paiements.',
+                'route' => 'vendor.payment-method',
+                'label' => 'Configurer le reversement',
+            ];
+        }
+
+        if ($shop->hasCompleteConfiguration() && ! $shop->canPublishProducts()) {
             $alerts[] = [
                 'type' => 'warning',
                 'title' => 'Publication à vérifier',
-                'message' => 'La boutique ou sa configuration logistique ne permet pas actuellement de publier de nouveaux produits actifs.',
+                'message' => 'La configuration de la boutique doit encore être complétée avant la publication de nouveaux produits actifs.',
                 'route' => 'vendor.shop-status',
                 'label' => 'Voir le statut',
             ];

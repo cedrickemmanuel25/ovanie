@@ -118,16 +118,17 @@
                                     $price = (float) ($item->price ?: ($product->final_price ?? $product->price ?? 0));
                                     $quantity = max((int) $item->quantity, 1);
                                     $subtotalLine = $price * $quantity;
-                                    $stock = max((int) ($product->stock ?? 0), 0);
+                                    $stock = max((int) ($item->variant?->stock ?? $product->stock ?? 0), 0);
                                     $unit = $product->display_unit ?? $product->unit_label ?? $product->unit ?? 'pièce';
                                     $productUrl = Route::has('product.show') ? route('product.show', $product->slug) : '#';
-                                    $imageUrl = $product->mainImageUrl ?? asset('storage/products/placeholder.png');
+                                    $imageUrl = $item->variant?->card_url ?: $item->variant?->image_url ?: $item->variant_image_snapshot ?: ($product->mainImageUrl ?? asset('storage/products/placeholder.png'));
                                 @endphp
 
                                 <article class="ov-cart-item"
                                          data-row
                                          data-item-id="{{ $item->id }}"
                                          data-product-id="{{ $product->id }}"
+                                         data-variant-id="{{ $item->product_variant_id ?? 0 }}"
                                          data-price="{{ $price }}"
                                          data-stock="{{ $stock }}"
                                          data-quantity="{{ $quantity }}">
@@ -143,6 +144,7 @@
 
                                     <div class="ov-cart-item__details">
                                         <a href="{{ $productUrl }}" class="ov-cart-item__name">{{ $product->name }}</a>
+                                        @if($item->variant_label_snapshot)<div class="ov-cart-item__variant"><strong>{{ $item->variant_label_snapshot }}</strong></div>@endif
 
                                         @if($stock <= 0)
                                             <div class="ov-cart-item__meta">
@@ -162,6 +164,7 @@
                                                    min="1"
                                                    max="{{ max($stock, $quantity, 1) }}"
                                                    data-product-id="{{ $product->id }}"
+                                         data-variant-id="{{ $item->product_variant_id ?? 0 }}"
                                                    data-stock="{{ $stock }}">
                                             <button type="button" data-qty-plus aria-label="Augmenter la quantité">+</button>
                                         </div>
@@ -178,6 +181,7 @@
                                     <div class="ov-cart-item__actions">
                                         <form method="POST" action="{{ route('cart.remove', $product->id) }}" class="ov-remove-form">
                                             @csrf
+                                            <input type="hidden" name="product_variant_id" value="{{ $item->product_variant_id ?? '' }}">
                                             <button type="submit" class="ov-item-link ov-item-link--danger" data-remove-item>
                                                 <i data-lucide="trash-2"></i>
                                                 Supprimer
@@ -259,7 +263,7 @@
             <section class="ov-cart-trust-strip">
                 <div>
                     <i data-lucide="shield-check"></i>
-                    <p><strong>Paiement 100% sécurisé</strong><span>Vos transactions sont protégées par un cryptage de pointe</span></p>
+                    <p><strong>Paiement sécurisé</strong><span>Vos transactions sont protégées par un cryptage de pointe</span></p>
                 </div>
                 <div>
                     <i data-lucide="truck"></i>

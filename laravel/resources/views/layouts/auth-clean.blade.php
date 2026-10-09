@@ -19,7 +19,7 @@
 
     <!-- Footer copyright fixe en bas -->
     <div class="absolute bottom-3 left-0 w-full text-center text-gray-400 text-xs">
-        &copy; 2024 OVANIE. Tous droits réservés.
+        &copy; {{ date('Y') }} OVANIE. Tous droits réservés.
     </div>
     
     <style>
@@ -40,5 +40,6 @@
     </style>
 
     @yield('scripts')
+@include('layouts.partials.live-sync')
 </body>
 </html>

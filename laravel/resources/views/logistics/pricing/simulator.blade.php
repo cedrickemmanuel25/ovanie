@@ -5,12 +5,12 @@
 
 @section('content')
 <main class="pricing-page pricing-simulator-page">
-    <div class="pricing-titlebar"><div><h1>Simulateur logistique</h1><p>Testez le tarif réel d’une livraison : le poids/volume choisit le véhicule, puis OVANIE lit le prix du trajet entre les communes et ajoute les suppléments applicables.</p></div></div>
+    <div class="pricing-titlebar"><div><h1>Simulateur logistique</h1><p>Testez le prix réel d’une livraison : le poids et le volume choisissent le véhicule, puis base + distance × prix/km + poids × prix/kg + volume × prix/m³ + frais éventuels.</p></div></div>
 
     <section class="pricing-kpis pricing-simulator-kpis">
         <article class="pricing-kpi"><span class="pricing-kpi-icon green"><x-operations.icon name="list"/></span><div class="pricing-kpi-body"><span class="pricing-kpi-label">Simulations du jour</span><div class="pricing-kpi-value-row"><strong>{{ $simulationsToday }}</strong></div><p>calculs enregistrés</p></div></article>
-        <article class="pricing-kpi"><span class="pricing-kpi-icon blue"><x-operations.icon name="truck"/></span><div class="pricing-kpi-body"><span class="pricing-kpi-label">Véhicules actifs</span><div class="pricing-kpi-value-row"><strong>{{ $configuredRateCount }}</strong></div><p>capacités disponibles</p></div></article>
-        <article class="pricing-kpi"><span class="pricing-kpi-icon orange"><x-operations.icon name="map"/></span><div class="pricing-kpi-body"><span class="pricing-kpi-label">Tarifs de trajets actifs</span><div class="pricing-kpi-value-row"><strong>{{ $activeMatrixCount }}</strong></div><p>relations commune → commune</p></div></article>
+        <article class="pricing-kpi"><span class="pricing-kpi-icon blue"><x-operations.icon name="truck"/></span><div class="pricing-kpi-body"><span class="pricing-kpi-label">Véhicules tarifés</span><div class="pricing-kpi-value-row"><strong>{{ $pricedVehicleCount }}/{{ count($vehicles) }}</strong></div><p>base, km, kg, m³ renseignés</p></div></article>
+        <article class="pricing-kpi"><span class="pricing-kpi-icon orange"><x-operations.icon name="map"/></span><div class="pricing-kpi-body"><span class="pricing-kpi-label">Distance</span><div class="pricing-kpi-value-row"><strong class="pricing-kpi-text-value">Itinéraire</strong></div><p>ou distance saisie</p></div></article>
         <article class="pricing-kpi"><span class="pricing-kpi-icon purple"><x-operations.icon name="plus"/></span><div class="pricing-kpi-body"><span class="pricing-kpi-label">Suppléments automatiques</span><div class="pricing-kpi-value-row"><strong>{{ $activeSupplementCount }}</strong></div><p>règles conditionnelles actives</p></div></article>
     </section>
 
@@ -20,12 +20,15 @@
 
     <section class="pricing-simulator-layout">
         <article class="sim-card sim-parameters-card">
-            <header class="sim-card-header"><div><h2><x-operations.icon name="truck"/> Paramètres de simulation</h2><p>Sélectionnez la commune de départ et la commune d’arrivée. Le même choix est autorisé pour une livraison intra-commune.</p></div></header>
+            <header class="sim-card-header"><div><h2><x-operations.icon name="truck"/> Paramètres de simulation</h2><p>Choisissez les communes : la distance est calculée entre leurs centres. Pour un trajet précis, saisissez directement la distance en km.</p></div></header>
             <form class="sim-form" method="POST" action="{{ route('logistics.ovanie-pricing.calculate') }}">@csrf
                 <div class="sim-form-grid sim-form-grid-route">
                     <div class="sim-field"><label>Départ <sup>*</sup></label><div class="sim-input-wrap"><x-operations.icon name="pin"/><select name="origin_commune_id" required style="width:100%;border:0;background:transparent;outline:0"><option value="">Commune de départ</option>@foreach($communes as $commune)<option value="{{ $commune->id }}" @selected((string)old('origin_commune_id',(string)data_get($result,'origin_commune_id'))===(string)$commune->id)>{{ $commune->name }}</option>@endforeach</select></div></div>
                     <div class="sim-swap"><x-operations.icon name="swap"/></div>
                     <div class="sim-field"><label>Destination <sup>*</sup></label><div class="sim-input-wrap"><x-operations.icon name="pin"/><select name="destination_commune_id" required style="width:100%;border:0;background:transparent;outline:0"><option value="">Commune de destination</option>@foreach($communes as $commune)<option value="{{ $commune->id }}" @selected((string)old('destination_commune_id',(string)data_get($result,'destination_commune_id'))===(string)$commune->id)>{{ $commune->name }}</option>@endforeach</select></div></div>
+                </div>
+                <div class="sim-form-grid sim-form-grid-pair">
+                    <div class="sim-field"><label>Distance (km)</label><div class="sim-input-wrap"><x-operations.icon name="route"/><input type="number" min="0" name="distance_km" step="0.1" value="{{ old('distance_km',data_get($result,'distance_input')) }}" placeholder="Automatique"><span class="unit">km</span></div></div>
                 </div>
                 <div class="sim-form-grid sim-form-grid-pair">
                     <div class="sim-field"><label>Poids (kg) <sup>*</sup></label><div class="sim-input-wrap"><x-operations.icon name="weight"/><input type="number" min="0" name="weight_kg" step="0.1" value="{{ old('weight_kg',data_get($result,'weight_kg')) }}" required><span class="unit">kg</span></div></div>
@@ -45,13 +48,13 @@
         </article>
 
         <article class="sim-card sim-result-card">
-            <header class="sim-card-header sim-result-header"><div><h2><x-operations.icon name="check-circle"/> Résultat de la simulation</h2><p>Tarif fixe du trajet pour le véhicule recommandé, puis suppléments dont les conditions sont remplies.</p></div></header>
+            <header class="sim-card-header sim-result-header"><div><h2><x-operations.icon name="check-circle"/> Résultat de la simulation</h2><p>Formule du véhicule recommandé, puis frais éventuels dont les conditions sont remplies.</p></div></header>
             <div class="sim-result-body">
             @if($result)
                 <div class="sim-recommended"><img src="{{ asset($result['vehicle_image']) }}" alt="{{ $result['vehicle_label'] }}"><div class="sim-recommended-copy"><small>Véhicule recommandé</small><strong>{{ $result['vehicle_label'] }}</strong><span>{{ $result['origin'] }} → {{ $result['destination'] }}</span></div><span class="sim-reco-pill">Recommandé</span></div>
                 <div class="sim-summary-kpis">
                     <div class="sim-summary-kpi"><x-operations.icon name="wallet"/><div><small>Prix calculé</small><strong>{{ number_format($result['price_total'],0,',',' ') }} FCFA</strong></div></div>
-                    <div class="sim-summary-kpi"><x-operations.icon name="route"/><div><small>Distance routière</small><strong>{{ $result['distance_km']!==null ? $result['distance_km'].' km' : 'Non disponible' }}</strong></div></div>
+                    <div class="sim-summary-kpi"><x-operations.icon name="route"/><div><small>Distance{{ ($result['distance_source'] ?? null) === 'manual' ? ' saisie' : (($result['distance_source'] ?? null) === 'haversine' ? ' (ligne droite)' : ' routière') }}</small><strong>{{ $result['distance_km'] }} km</strong></div></div>
                     <div class="sim-summary-kpi"><x-operations.icon name="clock"/><div><small>Temps estimé</small><strong>{{ $result['duration'] }}</strong></div></div>
                 </div>
                 <div class="sim-price-title">Détail du prix</div>@foreach($result['price_lines'] as $line)<div class="sim-price-line"><span>{{ $line['label'] }}</span><strong>{{ number_format($line['value'],0,',',' ') }} FCFA</strong></div>@endforeach

@@ -43,6 +43,10 @@
 
     $allOvaniePickedUp = $ovanieLines->isNotEmpty()
         && $ovanieLines->every(fn ($line) => in_array($line->delivery_status, ['picked_up', 'in_transit', 'delivered'], true));
+    // Livreur affecté : mission réservée par un livreur, ou toutes les lignes
+    // OVANIE au moins au statut « assigned ».
+    $allOvanieAssigned = $ovanieLines->isNotEmpty()
+        && ($ovanieMissionReserved || $ovanieLines->every(fn ($line) => in_array($line->delivery_status, ['assigned', 'picked_up', 'in_transit', 'delivered'], true)));
 
     $allSellerPreparationReady = $sellerLines->isNotEmpty()
         && $sellerLines->every(fn ($line) => $line->vendor_status === 'ready');
@@ -1206,7 +1210,7 @@
                                                     <span class="od-product-placeholder"><i data-lucide="package"></i></span>
                                                 @endif
                                                 <span style="min-width:0;">
-                                                    <span class="od-product-name">{{ $productName }}</span>
+                                                    <span class="od-product-name">{{ $productName }}</span>@if($item->variant_label_snapshot)<small style="display:block;color:#64748b;font-weight:700;margin-top:3px">{{ $item->variant_label_snapshot }}</small>@endif
                                                     <span class="od-product-sku">Référence : {{ $productSku }}</span>
                                                 </span>
                                             </div>

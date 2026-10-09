@@ -29,7 +29,7 @@
     @if($errors->any())<div class="territory-flash error"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 
     <section class="territory-detail-kpis">
-        <article class="zone-identity-kpi"><span class="territory-kpi-icon sky"><x-operations.icon name="pin"/></span><strong>{{ $zone->code }} — {{ $zone->name }}</strong><span class="territory-status {{ $zone->is_active?'active':'inactive' }}"><i></i>{{ $zone->is_active?'Active':'Inactive' }}</span></article>
+        <article class="zone-identity-kpi"><span class="territory-kpi-icon sky"><x-operations.icon name="pin"/></span><strong>{{ $zone->code }} — {{ $zone->name }}</strong><span class="territory-status {{ $zone->is_active?'active':'inactive' }}"><i></i>{{ $zone->is_active?'Active':'Désactivée' }}</span></article>
         <article><span class="territory-kpi-icon sky"><x-operations.icon name="users"/></span><div><small>Communes couvertes</small><strong>{{ $zone->communes->count() }}</strong></div></article>
         <article><span class="territory-kpi-icon sky"><x-operations.icon name="clock"/></span><div><small>Délai moyen</small><strong>{{ $zone->average_delay_hours }}h</strong></div></article>
         <article><span class="territory-kpi-icon mint"><x-operations.icon name="chart"/></span><div><small>Livraisons (7 jours)</small><strong>{{ $activity7d }}</strong><span>livraison(s)</span><em>{{ $activityGrowth>0?'+':'' }}{{ $activityGrowth }} %</em></div></article>
@@ -47,7 +47,7 @@
                         <div class="zone-info-column">
                             <label class="pro-field"><span>Nom de la zone <sup>*</sup></span><input name="name" value="{{ old('name',$zone->name) }}" required></label>
                             <label class="pro-field"><span>Région / district <sup>*</sup></span><select name="region">@foreach($regions ?? collect([$zone->region]) as $region)<option value="{{ $region }}" @selected(old('region',$zone->region)===$region)>{{ $region }}</option>@endforeach</select></label>
-                            <div class="pro-field status-pro-field"><span>Statut</span><div class="status-pro-row"><label class="detail-switch"><input type="checkbox" name="is_active" value="1" @checked(old('is_active',$zone->is_active))><i></i><b>Active</b></label><span class="inactive-label">Inactive</span></div></div>
+                            <div class="pro-field status-pro-field"><span>Statut</span><div class="status-pro-row"><label class="detail-switch"><input type="checkbox" name="is_active" value="1" @checked(old('is_active',$zone->is_active))><i></i><b>Active</b></label><span class="inactive-label">Désactivée</span></div></div>
                         </div>
                         <div class="zone-info-column">
                             <label class="pro-field"><span>Délai moyen <sup>*</sup></span><select name="average_delay_hours">@foreach([12,24,48,72] as $delay)<option value="{{ $delay }}" @selected((int)old('average_delay_hours',$zone->average_delay_hours)===$delay)>{{ $delay }}h</option>@endforeach</select></label>

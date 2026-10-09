@@ -13,7 +13,7 @@ class AppelOffreController extends Controller
     public function __construct()
     {
         // Les actions de mutation nécessitent une authentification
-        $this->middleware('auth')->only(['store', 'update', 'destroy', 'create']);
+        $this->middleware('auth:pro')->only(['store', 'update', 'destroy', 'create']);
     }
 
     /**
@@ -30,13 +30,9 @@ class AppelOffreController extends Controller
             abort(401, 'Non authentifié.');
         }
 
-        // Les administrateurs peuvent tout modifier
-        if ($user->is_admin) {
-            return;
-        }
-
-        // Sinon, seul le propriétaire peut agir sur son appel d'offre
-        if ((int) $appel->user_id !== (int) $user->id) {
+        // OVANIE Pro est séparé d'OVANIE : la propriété repose uniquement
+        // sur pro_user_id, jamais sur users.id.
+        if ((int) $appel->pro_user_id !== (int) $user->id) {
             abort(403, "Vous n'êtes pas autorisé à modifier cet appel d'offre.");
         }
     }
@@ -125,7 +121,8 @@ class AppelOffreController extends Controller
         $data['services'] = json_encode($data['services']);
 
         // Associer le créateur
-        $data['user_id'] = auth()->id();
+        $data['pro_user_id'] = auth('pro')->id();
+        $data['user_id'] = null;
 
         $appel = AppelOffre::create($data);
 

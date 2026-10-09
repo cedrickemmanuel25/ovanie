@@ -69,6 +69,103 @@ Schedule::command('ovanie:payouts-execute')
     ->withoutOverlapping();
 
 
+Artisan::command('ovanie:shops-require-configuration {--ids= : IDs séparés par des virgules} {--slugs= : Slugs séparés par des virgules} {--file= : Fichier texte, une valeur ID/slug/nom par ligne} {--only=both : both|logistics|payout} {--dry-run : Affiche seulement les boutiques ciblées}', function () {
+    $ids = collect(explode(',', (string) $this->option('ids')))->map(fn ($v) => trim($v))->filter()->values();
+    $slugs = collect(explode(',', (string) $this->option('slugs')))->map(fn ($v) => trim($v))->filter()->values();
+    $names = collect();
+
+    if ($file = trim((string) $this->option('file'))) {
+        if (! is_file($file)) {
+            $this->error("Fichier introuvable : {$file}");
+            return self::FAILURE;
+        }
+        collect(file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES))
+            ->map(fn ($v) => trim((string) $v))->filter()->each(function ($value) use ($ids, $slugs, $names) {
+                if (ctype_digit($value)) {
+                    $ids->push($value);
+                    return;
+                }
+
+                // Une valeur texte peut être soit un slug, soit le nom exact
+                // d'une boutique (même si ce nom ne contient qu'un seul mot).
+                $slugs->push($value);
+                $names->push($value);
+            });
+    }
+
+    if ($ids->isEmpty() && $slugs->isEmpty() && $names->isEmpty()) {
+        $this->error('Indiquez --ids, --slugs ou --file. Aucune boutique ne sera modifiée sans liste explicite.');
+        return self::FAILURE;
+    }
+
+    $only = strtolower((string) $this->option('only'));
+    if (! in_array($only, ['both', 'logistics', 'payout'], true)) {
+        $this->error('--only doit valoir both, logistics ou payout.');
+        return self::FAILURE;
+    }
+
+    $shops = \App\Models\Shop::query()->where(function ($q) use ($ids, $slugs, $names) {
+        // Point de départ impossible : chaque cible explicite est ensuite ajoutée avec OR.
+        // Cela évite qu'une liste partielle puisse produire une condition ambiguë.
+        $q->whereRaw('1 = 0');
+        if ($ids->isNotEmpty()) $q->orWhereIn('id', $ids->map(fn ($v) => (int) $v));
+        if ($slugs->isNotEmpty()) $q->orWhereIn('slug', $slugs->unique());
+        if ($names->isNotEmpty()) $q->orWhereIn('name', $names->unique());
+    })->orderBy('id')->get();
+
+    if ($shops->isEmpty()) {
+        $this->warn('Aucune boutique correspondant à la liste.');
+        return self::SUCCESS;
+    }
+
+    $this->table(['ID', 'Boutique', 'Slug', 'Logistique', 'Reversement'], $shops->map(fn ($shop) => [
+        $shop->id, $shop->name, $shop->slug,
+        $shop->logistics_confirmed_at ? 'confirmée' : 'à configurer',
+        $shop->payout_configured_at ? 'confirmé' : 'à configurer',
+    ])->all());
+
+    if ($this->option('dry-run')) {
+        $this->comment('Simulation uniquement : aucune donnée modifiée.');
+        return self::SUCCESS;
+    }
+
+    \Illuminate\Support\Facades\DB::transaction(function () use ($shops, $only) {
+        foreach ($shops as $shop) {
+            $values = [];
+            if (in_array($only, ['both', 'logistics'], true)) {
+                $values['logistics_confirmed_at'] = null;
+                $values['logistics_status'] = \App\Models\Shop::LOGISTICS_INCOMPLETE;
+            }
+            if (in_array($only, ['both', 'payout'], true)) {
+                $values['payout_configured_at'] = null;
+            }
+            $shop->forceFill($values)->save();
+
+            if (in_array($only, ['both', 'payout'], true)) {
+                \App\Models\VendorPayout::query()
+                    ->where('shop_id', $shop->id)
+                    ->whereNotIn('status', array_merge(\App\Models\VendorPayout::FINAL_STATUSES, [\App\Models\VendorPayout::STATUS_PROCESSING]))
+                    ->get()
+                    ->each(function ($payout) {
+                        $meta = $payout->meta ?? [];
+                        $meta['blocked_reason'] = 'Configurez et confirmez votre mode de reversement et votre compte Mobile Money.';
+                        $payout->forceFill([
+                            'status' => \App\Models\VendorPayout::STATUS_BLOCKED,
+                            'scheduled_for' => null,
+                            'expected_payment_date' => null,
+                            'payment_mode_snapshot' => null,
+                            'meta' => $meta,
+                        ])->save();
+                    });
+            }
+        }
+    });
+
+    $this->info($shops->count().' boutique(s) marquée(s) comme configuration requise. Les anciennes valeurs sont conservées, mais ne sont plus considérées comme confirmées.');
+    return self::SUCCESS;
+})->purpose('Marque explicitement une liste de boutiques historiques comme devant confirmer logistique et/ou reversement.');
+
+
 Artisan::command('ovanie:homepage-promotions-maintain', function () {
     $service = app(HomepageMaintenanceService::class);
     $fixed = $service->ensurePromotionWindows();
@@ -274,4 +371,62 @@ Artisan::command('ovanie:logistics-monitor', function () {
 
 Schedule::command('ovanie:logistics-monitor')
     ->everyTenMinutes()
+    ->withoutOverlapping();
+
+/*
+ * Réception automatique : une livraison remise avec le code OTP du client est
+ * considérée comme reçue après le délai de réclamation, sauf si le client a
+ * ouvert un retour ou un litige. Le vendeur n'attend plus un clic du client.
+ */
+Artisan::command('ovanie:auto-confirm-receptions', function () {
+    $hours = (int) config('delivery.auto_reception_hours', 48);
+    $workflow = app(\App\Services\OrderWorkflowService::class);
+    $confirmed = 0;
+
+    \App\Models\OrderItem::query()
+        ->whereNotNull('delivery_otp_verified_at')
+        ->where('delivery_otp_verified_at', '<=', now()->subHours($hours))
+        ->where(fn ($query) => $query->whereNull('reception_status')->orWhere('reception_status', '!=', 'confirmed'))
+        ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('returns')->whereColumn('returns.order_item_id', 'order_items.id'))
+        ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('disputes')->whereNull('disputes.deleted_at')
+            ->where(fn ($q) => $q->whereColumn('disputes.order_item_id', 'order_items.id')
+                ->orWhere(fn ($q) => $q->whereNull('disputes.order_item_id')->whereColumn('disputes.order_id', 'order_items.order_id'))))
+        ->orderBy('id')
+        ->chunkById(100, function ($items) use ($workflow, $hours, &$confirmed) {
+            foreach ($items as $item) {
+                try {
+                    $workflow->confirmClientReception($item, null, "Réception confirmée automatiquement {$hours} h après la remise validée par code.");
+                    $confirmed++;
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        });
+
+    $this->info("{$confirmed} réception(s) confirmée(s) automatiquement.");
+})->purpose('Confirme automatiquement la réception des livraisons validées par code après le délai de réclamation.');
+
+Schedule::command('ovanie:auto-confirm-receptions')
+    ->hourly()
+    ->withoutOverlapping();
+
+// Gains livreurs : relance des virements en attente ou en cours de confirmation.
+Artisan::command('ovanie:driver-payouts-process', function () {
+    $service = app(\App\Services\DriverPayoutService::class);
+    $count = 0;
+    \App\Models\DriverPayout::query()
+        ->whereIn('status', [\App\Models\DriverPayout::STATUS_PENDING, \App\Models\DriverPayout::STATUS_PROCESSING, \App\Models\DriverPayout::STATUS_FAILED])
+        ->orderBy('id')
+        ->limit(100)
+        ->get()
+        ->each(function ($payout) use ($service, &$count) {
+            $service->execute($payout);
+            $count++;
+        });
+
+    $this->info("{$count} gain(s) livreur traité(s).");
+})->purpose('Relance les virements des gains livreurs après livraison.');
+
+Schedule::command('ovanie:driver-payouts-process')
+    ->everyFiveMinutes()
     ->withoutOverlapping();

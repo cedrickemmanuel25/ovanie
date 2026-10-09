@@ -428,7 +428,8 @@ class DriverMissionService
         string $missionNumber,
         string $stopId,
         string $action,
-        array $payload = []
+        array $payload = [],
+        bool $gpsConfirmed = false
     ): void {
         $detail = $this->detail($driver, $missionNumber);
 
@@ -458,6 +459,14 @@ class DriverMissionService
         }
 
         $target = $stops->get($targetIndex);
+
+        // L'arrivée est détectée automatiquement par le GPS (voir
+        // detectAutomaticArrival). Une déclaration envoyée par l'application
+        // n'est acceptée que si la dernière position GPS est réellement sur place.
+        if ($action === 'arrived' && ! $gpsConfirmed) {
+            $this->assertDriverOnSite($driver, data_get($target, 'latitude'), data_get($target, 'longitude'), 'de la boutique');
+        }
+
         $items = collect(data_get($target, 'items', []));
         if ($items->isEmpty()) {
             throw ValidationException::withMessages(['pickup' => 'Aucun article n’est rattaché à ce point de collecte.']);
@@ -598,10 +607,22 @@ class DriverMissionService
         }
     }
 
-    public function updateStage(DeliveryDriver $driver, string $missionNumber, string $stage): void
+    public function updateStage(DeliveryDriver $driver, string $missionNumber, string $stage, bool $gpsConfirmed = false): void
     {
         $detail = $this->detail($driver, $missionNumber);
         $current = (string) ($detail['status'] ?? 'planned');
+
+        // Étape déjà franchie automatiquement (GPS) : la demande de l'application
+        // est simplement confirmée, sans erreur.
+        $reached = ['loaded' => 'picked_up', 'in_transit' => 'in_transit', 'arrived' => 'arrived'];
+        if (($reached[$stage] ?? null) === $current) {
+            return;
+        }
+
+        if ($stage === 'arrived' && ! $gpsConfirmed) {
+            $destination = $this->coordinates->forOrder($detail['items']->first()?->order);
+            $this->assertDriverOnSite($driver, $destination['latitude'] ?? null, $destination['longitude'] ?? null, 'du client');
+        }
         $next = match ($current) {
             'collecting' => 'loaded',
             'picked_up' => 'in_transit',
@@ -847,10 +868,173 @@ class DriverMissionService
             ]);
         }
 
+        try {
+            $autoArrival = $this->detectAutomaticArrival(
+                $driver->fresh(),
+                $missionNumber,
+                (float) $payload['latitude'],
+                (float) $payload['longitude'],
+                isset($payload['accuracy']) ? (float) $payload['accuracy'] : null,
+            );
+        } catch (\Throwable $e) {
+            report($e);
+            $autoArrival = null;
+        }
+
         return [
             'location' => $locations->first(),
             'route_plan' => $routePlan,
+            'auto_arrival' => $autoArrival,
         ];
+    }
+
+    /**
+     * Rayon (mètres) dans lequel le livreur est considéré arrivé.
+     */
+    public function arrivalRadiusMeters(): float
+    {
+        return (float) config('delivery.auto_arrival_radius_m', 150);
+    }
+
+    /**
+     * Arrivée automatique par géolocalisation, sans bouton :
+     *  - mission en collecte : dès que le livreur entre dans le rayon du
+     *    prochain point de collecte, son arrivée est enregistrée et le
+     *    vendeur est prévenu (code de remise généré) ;
+     *  - mission en route vers le client : dès qu'il entre dans le rayon de
+     *    l'adresse de livraison, la mission passe « arrivé » et le client est
+     *    prévenu.
+     *
+     * @return string|null 'pickup_arrived', 'customer_arrived' ou null.
+     */
+    public function detectAutomaticArrival(DeliveryDriver $driver, string $missionNumber, float $latitude, float $longitude, ?float $accuracy = null): ?string
+    {
+        $detail = $this->detail($driver, $missionNumber);
+        $status = (string) ($detail['status'] ?? '');
+
+        if ($status === 'collecting') {
+            $assignmentsByItem = $detail['assignments']->keyBy('order_item_id');
+            $stops = collect($detail['pickup_stops'] ?? []);
+
+            // Toutes les remises vendeur sont confirmées : le chargement est acquis,
+            // même si l'application a été fermée avant de l'envoyer.
+            if ($stops->isNotEmpty() && $stops->every(fn (array $stop) => $this->pickupStopCompleted($stop, $assignmentsByItem))) {
+                $this->updateStage($driver, $missionNumber, 'loaded');
+
+                return 'loaded';
+            }
+
+            foreach (collect($detail['pickup_stops'] ?? [])->values() as $stop) {
+                if ($this->pickupStopCompleted($stop, $assignmentsByItem)) {
+                    continue;
+                }
+
+                // Premier point non terminé : les collectes se font dans l'ordre.
+                $alreadyArrived = collect($stop['items'] ?? [])->pluck('id')->filter()->every(
+                    fn ($itemId) => filled(data_get($assignmentsByItem->get($itemId)?->meta, 'pickup_arrived_at'))
+                );
+                if ($alreadyArrived) {
+                    return null;
+                }
+
+                $distance = $this->distanceMeters($latitude, $longitude, $stop['latitude'] ?? null, $stop['longitude'] ?? null);
+                if ($distance === null || ! $this->withinArrivalRadius($distance, $accuracy)) {
+                    return null;
+                }
+
+                $this->completePickup($driver, $missionNumber, (string) data_get($stop, 'id'), 'arrived', [], true);
+
+                return 'pickup_arrived';
+            }
+
+            return null;
+        }
+
+        if ($status === 'picked_up') {
+            // Départ automatique : le livreur chargé quitte le dernier point de
+            // collecte (marge de 1,5 × le rayon d'arrivée pour ignorer le bruit GPS).
+            $lastStop = collect($detail['pickup_stops'] ?? [])->last();
+            $distance = $this->distanceMeters($latitude, $longitude, $lastStop['latitude'] ?? null, $lastStop['longitude'] ?? null);
+            if ($distance === null || $distance <= $this->arrivalRadiusMeters() * 1.5
+                || ($accuracy !== null && $accuracy > $this->arrivalRadiusMeters())) {
+                return null;
+            }
+
+            $this->updateStage($driver, $missionNumber, 'in_transit');
+
+            return 'departed';
+        }
+
+        if ($status === 'in_transit') {
+            $destination = $this->coordinates->forOrder($detail['items']->first()?->order);
+            $distance = $this->distanceMeters($latitude, $longitude, $destination['latitude'] ?? null, $destination['longitude'] ?? null);
+            if ($distance === null || ! $this->withinArrivalRadius($distance, $accuracy)) {
+                return null;
+            }
+
+            $this->updateStage($driver, $missionNumber, 'arrived', true);
+
+            return 'customer_arrived';
+        }
+
+        return null;
+    }
+
+    /**
+     * Refuse une arrivée déclarée depuis l'application si le GPS n'est pas
+     * réellement sur place (ou trop ancien).
+     */
+    private function assertDriverOnSite(DeliveryDriver $driver, mixed $targetLat, mixed $targetLng, string $placeLabel): void
+    {
+        if (! is_numeric($targetLat) || ! is_numeric($targetLng)) {
+            // Point sans coordonnées : impossible de contrôler, on ne bloque pas.
+            return;
+        }
+
+        $driver->loadMissing('currentLocation');
+        $location = $driver->currentLocation;
+        $fresh = $location && $location->recorded_at && $location->recorded_at->gte(now()->subMinutes(3));
+
+        if (! $fresh) {
+            throw ValidationException::withMessages([
+                'location' => 'Position GPS introuvable. Activez la localisation : votre arrivée sera validée automatiquement dès que vous serez sur place.',
+            ]);
+        }
+
+        $distance = $this->distanceMeters((float) $location->latitude, (float) $location->longitude, $targetLat, $targetLng);
+        $accuracy = $location->accuracy !== null ? (float) $location->accuracy : null;
+
+        if ($distance !== null && ! $this->withinArrivalRadius($distance, $accuracy)) {
+            $label = $distance >= 1000
+                ? number_format($distance / 1000, 1, ',', ' ').' km'
+                : (int) round($distance).' m';
+
+            throw ValidationException::withMessages([
+                'location' => "Vous êtes encore à {$label} {$placeLabel}. Votre arrivée sera validée automatiquement dès que le GPS vous localisera sur place.",
+            ]);
+        }
+    }
+
+    private function withinArrivalRadius(float $distanceMeters, ?float $accuracy): bool
+    {
+        // Tolérance limitée à l'imprécision GPS annoncée (plafonnée à 50 m).
+        $tolerance = min(max((float) $accuracy, 0), 50);
+
+        return $distanceMeters - $tolerance <= $this->arrivalRadiusMeters();
+    }
+
+    private function distanceMeters(float $fromLat, float $fromLng, mixed $toLat, mixed $toLng): ?float
+    {
+        if (! is_numeric($toLat) || ! is_numeric($toLng)) {
+            return null;
+        }
+
+        $earth = 6371000;
+        $dLat = deg2rad((float) $toLat - $fromLat);
+        $dLng = deg2rad((float) $toLng - $fromLng);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($fromLat)) * cos(deg2rad((float) $toLat)) * sin($dLng / 2) ** 2;
+
+        return $earth * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 
     public function gpsUnavailable(DeliveryDriver $driver, string $missionNumber, string $reason, ?Carbon $manualEta = null): void
@@ -1017,9 +1201,13 @@ class DriverMissionService
         DeliveryDriver $driver,
         string $missionNumber,
         string $otp,
-        bool $handoverConfirmed = false
+        bool $handoverConfirmed = false,
+        bool $cashCollected = false
     ): void {
         $detail = $this->detail($driver, $missionNumber);
+        $payouts = app(DriverPayoutService::class);
+        $cashGroups = $payouts->cashGroups($detail['items']);
+        $cashToCollect = round((float) collect($cashGroups)->sum('total'), 2);
 
         if (($detail['status'] ?? null) !== 'arrived') {
             throw ValidationException::withMessages([
@@ -1030,6 +1218,13 @@ class DriverMissionService
         if (! $handoverConfirmed) {
             throw ValidationException::withMessages([
                 'handover_confirmed' => 'Confirmez que tous les articles ont été remis au client avant de saisir son code.',
+            ]);
+        }
+
+        if ($cashToCollect > 0 && ! $cashCollected) {
+            $amount = number_format($cashToCollect, 0, ',', ' ');
+            throw ValidationException::withMessages([
+                'cash_collected' => "Encaissez {$amount} F auprès du client, puis confirmez l’encaissement avant de saisir son code.",
             ]);
         }
 
@@ -1087,6 +1282,13 @@ class DriverMissionService
                 'last_seen_at' => now(),
             ])->save();
         });
+
+        // Gain versé au livreur juste après la livraison (net conservé sur les espèces si paiement à la livraison).
+        try {
+            $payouts->recordDeliveredMission($driver->fresh(), $missionNumber, $detail['assignments'], $cashToCollect, $cashGroups);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         if ($first = $detail['items']->first()) {
             $this->deliveryNotifications->notifyGroup(
@@ -1192,6 +1394,10 @@ class DriverMissionService
             'total_weight_kg' => (float) ($group['weight'] ?? 0),
             'total_volume_m3' => (float) ($group['volume'] ?? 0),
             'net_amount' => (float) $latest->sum('driver_net_amount'),
+            // Prix de la livraison facturé au client et commission OVANIE,
+            // affichés au livreur avant qu'il réserve la mission.
+            'gross_amount' => (float) $latest->sum('price_amount'),
+            'commission_percent' => (float) ($latest->first()?->driver_commission_percent ?? 0),
             // Sur les écrans Mission, on affiche le véhicule requis par le
             // chargement (poids/volume), comme sur les maquettes. Le véhicule
             // personnel du partenaire reste affiché dans son Accueil/Profil.

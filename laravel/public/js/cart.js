@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (span) span.textContent = `(${count})`;
     }
 
-    async function updateQuantityOnServer(productId, quantity) {
+    async function updateQuantityOnServer(productId, quantity, variantId = null) {
         const response = await fetch(`/cart/update/${productId}`, {
             method: 'POST',
             headers: {
@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 'X-CSRF-TOKEN': csrf,
             },
             credentials: 'same-origin',
-            body: JSON.stringify({ quantity }),
+            body: JSON.stringify({ quantity, product_variant_id: variantId || null }),
         });
 
         const data = await response.json().catch(() => ({}));
@@ -148,11 +148,12 @@ document.addEventListener('DOMContentLoaded', () => {
         updateTotalsFromDom();
 
         const productId = row.dataset.productId;
+        const variantId = row.dataset.variantId || '';
         if (!productId) return;
 
         row.classList.add('is-updating');
         try {
-            const data = await updateQuantityOnServer(productId, next);
+            const data = await updateQuantityOnServer(productId, next, variantId);
             if (data.item_quantity) {
                 input.value = data.item_quantity;
             }
@@ -168,6 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function removeRow(row) {
         const productId = row.dataset.productId;
+        const variantId = row.dataset.variantId || '';
         if (!productId) return;
 
         row.classList.add('is-removing');
@@ -180,6 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 'X-CSRF-TOKEN': csrf,
             },
             credentials: 'same-origin',
+            body: new URLSearchParams({ product_variant_id: variantId || '' }),
         });
 
         const data = await response.json().catch(() => ({}));

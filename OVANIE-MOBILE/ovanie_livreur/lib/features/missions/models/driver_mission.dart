@@ -63,6 +63,8 @@ class DriverMissionSummaryModel {
     this.readyCount = 0,
     this.readyPickupCount = 0,
     this.netAmount = 0,
+    this.grossAmount = 0,
+    this.commissionPercent = 0,
     this.canStart = false,
     this.reservationState,
   });
@@ -92,6 +94,10 @@ class DriverMissionSummaryModel {
   final int readyCount;
   final int readyPickupCount;
   final double netAmount;
+  /// Prix de la livraison payé par le client (avant commission OVANIE).
+  final double grossAmount;
+  /// Commission OVANIE retenue sur le prix de la livraison (%).
+  final double commissionPercent;
   final bool canStart;
   final String? reservationState;
 
@@ -122,6 +128,8 @@ class DriverMissionSummaryModel {
       readyCount: _asInt(json['ready_count']),
       readyPickupCount: _asInt(json['ready_pickup_count']),
       netAmount: _asDouble(json['net_amount']),
+      grossAmount: _asDouble(json['gross_amount']),
+      commissionPercent: _asDouble(json['commission_percent']),
       canStart: json['can_start'] == true,
       reservationState: json['reservation_state']?.toString(),
     );
@@ -187,9 +195,12 @@ class DriverMissionDetail extends DriverMissionSummaryModel {
     super.readyCount,
     super.readyPickupCount,
     super.netAmount,
+    super.grossAmount,
+    super.commissionPercent,
     super.canStart,
     super.reservationState,
     this.destinationAddress,
+    this.cashToCollect = 0,
     this.pickupStops = const [],
     this.routePlan,
     this.mapPoints = const [],
@@ -205,6 +216,8 @@ class DriverMissionDetail extends DriverMissionSummaryModel {
   });
 
   final String? destinationAddress;
+  /// Paiement à la livraison : montant à encaisser auprès du client.
+  final double cashToCollect;
   final List<DriverMissionPickupStop> pickupStops;
   final DriverMissionRoutePlan? routePlan;
   final List<DriverMissionGeoPoint> mapPoints;
@@ -248,9 +261,12 @@ class DriverMissionDetail extends DriverMissionSummaryModel {
       readyCount: summary.readyCount,
       readyPickupCount: summary.readyPickupCount,
       netAmount: summary.netAmount,
+      grossAmount: summary.grossAmount,
+      commissionPercent: summary.commissionPercent,
       canStart: summary.canStart,
       reservationState: summary.reservationState,
       destinationAddress: json['destination_address']?.toString(),
+      cashToCollect: _asDouble(json['cash_to_collect']),
       incidentType: json['incident_type']?.toString(),
       incidentDescription: json['incident_description']?.toString(),
       incidentOccurredAt: _asDate(json['incident_occurred_at']),

@@ -128,6 +128,7 @@
 
         /* Flash */
         .flash-success { background:#DCFCE7; border:1px solid #BBF7D0; color:#15803D; border-radius:8px; padding:10px 16px; font-size:13px; font-weight:500; }
+        .flash-info    { background:#FFF7ED; border:1px solid #FED7AA; color:#9A3412; border-radius:8px; padding:10px 16px; font-size:13px; font-weight:500; }
         .flash-error   { background:#FEE2E2; border:1px solid #FECACA; color:#DC2626; border-radius:8px; padding:10px 16px; font-size:13px; font-weight:500; }
 
         [x-cloak] { display:none !important; }
@@ -161,6 +162,7 @@
     @if(session('error'))
     <div class="mx-6 mt-4 flash-error">{{ session('error') }}</div>
     @endif
+    @if(session('info'))<div class="mx-6 mt-4 flash-info" role="status">{{ session('info') }}</div>@endif
 
     <!-- CONTENT -->
     <div class="flex-1 overflow-y-auto min-h-0">
@@ -178,5 +180,6 @@ window.OVANIE_MAPBOX = {
 </script>
 
 @stack('scripts')
+@include('layouts.partials.live-sync')
 </body>
 </html>

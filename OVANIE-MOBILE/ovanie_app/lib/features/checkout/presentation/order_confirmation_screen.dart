@@ -152,7 +152,7 @@ class _CheckoutHeader extends StatelessWidget {
                   SizedBox(width: 5),
                   Text(
                     'Paiement 100% sécurisé',
-                    style: TextStyle(color: OvanieColors.navy, fontSize: 10.5, fontWeight: FontWeight.w700),
+                    style: TextStyle(color: OvanieColors.navy, fontSize: 12, fontWeight: FontWeight.w700),
                   ),
                   SizedBox(width: 8),
                 ],
@@ -243,7 +243,7 @@ class _CheckoutProgress extends StatelessWidget {
                           labels[index],
                           style: TextStyle(
                             color: (done || isCurrent) ? OvanieColors.orange : const Color(0xFF515D75),
-                            fontSize: 10.8,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

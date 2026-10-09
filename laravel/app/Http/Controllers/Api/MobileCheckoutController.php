@@ -7,7 +7,6 @@ use App\Models\Cart;
 use App\Services\CartFulfillmentOptimizer;
 use App\Services\CheckoutAddressResolver;
 use App\Services\CheckoutSummaryService;
-use App\Services\CommissionService;
 use App\Services\CheckoutPaymentOptionsService;
 use App\Services\CheckoutCartSelectionService;
 use App\Services\MobileCartResolver;
@@ -24,7 +23,6 @@ class MobileCheckoutController extends Controller
         CheckoutAddressResolver $addresses,
         CheckoutSummaryService $checkoutSummary,
         CartFulfillmentOptimizer $optimizer,
-        CommissionService $commissions,
         MobileCartResolver $carts,
         GeocodingService $geocoding,
         AbidjanLocalityRegistry $registry,
@@ -79,8 +77,6 @@ class MobileCheckoutController extends Controller
                 'subtotal' => 0,
                 'delivery_fee' => 0,
                 'total' => 0,
-                'commission' => 0,
-                'delivery_breakdown' => [],
                 'total_weight_kg' => 0,
                 'total_volume_m3' => 0,
                 'recommended_vehicle' => null,
@@ -105,8 +101,6 @@ class MobileCheckoutController extends Controller
                 'subtotal' => $subtotal,
                 'delivery_fee' => 0,
                 'total' => $subtotal,
-                'commission' => $commissions->commissionFromPublicItems($cart->items),
-                'delivery_breakdown' => [],
                 'total_weight_kg' => 0,
                 'total_volume_m3' => 0,
                 'recommended_vehicle' => null,
@@ -129,17 +123,15 @@ class MobileCheckoutController extends Controller
             'subtotal' => $checkout['subtotal'],
             'delivery_fee' => $checkout['delivery_fee'],
             'total' => $checkout['total'],
-            'commission' => $checkout['commission'],
             'delivery_quote_required' => $checkout['delivery_quote_required'] ?? false,
             'delivery_available' => $checkout['delivery_available'] ?? false,
             'delivery_message' => $checkout['client_delivery_message'] ?? null,
-            'delivery_debug' => $checkout['delivery_issues'] ?? [],
             'delivery_calculated' => true,
             'total_weight_kg' => $checkout['total_weight_kg'] ?? 0,
             'total_volume_m3' => $checkout['total_volume_m3'] ?? 0,
             'recommended_vehicle' => $checkout['recommended_vehicle'] ?? null,
             'recommended_vehicle_code' => $checkout['recommended_vehicle_code'] ?? null,
-            'shop_deliveries' => $checkout['shop_deliveries'] ?? [],
+            'delivery_distance_km' => $checkout['delivery_distance_km'] ?? null,
             'resolved_delivery_location' => $this->resolvedDeliveryLocation($request),
             'territory_zone' => $territoryZone,
             'payment_options' => $paymentOptions->forCart($preview['cart'], (float) $checkout['total']),
@@ -245,9 +237,9 @@ class MobileCheckoutController extends Controller
                 ?? ($resolved['commune'] ?? null)
                 ?? $request->input('delivery_commune');
 
-            $quartier = $registryResolved['quarter']
-                ?? ($resolved['quartier'] ?? null)
-                ?? $request->input('delivery_quartier');
+            // Le quartier saisi par le client prime : le GPS peut tomber sur un quartier voisin.
+            $quartier = $request->input('delivery_quartier')
+                ?: ($registryResolved['quarter'] ?? ($resolved['quartier'] ?? null));
 
             $request->merge([
                 'delivery_zone' => $isAbidjan

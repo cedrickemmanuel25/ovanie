@@ -160,9 +160,8 @@ class _MissionAcceptedScreenState extends State<MissionAcceptedScreen> {
                     MissionOverviewBlock(
                       mission: mission,
                       message: !mission.canStart
-                          ? 'Cette mission est réservée pour vous. ${mission.preparationLabel}. '
-                              'Restez disponible : le bouton de collecte se débloquera automatiquement lorsque tous les vendeurs seront prêts.'
-                          : 'Tous les vendeurs sont prêts. Vous pouvez maintenant démarrer les collectes.',
+                          ? 'Les vendeurs préparent encore la commande.'
+                          : null,
                       messageWarning: !mission.canStart,
                     ),
                     if (mission.incidentType != null) ...[

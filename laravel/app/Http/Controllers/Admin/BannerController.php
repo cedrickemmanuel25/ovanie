@@ -26,8 +26,9 @@ class BannerController extends Controller
     {
         $request->validate([
             'image' => 'required|image|max:2048',
-            'link' => 'nullable|string|max:500',
-            'zone' => 'required|string',
+            // Lien interne (« /catalogue ») ou adresse complète en http(s) : rien d'autre ne doit pouvoir être cliqué par un visiteur.
+            'link' => ['nullable', 'string', 'max:500', 'regex:#^(/(?!/)|https?://)#i'],
+            'zone' => 'required|in:home_top,home_middle,home_bottom,category_page',
             'position' => 'nullable|integer'
         ]);
 

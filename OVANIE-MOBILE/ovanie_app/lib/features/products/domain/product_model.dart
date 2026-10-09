@@ -1,6 +1,59 @@
 import '../../../core/config/app_config.dart';
 import '../../../core/utils/text_cleaner.dart';
 
+class ProductVariantModel {
+  final int id;
+  final String type;
+  final String value;
+  final String label;
+  final String colorHex;
+  final int stock;
+  final double? priceOverride;
+  final String imageUrl;
+
+  const ProductVariantModel({
+    required this.id,
+    required this.type,
+    required this.value,
+    required this.label,
+    required this.colorHex,
+    required this.stock,
+    required this.priceOverride,
+    required this.imageUrl,
+  });
+
+  factory ProductVariantModel.fromJson(Map<String, dynamic> json) {
+    int toInt(dynamic value) => value is num ? value.toInt() : int.tryParse('${value ?? ''}') ?? 0;
+    double? toNullableDouble(dynamic value) {
+      if (value == null || '$value'.trim().isEmpty) return null;
+      return value is num ? value.toDouble() : double.tryParse('$value');
+    }
+    final type = cleanOvanieText('${json['type'] ?? 'Couleur'}');
+    final value = cleanOvanieText('${json['value'] ?? ''}');
+    return ProductVariantModel(
+      id: toInt(json['id']),
+      type: type,
+      value: value,
+      label: cleanOvanieText('${json['label'] ?? '$type : $value'}'),
+      colorHex: '${json['color_hex'] ?? ''}'.trim(),
+      stock: toInt(json['stock']),
+      priceOverride: toNullableDouble(json['price_override']),
+      imageUrl: AppConfig.normalizeMediaUrl('${json['image_url'] ?? json['card_url'] ?? json['thumb_url'] ?? ''}'),
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'type': type,
+        'value': value,
+        'label': label,
+        'color_hex': colorHex,
+        'stock': stock,
+        'price_override': priceOverride,
+        'image_url': imageUrl,
+      };
+}
+
 class ProductModel {
   final int id;
   final String slug;
@@ -55,6 +108,7 @@ class ProductModel {
   final String imageUrl;
   final List<String> galleryUrls;
   final List<String> tags;
+  final List<ProductVariantModel> variants;
 
   const ProductModel({
     required this.id,
@@ -110,6 +164,7 @@ class ProductModel {
     required this.imageUrl,
     required this.galleryUrls,
     required this.tags,
+    required this.variants,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -191,6 +246,11 @@ class ProductModel {
       json['original_public_price'] ?? json['base_price'] ?? json['price'],
     );
 
+    final rawVariants = json['variants'];
+    final variants = rawVariants is List
+        ? rawVariants.whereType<Map>().map((item) => ProductVariantModel.fromJson(Map<String, dynamic>.from(item))).where((item) => item.id > 0 && item.value.isNotEmpty).toList(growable: false)
+        : const <ProductVariantModel>[];
+
     final apiDiscount = toInt(json['discount_percent']);
     final computedDiscount = price > 0 &&
             promoPrice != null &&
@@ -270,6 +330,7 @@ class ProductModel {
       tags: rawTags is List
           ? rawTags.map((e) => clean(e)).where((e) => e.isNotEmpty).toList()
           : const [],
+      variants: List<ProductVariantModel>.unmodifiable(variants),
     );
   }
 
@@ -379,5 +440,6 @@ class ProductModel {
         'main_image_url': imageUrl,
         'gallery': galleryUrls,
         'tags': tags,
+        'variants': variants.map((variant) => variant.toJson()).toList(growable: false),
       };
 }

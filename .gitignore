@@ -30,3 +30,6 @@ cloudflared.exe
 .DS_Store
 Thumbs.db
 *.log
+
+# Local browser artifacts
+.playwright-mcp/

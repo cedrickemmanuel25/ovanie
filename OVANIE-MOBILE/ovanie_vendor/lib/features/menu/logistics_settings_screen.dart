@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../core/network/api_client.dart';
+import '../orders/order_widgets.dart' show OrderMapImage, OrderCheckLine;
 import 'delivery_screens.dart';
 import 'menu_ui.dart';
 
@@ -37,8 +39,10 @@ class _LogisticsSettingsState extends State<LogisticsSettingsScreen> {
       'Placez-vous à la boutique avec votre téléphone, puis lancez la localisation.';
 
   bool get seller => widget.targetMode == 'seller';
-  bool get changing =>
-      widget.targetMode != screenText(widget.shop['logistics_type'], 'ovanie');
+  String get currentMode => widget.shop['logistics_configured'] == true
+      ? screenText(widget.shop['logistics_type'], '')
+      : '';
+  bool get changing => currentMode.isNotEmpty && widget.targetMode != currentMode;
   String get label => seller ? 'Ma propre logistique' : 'OVANIE Logistics';
   bool get zonesReady =>
       zones.any((z) => z['is_active'] == true) &&
@@ -273,21 +277,47 @@ class _LogisticsSettingsState extends State<LogisticsSettingsScreen> {
     if (activate && changing) {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Changer de mode logistique ?'),
-          content: Text(
-            'Activer $label pour les nouvelles commandes ? Les commandes déjà créées ou en cours conserveront leur mode logistique.${seller ? '' : ' Vos zones, tarifs et délais seront conservés mais désactivés.'}',
+        builder: (dialog) => MkTheme(
+          lightStatusBar: false,
+          child: Dialog(
+            backgroundColor: Colors.white,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 22, 18, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Changer de mode logistique ?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: menuBlue, fontSize: 19, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Activer $label pour les nouvelles commandes ? Les commandes déjà créées ou en cours conserveront leur mode logistique.${seller ? '' : ' Vos zones, tarifs et délais seront conservés mais désactivés.'}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: menuMuted, fontSize: 14, height: 1.45, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(dialog, false),
+                          child: const Text('Annuler', style: TextStyle(color: menuBlue, fontSize: 15, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: MkBarButton(label: 'Confirmer', filled: true, onTap: () => Navigator.pop(dialog, true)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Annuler'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Confirmer'),
-            ),
-          ],
         ),
       );
       if (confirmed != true || !mounted) return;
@@ -305,7 +335,9 @@ class _LogisticsSettingsState extends State<LogisticsSettingsScreen> {
               'max_volume_m3',
               'conditions',
             ])
-              key: fields[key]!.text.trim(),
+              key: key == 'default_delay' || key == 'conditions'
+                  ? fields[key]!.text.trim()
+                  : fields[key]!.text.trim().replaceAll(',', '.'),
             'vehicle_types': profile['vehicle_types'] ?? [],
             'capacity_description': profile['capacity_description'],
           },
@@ -317,10 +349,7 @@ class _LogisticsSettingsState extends State<LogisticsSettingsScreen> {
           method: 'POST',
           data: {
             'logistics_type': widget.targetMode,
-            'expected_logistics_type': screenText(
-              widget.shop['logistics_type'],
-              'ovanie',
-            ),
+            'expected_logistics_type': currentMode.isEmpty ? null : currentMode,
             'confirmed': activate && changing,
             if (!seller) ...{
               for (final key in [
@@ -355,177 +384,267 @@ class _LogisticsSettingsState extends State<LogisticsSettingsScreen> {
     }
   }
 
-  Widget field(
-    String key,
-    String title, {
-    bool numeric = false,
-    double? limit,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: TextFormField(
-      controller: fields[key],
-      enabled: !saving && !locating,
-      readOnly:
-          locationToken != null &&
-          ['address', 'commune', 'district'].contains(key) &&
-          screenText(detectedLocation[key], '').isNotEmpty,
-      keyboardType: numeric
-          ? const TextInputType.numberWithOptions(decimal: true, signed: true)
-          : TextInputType.text,
-      decoration: InputDecoration(
-        labelText: '$title *',
-        border: const OutlineInputBorder(),
-      ),
-      onChanged: seller
-          ? null
-          : (_) => setState(() {
-              locationConfirmed = false;
-              if (locationToken != null &&
-                  ['address', 'landmark', 'district'].contains(key)) {
-                return;
+  Widget field(String key, String title, {bool numeric = false, double? limit, String? hint, IconData? icon}) {
+    final detected =
+        locationToken != null &&
+        ['address', 'commune', 'district'].contains(key) &&
+        screenText(detectedLocation[key], '').isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          MkLabel(title, required: true),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: fields[key],
+            enabled: !saving && !locating,
+            readOnly: detected,
+            keyboardType: numeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+            inputFormatters: numeric
+                ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')), LengthLimitingTextInputFormatter(9)]
+                : [LengthLimitingTextInputFormatter(190)],
+            style: mkFieldText,
+            decoration: mkInput(hint: hint ?? title, icon: icon, readOnly: detected),
+            onChanged: seller
+                ? null
+                : (_) => setState(() {
+                    locationConfirmed = false;
+                    if (locationToken != null && ['address', 'landmark', 'district'].contains(key)) {
+                      return;
+                    }
+                    locationReady = false;
+                    gpsAccuracy = null;
+                    gpsCapturedAt = null;
+                    locationToken = null;
+                    detectedLocation = {};
+                    fields['latitude']!.clear();
+                    fields['longitude']!.clear();
+                    gpsFeedback = 'Adresse modifiée. Localisez à nouveau la boutique.';
+                  }),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) return 'Champ obligatoire';
+              if (numeric) {
+                final n = double.tryParse(value.trim().replaceAll(',', '.'));
+                if (n == null || !n.isFinite || (limit == null ? n <= 0 : n.abs() > limit)) {
+                  return 'Valeur invalide';
+                }
               }
-              locationReady = false;
-              gpsAccuracy = null;
-              gpsCapturedAt = null;
-              locationToken = null;
-              detectedLocation = {};
-              fields['latitude']!.clear();
-              fields['longitude']!.clear();
-              gpsFeedback =
-                  'Adresse modifiée. Localisez à nouveau la boutique.';
-            }),
-      validator: (value) {
-        if (value == null || value.trim().isEmpty) return 'Champ obligatoire';
-        if (numeric) {
-          final n = double.tryParse(value.trim());
-          if (n == null ||
-              !n.isFinite ||
-              (limit == null ? n <= 0 : n.abs() > limit)) {
-            return 'Valeur invalide';
-          }
-        }
-        return null;
-      },
+              return null;
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> openMap() async {
+    try {
+      final lat = fields['latitude']!.text, lng = fields['longitude']!.text;
+      await launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng'));
+    } catch (e) {
+      if (mounted) menuError(context, e);
+    }
+  }
+
+  bool get _activating => changing || currentMode.isEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocked = saving || locating || (seller && _activating && !zonesReady) || (!seller && !locationReady);
+    return MenuPage(
+      title: changing ? 'Passer à $label' : 'Informations logistiques',
+      subtitle: 'Livraison & logistique',
+      loading: loading,
+      error: error,
+      refresh: load,
+      actions: [
+        MkBarButton(
+          label: currentMode.isEmpty
+              ? 'Confirmer $label'
+              : changing
+              ? 'Confirmer $label'
+              : 'Enregistrer mes informations',
+          filled: true,
+          loading: saving,
+          onTap: blocked ? null : () => save(activate: _activating),
+        ),
+      ],
+      children: [
+        if (changing)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFFFFF4D6), borderRadius: BorderRadius.circular(12)),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded, color: Color(0xFFB36B00), size: 22),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Le mode actuel reste actif jusqu’à votre confirmation. Les commandes existantes ne changent pas.',
+                    style: TextStyle(color: Color(0xFF7A4500), fontSize: 13, height: 1.4, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Form(key: form, child: seller ? _capacityCard() : _pickupCard()),
+        if (seller) _zonesCard(),
+      ],
+    );
+  }
+
+  // ---- Ma propre logistique : capacités et délais --------------------------------
+  Widget _capacityCard() => DataCard(
+    title: 'Capacités et délais',
+    icon: Icons.local_shipping_outlined,
+    iconColor: menuOrange,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (MediaQuery.sizeOf(context).width >= 340)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Image.asset('assets/images/mockups/logi_pickup.jpg', height: 120, excludeFromSemantics: true),
+          ),
+        field('default_delay', 'Délai de préparation avant départ', hint: 'Ex. 24 h', icon: Icons.schedule_rounded),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: field('max_weight_kg', 'Poids maximum (kg)', numeric: true, hint: 'Ex. 1500')),
+            const SizedBox(width: 8),
+            Expanded(child: field('max_volume_m3', 'Volume maximum (m³)', numeric: true, hint: 'Ex. 4')),
+          ],
+        ),
+        field('conditions', 'Conditions de livraison', hint: 'Ex. Livraison au pied du chantier'),
+      ],
     ),
   );
 
-  @override
-  Widget build(BuildContext context) => MenuPage(
-    title: changing ? 'Passer à $label' : 'Informations logistiques',
-    subtitle: 'Livraison & logistique',
-    loading: loading,
-    error: error,
-    refresh: load,
-    children: [
-      ShopIdentity(shop: widget.shop),
-      if (changing)
-        menuInfo(
-          'Le mode actuel reste actif jusqu’à votre confirmation. Les commandes existantes ne changent pas.',
-        ),
-      Form(
-        key: form,
-        child: DataCard(
-          title: seller ? 'Capacités et délais' : 'Point d’enlèvement',
-          child: Column(
+  Widget _zonesCard() => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: saving ? null : editZones,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
             children: [
-              if (seller) ...[
-                field('default_delay', 'Délai de préparation avant départ'),
-                field('max_weight_kg', 'Poids maximum (kg)', numeric: true),
-                field('max_volume_m3', 'Volume maximum (m³)', numeric: true),
-                field('conditions', 'Conditions de livraison'),
-              ] else ...[
-                menuInfo(
-                  locationToken == null
-                      ? 'Informations enregistrées, non issues d’une nouvelle capture. Localisez la boutique sur place pour détecter son adresse actuelle.'
-                      : 'Informations issues de la nouvelle position. Aucune adresse d’ouverture n’a été réutilisée.',
-                ),
-                field('address', 'Adresse de la boutique'),
-                field('commune', 'Commune'),
-                field('district', 'Quartier'),
-                field('landmark', 'Point de repère'),
-                menuButton(
-                  locating ? 'Localisation…' : 'Utiliser ma position GPS',
-                  locating || saving ? null : captureGps,
-                  icon: Icons.my_location,
-                ),
-                if (locationToken != null) ...[
-                  Text(
-                    screenText(
-                      detectedLocation['display_name'],
-                      fields['address']!.text,
+              menuIcon(Icons.local_shipping_outlined, size: 42),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    menuHeading('Zones, tarifs et délais'),
+                    const SizedBox(height: 4),
+                    menuPill(
+                      zonesReady ? 'Zones de livraison configurées' : 'Zones de livraison à compléter',
+                      color: zonesReady ? menuGreen : const Color(0xFFE85400),
+                      icon: zonesReady ? Icons.check_circle_rounded : Icons.error_outline_rounded,
                     ),
-                  ),
-                  TextButton.icon(
-                    icon: const Icon(Icons.map_outlined),
-                    label: const Text('Vérifier le point sur la carte'),
-                    onPressed: () async {
-                      try {
-                        final lat = fields['latitude']!.text,
-                            lng = fields['longitude']!.text;
-                        await launchUrl(
-                          Uri.parse(
-                            'https://www.openstreetmap.org/?mlat=$lat&mlon=$lng#map=19/$lat/$lng',
-                          ),
-                        );
-                      } catch (e) {
-                        if (context.mounted) menuError(context, e);
-                      }
-                    },
-                  ),
-                ],
-                CheckboxListTile(
-                  value: locationConfirmed,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'Je confirme que l’adresse est correcte et que la localisation a été effectuée au point d’enlèvement de ma boutique.',
-                  ),
-                  onChanged: saving || locating || !locationReady
-                      ? null
-                      : (value) =>
-                            setState(() => locationConfirmed = value == true),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Au moins une zone active avec un tarif et un délai est obligatoire.',
+                      style: TextStyle(color: menuMuted, fontSize: 12.5, height: 1.35, fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 ),
-                Text(gpsFeedback, style: const TextStyle(color: menuMuted)),
-              ],
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Mk.icon, size: 24),
             ],
           ),
         ),
       ),
-      if (seller) ...[
-        menuButton(
-          'Enregistrer mes informations logistiques',
-          saving ? null : () => save(),
-        ),
-        DataCard(
-          title: 'Zones, tarifs et délais',
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              zonesReady
-                  ? 'Zones de livraison configurées'
-                  : 'Compléter mes zones de livraison',
-            ),
-            subtitle: const Text(
-              'Au moins une zone active avec un tarif et un délai est obligatoire.',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: saving ? null : editZones,
-          ),
-        ),
-      ],
-      if (changing || !seller)
-        menuButton(
-          saving
-              ? 'Enregistrement…'
-              : changing
-              ? 'Activer $label'
-              : 'Enregistrer mes informations',
-          saving ||
-                  locating ||
-                  (seller && !zonesReady) ||
-                  (!seller && !locationReady)
-              ? null
-              : () => save(activate: changing),
-        ),
-    ],
+    ),
   );
+
+  // ---- OVANIE Logistics : point d'enlèvement ----------------------------------------
+  Widget _pickupCard() {
+    final mapUrl = screenText(detectedLocation['map_url'], locationToken == null ? screenText(widget.shop['pickup_map_url'], '') : '');
+    final hasPoint = fields['latitude']!.text.isNotEmpty && fields['longitude']!.text.isNotEmpty;
+    return DataCard(
+      title: 'Point d’enlèvement',
+      icon: Icons.location_on_outlined,
+      iconColor: menuOrange,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Définissez l’adresse de votre boutique pour les retraits et les livraisons.',
+            style: TextStyle(color: menuMuted, fontSize: 13, height: 1.4, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(aspectRatio: 16 / 9, child: OrderMapImage(url: mapUrl)),
+          ),
+          const SizedBox(height: 10),
+          MkBarButton(
+            label: locating ? 'Localisation en cours…' : 'Utiliser ma position GPS',
+            icon: Icons.my_location_rounded,
+            filled: true,
+            color: Mk.navy,
+            loading: locating,
+            onTap: locating || saving ? null : captureGps,
+          ),
+          const SizedBox(height: 8),
+          if (locationToken != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: const Color(0xFFE9F7EE), borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: menuGreen, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      gpsFeedback,
+                      style: const TextStyle(color: Color(0xFF0B5E32), fontSize: 13, height: 1.4, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Text(
+              gpsFeedback,
+              style: const TextStyle(color: menuMuted, fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w500),
+            ),
+          const SizedBox(height: 14),
+          field('address', 'Adresse de la boutique', hint: 'Rue, immeuble, carrefour'),
+          field('commune', 'Commune', hint: 'Ex. Cocody'),
+          field('district', 'Quartier', hint: 'Ex. Angré 8e tranche'),
+          field('landmark', 'Point de repère', hint: 'Ex. En face de la pharmacie'),
+          MkBarButton(
+            label: 'Vérifier le point sur la carte',
+            icon: Icons.map_outlined,
+            color: orderBlue,
+            onTap: hasPoint ? openMap : null,
+          ),
+          const SizedBox(height: 8),
+          OrderCheckLine(
+            label:
+                'Je confirme que l’adresse est correcte et que la localisation a été effectuée au point d’enlèvement de ma boutique.',
+            value: locationConfirmed,
+            onChanged: saving || locating || !locationReady ? null : (value) => setState(() => locationConfirmed = value),
+          ),
+          if (!locationReady)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Localisez d’abord la boutique avec le bouton GPS pour pouvoir confirmer.',
+                style: TextStyle(color: menuMuted, fontSize: 12, height: 1.35, fontWeight: FontWeight.w500),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

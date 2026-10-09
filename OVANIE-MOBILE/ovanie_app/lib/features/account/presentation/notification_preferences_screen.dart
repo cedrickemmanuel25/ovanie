@@ -92,8 +92,8 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                           ),
                           child: Text(
                             data.channels.any((channel) => channel.key == 'push' && channel.available)
-                                ? 'Les canaux affichés reflètent la configuration Laravel. Firebase Cloud Messaging est actuellement déclaré opérationnel par OVANIE.'
-                                : 'Les canaux affichés reflètent la configuration Laravel. Le push mobile reste indisponible tant que Firebase Cloud Messaging n’est pas réellement configuré.',
+                                ? 'Choisissez comment OVANIE vous informe de vos commandes, paiements et livraisons.'
+                                : 'Choisissez comment OVANIE vous informe de vos commandes, paiements et livraisons.',
                             style: const TextStyle(color: OvanieColors.muted, height: 1.45),
                           ),
                         ),

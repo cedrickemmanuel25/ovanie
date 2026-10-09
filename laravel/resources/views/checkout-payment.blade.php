@@ -51,7 +51,7 @@
 
 <header class="payment-topbar">
     <a href="{{ route('home') }}" class="payment-brand" aria-label="Accueil OVANIE">
-        <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE">
+        <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE">
     </a>
 
     <div class="secure-label" aria-label="Paiement sécurisé">

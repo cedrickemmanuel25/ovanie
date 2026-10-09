@@ -793,3 +793,46 @@ body.modal-open { overflow: hidden; }
     .delivery-map-footer { align-items: stretch; flex-direction: column; }
     .delivery-map-footer button { width: 100%; }
 }
+
+/* Étape 1 : le client choisit explicitement son adresse de livraison. */
+.address-choice {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+}
+.address-choice-option {
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    border: 1px solid var(--ov-border);
+    border-radius: 12px;
+    background: #fff;
+    cursor: pointer;
+}
+.address-choice-option.active {
+    border-color: var(--ov-blue);
+    box-shadow: inset 0 0 0 2px rgba(13, 88, 232, .12);
+}
+.address-choice-option input {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    accent-color: var(--ov-blue);
+}
+.address-choice-option strong {
+    display: block;
+    font-size: 14px;
+}
+.address-choice-option small {
+    display: block;
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 12.5px;
+}
+.address-choice-hint {
+    margin: 2px 0 0;
+    color: #64748b;
+    font-size: 12.5px;
+}

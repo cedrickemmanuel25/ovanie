@@ -1,9 +1,11 @@
 import 'dart:math' as math;
+import '../../core/sync/live_sync_service.dart';
 
 import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/ui/vendor_design.dart';
+import '../../core/ui/vendor_mockup_ui.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/vendor_repository.dart';
 import '../after_sales/after_sales_screen.dart';
@@ -23,7 +25,8 @@ class VendorDashboardScreen extends StatefulWidget {
   State<VendorDashboardScreen> createState() => _VendorDashboardScreenState();
 }
 
-class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
+class _VendorDashboardScreenState extends State<VendorDashboardScreen>
+    with LiveSyncListener<VendorDashboardScreen> {
   Map<String, dynamic> _data = {};
   bool _loading = true;
   String? _error;
@@ -33,6 +36,9 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
   void initState() {
     super.initState();
     _load();
+    listenLiveSync({'shop', 'notifications'}, () {
+      if (!_loading) _load();
+    });
   }
 
   Future<void> _load() async {
@@ -143,7 +149,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
 
   String _statusLabel(Object? raw) {
     final s = '${raw ?? 'pending'}'.toLowerCase();
-    if (s.contains('delivered')) return 'Expédiée';
+    if (s.contains('delivered')) return 'Livrée';
     if (s.contains('shipped') || s.contains('in_transit')) return 'Expédiée';
     if (s.contains('prepar') || s.contains('accepted')) return 'Préparation';
     if (s.contains('ready')) return 'Prête';
@@ -154,7 +160,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
   Color _statusColor(Object? raw) {
     final s = '${raw ?? ''}'.toLowerCase();
     if (s.contains('delivered') || s.contains('shipped') || s.contains('ready')) return const Color(0xFF16845B);
-    if (s.contains('prepar') || s.contains('accepted')) return vendorOrange;
+    if (s.contains('prepar') || s.contains('accepted')) return const Color(0xFFE85400);
     if (s.contains('cancel')) return const Color(0xFFC72B2B);
     return const Color(0xFF1B5FD0);
   }
@@ -167,89 +173,94 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
     final orders = (_data['orders'] as List?) ?? const [];
     final rating = _num(stats, 'average_rating').toDouble();
     final rate = _treatmentRate(stats);
+    final toProcess = int.tryParse('${stats['orders_to_prepare'] ?? stats['pending_orders'] ?? 0}') ?? 0;
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      displacement: 100,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: _Header(
-              shopName: _shopName(),
-              sellerName: _name(),
-              active: _shopActive(),
-              notificationCount: _notificationCount,
-              shopLogoUrl: _shopLogoUrl(),
-              onNotificationsTap: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const VendorNotificationsScreen()),
-                );
-                if (mounted) await _load();
-              },
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Transform.translate(
-              offset: const Offset(0, -10),
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    return MkTheme(
+      child: ColoredBox(
+        color: Colors.white,
+        child: RefreshIndicator(
+          onRefresh: _load,
+          displacement: 80,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: _Header(
+                  shopName: _shopName(),
+                  sellerName: _name(),
+                  active: _shopActive(),
+                  notificationCount: _notificationCount,
+                  shopLogoUrl: _shopLogoUrl(),
+                  onShopTap: () => _push(const ShopScreen()),
+                  onNotificationsTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const VendorNotificationsScreen()),
+                    );
+                    if (mounted) await _load();
+                  },
                 ),
-                padding: const EdgeInsets.fromLTRB(12, 16, 12, 18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+                sliver: SliverList.list(
                   children: [
-                    if (_loading) const LinearProgressIndicator(minHeight: 2),
+                    if (_loading) const LinearProgressIndicator(minHeight: 2, color: Mk.orange),
                     if (_error != null) ...[
                       VendorErrorBox(_error),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                     ],
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _MetricCard(
-                            icon: Icons.bar_chart_rounded,
-                            iconColor: vendorOrange,
-                            label: 'Ventes du jour',
-                            value: _shortMoney(stats['sales_today']),
-                            unit: 'FCFA',
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: _StatCard(
+                              icon: Icons.bar_chart_rounded,
+                              color: Mk.orange,
+                              label: 'Ventes du jour',
+                              value: _shortMoney(stats['sales_today']),
+                              caption: 'FCFA',
+                              captionOrange: true,
+                              onTap: () => widget.onSelectTab(VendorTab.finance),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 7),
-                        Expanded(
-                          child: _MetricCard(
-                            icon: Icons.assignment_outlined,
-                            iconColor: vendorBlue,
-                            label: 'Commandes',
-                            value: '${stats['orders_today'] ?? stats['orders'] ?? 0}',
-                            unit: 'aujourd’hui',
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _StatCard(
+                              icon: Icons.description_rounded,
+                              color: const Color(0xFF1668E3),
+                              label: 'Commandes',
+                              value: '${stats['orders_today'] ?? stats['orders'] ?? 0}',
+                              caption: 'aujourd’hui',
+                              onTap: () => widget.onSelectTab(VendorTab.orders),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 7),
-                        Expanded(
-                          child: _MetricCard(
-                            icon: Icons.inventory_2_rounded,
-                            iconColor: const Color(0xFF209447),
-                            label: 'Produits actifs',
-                            value: '${stats['active_products'] ?? 0}',
-                            unit: 'en ligne',
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _StatCard(
+                              icon: Icons.inventory_2_rounded,
+                              color: const Color(0xFF16845B),
+                              label: 'Produits actifs',
+                              value: '${stats['active_products'] ?? 0}',
+                              caption: 'en ligne',
+                              onTap: () => widget.onSelectTab(VendorTab.products),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 7),
-                        Expanded(
-                          child: _MetricCard(
-                            icon: Icons.schedule_rounded,
-                            iconColor: vendorOrange,
-                            label: 'À traiter',
-                            value: '${stats['orders_to_prepare'] ?? stats['pending_orders'] ?? 0}',
-                            unit: 'en attente',
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _StatCard(
+                              icon: Icons.schedule_rounded,
+                              color: const Color(0xFF6D3BD9),
+                              label: 'À traiter',
+                              value: '$toProcess',
+                              caption: 'en attente',
+                              onTap: () => widget.onSelectTab(VendorTab.orders),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     _FinanceBanner(
                       available: _shortMoney(stats['payout_available'] ?? stats['pending_payouts']),
                       scheduleLabel: _payoutScheduleLabel(),
@@ -257,34 +268,74 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                     ),
                     const SizedBox(height: 14),
                     const _SectionLabel('Actions rapides'),
-                    const SizedBox(height: 8),
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 3,
-                      childAspectRatio: 2.45,
-                      crossAxisSpacing: 7,
-                      mainAxisSpacing: 7,
+                    const SizedBox(height: 10),
+                    _ActionRow(
                       children: [
-                        _QuickAction(icon: Icons.add_rounded, iconColor: vendorOrange, label: 'Ajouter un produit', onTap: _openAddProduct),
-                        _QuickAction(icon: Icons.assignment_outlined, iconColor: vendorBlue, label: 'Mes commandes', onTap: () => widget.onSelectTab(VendorTab.orders)),
-                        _QuickAction(icon: Icons.inventory_2_outlined, iconColor: const Color(0xFF17913E), label: 'Mes produits', onTap: () => widget.onSelectTab(VendorTab.products)),
-                        _QuickAction(icon: Icons.headset_mic_outlined, iconColor: const Color(0xFF8A2BE2), label: 'Ouvrir SAV', onTap: () => _push(const AfterSalesScreen())),
-                        _QuickAction(icon: Icons.account_balance_wallet_outlined, iconColor: vendorOrange, label: 'Finances', onTap: () => widget.onSelectTab(VendorTab.finance)),
-                        _QuickAction(icon: Icons.storefront_outlined, iconColor: vendorBlue, label: 'Ma boutique', onTap: () => _push(const ShopScreen())),
+                        _QuickAction(
+                          icon: Icons.add_rounded,
+                          color: Mk.orange,
+                          label: 'Ajouter un produit',
+                          onTap: _openAddProduct,
+                        ),
+                        _QuickAction(
+                          icon: Icons.description_rounded,
+                          color: const Color(0xFF1668E3),
+                          label: 'Mes commandes',
+                          onTap: () => widget.onSelectTab(VendorTab.orders),
+                        ),
+                        _QuickAction(
+                          icon: Icons.inventory_2_rounded,
+                          color: const Color(0xFF16845B),
+                          label: 'Mes produits',
+                          onTap: () => widget.onSelectTab(VendorTab.products),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 8),
+                    _ActionRow(
+                      children: [
+                        _QuickAction(
+                          icon: Icons.headset_mic_rounded,
+                          color: const Color(0xFF6D3BD9),
+                          label: 'Ouvrir SAV',
+                          onTap: () => _push(const AfterSalesScreen()),
+                        ),
+                        _QuickAction(
+                          icon: Icons.account_balance_wallet_rounded,
+                          color: Mk.orange,
+                          label: 'Finances',
+                          onTap: () => widget.onSelectTab(VendorTab.finance),
+                        ),
+                        _QuickAction(
+                          icon: Icons.storefront_rounded,
+                          color: const Color(0xFF1668E3),
+                          label: 'Ma boutique',
+                          onTap: () => _push(const ShopScreen()),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         const Expanded(child: _SectionLabel('Commandes récentes')),
                         TextButton(
                           onPressed: () => widget.onSelectTab(VendorTab.orders),
-                          child: const Text('Voir tout  ›', style: TextStyle(color: vendorOrange, fontSize: 12, fontWeight: FontWeight.w800)),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Mk.orange,
+                            minimumSize: const Size(48, 48),
+                            padding: const EdgeInsets.only(left: 8),
+                            textStyle: const TextStyle(fontFamily: Mk.font, fontSize: 14, fontWeight: FontWeight.w700),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Voir tout'),
+                              Icon(Icons.chevron_right_rounded, size: 20),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
                     _RecentOrders(
                       orders: orders,
                       statusLabel: _statusLabel,
@@ -296,88 +347,70 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                     ),
                     const SizedBox(height: 14),
                     const _SectionLabel('Performance boutique'),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _PerformanceCard(
-                            icon: Icons.local_shipping_outlined,
-                            iconColor: vendorOrange,
-                            title: 'Taux de traitement',
-                            value: '${rate.round()}%',
-                            progress: rate / 100,
-                            footer: rate > 0 ? '▲ suivi en temps réel' : 'Aucune donnée',
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _PerformanceCard(
-                            icon: Icons.star_outline_rounded,
-                            iconColor: const Color(0xFF199447),
-                            title: 'Satisfaction client',
-                            value: rating > 0 ? '${rating.toStringAsFixed(1)}/5' : '—/5',
-                            progress: rating <= 0 ? 0.0 : math.min(1.0, rating / 5).toDouble(),
-                            footer: '${stats['reviews'] ?? 0} avis client(s)',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFFBF7),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFFFD0AD)),
-                      ),
+                    const SizedBox(height: 10),
+                    IntrinsicHeight(
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const VendorCircleIcon(
-                            icon: Icons.info_outline_rounded,
-                            color: Colors.white,
-                            background: vendorOrange,
-                            size: 38,
-                            iconSize: 21,
-                          ),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Conseil OVANIE', style: TextStyle(color: vendorOrange, fontSize: 13, fontWeight: FontWeight.w900)),
-                                SizedBox(height: 2),
-                                Text(
-                                  'Ajoutez des photos complètes et une description détaillée à vos produits. Cela augmente vos ventes et la confiance des acheteurs !',
-                                  style: TextStyle(color: vendorText, fontSize: 10.5, height: 1.25),
-                                ),
-                              ],
+                          Expanded(
+                            child: _PerformanceCard(
+                              icon: Icons.local_shipping_rounded,
+                              color: const Color(0xFF1668E3),
+                              barColor: const Color(0xFF16845B),
+                              title: 'Taux de traitement',
+                              value: '${rate.round()}',
+                              unit: '%',
+                              progress: rate / 100,
+                              footer: 'suivi en temps réel',
+                              footerIcon: Icons.arrow_drop_up_rounded,
                             ),
                           ),
                           const SizedBox(width: 8),
-                          SizedBox(
-                            width: 92,
-                            height: 60,
-                            child: Image.asset(
-                              'assets/images/vendor_advice_items_full.png',
-                              fit: BoxFit.contain,
-                              alignment: Alignment.centerRight,
-                              filterQuality: FilterQuality.high,
+                          Expanded(
+                            child: _PerformanceCard(
+                              icon: Icons.star_rounded,
+                              color: Mk.orange,
+                              barColor: Mk.orange,
+                              title: 'Satisfaction client',
+                              value: rating > 0 ? rating.toStringAsFixed(1) : '—',
+                              unit: rating > 0 ? '/5' : '',
+                              progress: rating <= 0 ? 0.0 : math.min(1.0, rating / 5).toDouble(),
+                              footer: _reviewsLabel(stats['reviews']),
                             ),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    const _TipCard(),
                   ],
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
+
+  String _reviewsLabel(Object? raw) {
+    final count = int.tryParse('${raw ?? 0}') ?? 0;
+    if (count == 0) return 'Aucun avis';
+    return count == 1 ? '1 avis client' : '$count avis clients';
+  }
 }
 
+const _cardBorder = Color(0xFFE1E7F0);
+
+BoxDecoration _cardBox([double radius = 12]) => BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: _cardBorder, width: 1.2),
+      boxShadow: const [BoxShadow(color: Color(0x0D0A1B4F), blurRadius: 8, offset: Offset(0, 2))],
+    );
+
+/// En-tête : photo du magasin voilée de bleu, logo, cloche, salutation et
+/// bandeau de la boutique. Le bas arrondi blanc amorce le contenu.
 class _Header extends StatelessWidget {
   const _Header({
     required this.shopName,
@@ -386,6 +419,7 @@ class _Header extends StatelessWidget {
     required this.notificationCount,
     required this.shopLogoUrl,
     required this.onNotificationsTap,
+    required this.onShopTap,
   });
 
   final String shopName;
@@ -394,127 +428,138 @@ class _Header extends StatelessWidget {
   final int notificationCount;
   final String? shopLogoUrl;
   final VoidCallback onNotificationsTap;
+  final VoidCallback onShopTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: vendorNavyDeep,
-      child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: 184,
-          child: Stack(
-            fit: StackFit.expand,
+    final top = MediaQuery.paddingOf(context).top;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Image.asset(
+            'assets/images/mockups/dash_header.jpg',
+            fit: BoxFit.cover,
+            alignment: const Alignment(.6, -.2),
+            excludeFromSemantics: true,
+          ),
+        ),
+        const Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [Color(0xEB0A2E7A), Color(0xB80B3A93), Color(0x520B3A93)],
+                stops: [0, .5, 1],
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(16, top + 8, 14, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF052653), Color(0xFF063C79)],
+              Row(
+                children: [
+                  Image.asset('assets/images/mockups/logo_white.png', height: 36, semanticLabel: 'OVANIE Vendeur'),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Notifications',
+                    onPressed: onNotificationsTap,
+                    icon: Badge(
+                      isLabelVisible: notificationCount > 0,
+                      backgroundColor: Mk.orange,
+                      label: Text(notificationCount > 99 ? '99+' : '$notificationCount'),
+                      child: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
+                    ),
                   ),
-                ),
+                ],
               ),
-              const Positioned.fill(
-                child: IgnorePointer(
-                  child: CustomPaint(painter: _ConstructionLinePainter()),
+              const SizedBox(height: 6),
+              Text.rich(
+                TextSpan(
+                  text: 'Bonjour, ',
+                  children: [TextSpan(text: sellerName, style: const TextStyle(color: Mk.orange))],
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              const SizedBox(height: 2),
+              const Text(
+                'Gérez votre boutique en toute simplicité',
+                style: TextStyle(color: Color(0xFFD5E0F5), fontSize: 12.5, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 10),
+              Material(
+                color: Colors.white.withValues(alpha: .08),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withValues(alpha: .75), width: 1.1),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onShopTap,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                    child: Row(
                       children: [
-                        const _OvanieOfficialLogo(),
-                        const Spacer(),
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            IconButton(
-                              onPressed: onNotificationsTap,
-                              icon: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 27),
-                            ),
-                            if (notificationCount > 0)
-                              Positioned(
-                                right: 5,
-                                top: 2,
-                                child: Container(
-                                  constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
-                                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(color: vendorOrange, borderRadius: BorderRadius.circular(99)),
-                                  child: Text(
-                                    notificationCount > 99 ? '99+' : '$notificationCount',
-                                    style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w900),
-                                  ),
-                                ),
+                        _ShopAvatar(imageUrl: shopLogoUrl),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            shopName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: active ? const Color(0xFF12805C) : const Color(0xFF9A6200),
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(color: Colors.white.withValues(alpha: .45)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                               ),
-                          ],
+                              const SizedBox(width: 6),
+                              Text(
+                                active ? 'Boutique active' : 'En vérification',
+                                style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    RichText(
-                      text: TextSpan(
-                        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-                        children: [
-                          const TextSpan(text: 'Bonjour, ', style: TextStyle(color: Colors.white)),
-                          TextSpan(text: 'M. $sellerName', style: const TextStyle(color: vendorOrange)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text('Gérez votre boutique en toute simplicité', style: TextStyle(color: Colors.white.withValues(alpha: .88), fontSize: 12.5)),
-                    const Spacer(),
-                    Container(
-                      height: 48,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF06234F).withValues(alpha: .72),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white.withValues(alpha: .2)),
-                      ),
-                      child: Row(
-                        children: [
-                          _ShopAvatar(imageUrl: shopLogoUrl),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              shopName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: active ? const Color(0xFF155E4A) : const Color(0xFF6F5A15),
-                              borderRadius: BorderRadius.circular(99),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(width: 7, height: 7, decoration: BoxDecoration(color: active ? const Color(0xFF61DE8A) : Colors.amber, shape: BoxShape.circle)),
-                                const SizedBox(width: 5),
-                                Text(
-                                  active ? 'Boutique active' : 'Boutique à vérifier',
-                                  style: TextStyle(color: active ? const Color(0xFF86F2A6) : Colors.white, fontSize: 10.5, fontWeight: FontWeight.w700),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
           ),
         ),
-      ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: -1,
+          child: Container(
+            height: 22,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -526,7 +571,7 @@ class _ShopAvatar extends StatelessWidget {
 
   Widget _fallback() {
     return const Center(
-      child: Icon(Icons.storefront_outlined, color: vendorOrange, size: 21),
+      child: Icon(Icons.storefront_rounded, color: Mk.orange, size: 20),
     );
   }
 
@@ -534,13 +579,9 @@ class _ShopAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = (imageUrl ?? '').trim();
     return Container(
-      width: 38,
-      height: 38,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: .9), width: 2),
-      ),
+      width: 34,
+      height: 34,
+      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
       clipBehavior: Clip.antiAlias,
       child: url.isEmpty
           ? _fallback()
@@ -554,127 +595,82 @@ class _ShopAvatar extends StatelessWidget {
   }
 }
 
-class _ConstructionLinePainter extends CustomPainter {
-  const _ConstructionLinePainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..color = const Color(0x245DA9F7)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    final faint = Paint()
-      ..color = const Color(0x145DA9F7)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = .8;
-
-    final right = size.width;
-    final bottom = size.height;
-
-    // Grue stylisée, dessinée directement en Flutter : aucun rectangle bitmap.
-    final mastX = right * .72;
-    canvas.drawLine(Offset(mastX, bottom * .18), Offset(mastX, bottom), line);
-    canvas.drawLine(Offset(mastX - 18, bottom * .24), Offset(mastX + 18, bottom * .24), line);
-    canvas.drawLine(Offset(mastX, bottom * .20), Offset(right * .97, bottom * .32), line);
-    canvas.drawLine(Offset(mastX, bottom * .20), Offset(right * .55, bottom * .27), faint);
-    canvas.drawLine(Offset(right * .91, bottom * .29), Offset(right * .91, bottom * .55), faint);
-    canvas.drawRect(Rect.fromLTWH(right * .895, bottom * .55, 13, 7), faint);
-
-    // Structure d'immeuble en lignes fines à droite.
-    final building = Rect.fromLTWH(right * .76, bottom * .50, right * .27, bottom * .50);
-    canvas.drawRect(building, faint);
-    for (var i = 1; i < 5; i++) {
-      final y = building.top + building.height * i / 5;
-      canvas.drawLine(Offset(building.left, y), Offset(building.right, y), faint);
-    }
-    for (var i = 1; i < 4; i++) {
-      final x = building.left + building.width * i / 4;
-      canvas.drawLine(Offset(x, building.top), Offset(x, building.bottom), faint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _OvanieOfficialLogo extends StatelessWidget {
-  const _OvanieOfficialLogo();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 172,
-      height: 54,
-      child: Image.asset(
-        'assets/images/ovanie_logo.png',
-        fit: BoxFit.contain,
-        alignment: Alignment.centerLeft,
-        filterQuality: FilterQuality.high,
-      ),
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.icon, required this.iconColor, required this.label, required this.value, required this.unit});
+/// Chiffre clé : pictogramme, libellé, valeur et précision.
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.caption,
+    required this.onTap,
+    this.captionOrange = false,
+  });
 
   final IconData icon;
-  final Color iconColor;
+  final Color color;
   final String label;
   final String value;
-  final String unit;
+  final String caption;
+  final bool captionOrange;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 92,
-      padding: const EdgeInsets.all(9),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE3E8EF)),
-        boxShadow: const [BoxShadow(color: Color(0x08000F35), blurRadius: 10, offset: Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              VendorCircleIcon(
-                icon: icon,
-                color: iconColor,
-                background: iconColor.withValues(alpha: .10),
-                size: 30,
-                iconSize: 16,
-              ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    style: const TextStyle(color: vendorText, fontSize: 10.2, height: 1.05),
+    return Semantics(
+      button: true,
+      label: '$label : $value $caption',
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: _cardBox(),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: color, size: 24),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(label, maxLines: 1, style: const TextStyle(color: Mk.muted, fontSize: 10.5, fontWeight: FontWeight.w500)),
                   ),
-                ),
+                  const SizedBox(height: 1),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      style: const TextStyle(color: Mk.navy, fontSize: 19, fontWeight: FontWeight.w800, height: 1.15),
+                    ),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      caption,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: captionOrange ? Mk.orange : Mk.muted,
+                        fontSize: 10.5,
+                        fontWeight: captionOrange ? FontWeight.w800 : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-          const Spacer(),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(value, style: const TextStyle(color: vendorText, fontSize: 18, fontWeight: FontWeight.w900)),
-          ),
-          Text(unit, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: unit == 'FCFA' ? vendorOrange : vendorMuted, fontSize: 9.5, fontWeight: unit == 'FCFA' ? FontWeight.w800 : FontWeight.w500)),
-        ],
+        ),
       ),
     );
   }
 }
 
+/// Bandeau bleu « Revenus disponibles » avec le portefeuille.
 class _FinanceBanner extends StatelessWidget {
   const _FinanceBanner({required this.available, required this.scheduleLabel, required this.onTap});
 
@@ -684,76 +680,124 @@ class _FinanceBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 100,
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        gradient: const LinearGradient(colors: [Color(0xFF073278), Color(0xFF0A48A6)]),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Revenus disponibles', style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: RichText(
-                    text: TextSpan(
+    return Semantics(
+      button: true,
+      label: 'Revenus disponibles : $available FCFA. $scheduleLabel. Voir les finances',
+      excludeSemantics: true,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0B46B4), Color(0xFF062B7E)],
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  final texts = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Revenus disponibles',
+                        style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 3),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text.rich(
+                          TextSpan(
+                            text: '$available ',
+                            children: const [TextSpan(text: 'FCFA', style: TextStyle(color: Mk.orange))],
+                          ),
+                          maxLines: 1,
+                          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -.3),
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_month_outlined, color: Colors.white, size: 16),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              scheduleLabel,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                  final button = Container(
+                    padding: const EdgeInsets.fromLTRB(8, 5, 4, 5),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white, width: 1.1),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextSpan(text: available, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
-                        const TextSpan(text: ' FCFA', style: TextStyle(color: vendorOrange, fontSize: 13, fontWeight: FontWeight.w800)),
+                        Text(
+                          'Voir les finances',
+                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                        Icon(Icons.chevron_right_rounded, color: Colors.white, size: 15),
                       ],
                     ),
-                  ),
-                ),
-                const Spacer(),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today_outlined, size: 12, color: Colors.white),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        scheduleLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w600),
+                  );
+                  // Écran étroit ou texte agrandi : le portefeuille passe au-dessus du bouton.
+                  final roomy = box.maxWidth >= 345 && MediaQuery.textScalerOf(context).scale(10) <= 10.5;
+                  if (!roomy) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(child: texts),
+                        const SizedBox(width: 8),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Image.asset('assets/images/mockups/dash_wallet.png', height: 52),
+                            const SizedBox(height: 6),
+                            button,
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+                  // Le portefeuille se pose à droite du montant, le bouton en bas à droite.
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 122),
+                        child: texts,
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          SizedBox(
-            width: 98,
-            height: 76,
-            child: Image.asset(
-              'assets/images/vendor_wallet_transparent.png',
-              fit: BoxFit.contain,
-              alignment: Alignment.bottomCenter,
-              filterQuality: FilterQuality.high,
-            ),
-          ),
-          const SizedBox(width: 6),
-          SizedBox(
-            width: 90,
-            height: 42,
-            child: OutlinedButton(
-              onPressed: onTap,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                side: BorderSide(color: Colors.white.withValues(alpha: .7)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                      Positioned(
+                        right: 26,
+                        top: -4,
+                        child: Image.asset('assets/images/mockups/dash_wallet.png', height: 52),
+                      ),
+                      Positioned(right: 0, bottom: 0, child: button),
+                    ],
+                  );
+                },
               ),
-              child: const Text('Voir les finances  ›', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w700)),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -765,55 +809,72 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text, style: const TextStyle(color: vendorText, fontSize: 14.5, fontWeight: FontWeight.w900));
+    return Text(
+      text,
+      style: const TextStyle(color: Mk.navy, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -.2),
+    );
+  }
+}
+
+/// Trois actions rapides de même hauteur.
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(child: children[i]),
+          ],
+        ],
+      ),
+    );
   }
 }
 
 class _QuickAction extends StatelessWidget {
-  const _QuickAction({required this.icon, required this.iconColor, required this.label, required this.onTap});
+  const _QuickAction({required this.icon, required this.color, required this.label, required this.onTap});
 
   final IconData icon;
-  final Color iconColor;
+  final Color color;
   final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(9),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(9),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: const Color(0xFFE3E8EF)),
-          ),
-          child: Row(
-            children: [
-              VendorCircleIcon(
-                icon: icon,
-                color: Colors.white,
-                background: iconColor,
-                size: 30,
-                iconSize: 18,
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    style: const TextStyle(color: vendorText, fontSize: 10.6, fontWeight: FontWeight.w700),
-                  ),
+    return DecoratedBox(
+      decoration: _cardBox(),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 9, 4, 9),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  child: Icon(icon, color: Colors.white, size: 22),
                 ),
-              ),
-            ],
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  style: const TextStyle(color: Mk.navy, fontSize: 11.5, fontWeight: FontWeight.w700, height: 1.2),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -838,60 +899,74 @@ class _RecentOrders extends StatelessWidget {
   Widget build(BuildContext context) {
     if (orders.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFE3E8EF))),
-        child: const Text('Aucune commande récente.', style: TextStyle(color: vendorMuted, fontSize: 11.5)),
+        padding: const EdgeInsets.all(16),
+        decoration: _cardBox(),
+        child: const Row(
+          children: [
+            _OrderIcon(),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Aucune commande pour le moment.',
+                style: TextStyle(color: Mk.muted, fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
       );
     }
-
     final visible = orders.take(3).whereType<Map>().toList();
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFE3E8EF))),
+      decoration: _cardBox(),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: List.generate(visible.length, (index) {
           final order = Map<String, dynamic>.from(visible[index]);
           final status = order['vendor_status'];
           final color = statusColor(status);
-          return InkWell(
-            onTap: () => onTap(order),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(border: index == visible.length - 1 ? null : const Border(bottom: BorderSide(color: Color(0xFFE9EDF3)))),
-              child: Row(
-              children: [
-                const VendorCircleIcon(icon: Icons.inventory_2_outlined, size: 31, iconSize: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 5,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('${order['order_number'] ?? 'Commande'}', style: const TextStyle(color: vendorText, fontSize: 11.5, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 1),
-                      Text('${order['client_name'] ?? 'Client OVANIE'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: vendorMuted, fontSize: 9.8)),
-                    ],
-                  ),
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => onTap(order),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  border: index == visible.length - 1 ? null : const Border(bottom: BorderSide(color: _cardBorder)),
                 ),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    money(order['public_products_total']),
-                    textAlign: TextAlign.right,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: vendorText, fontSize: 10.5, fontWeight: FontWeight.w800),
-                  ),
+                child: Row(
+                  children: [
+                    const _OrderIcon(),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${order['order_number'] ?? ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            '${order['client_name'] ?? 'Client'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Mk.muted, fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _OrderAmount(
+                      amount: money(order['seller_products_total'] ?? order['public_products_total']),
+                      status: statusLabel(status),
+                      color: color,
+                    ),
+                    const Icon(Icons.chevron_right_rounded, color: Mk.navy, size: 22),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  width: 72,
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                  decoration: BoxDecoration(color: color.withValues(alpha: .10), borderRadius: BorderRadius.circular(99)),
-                  child: Text(statusLabel(status), textAlign: TextAlign.center, style: TextStyle(color: color, fontSize: 9.5, fontWeight: FontWeight.w800)),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.chevron_right_rounded, color: vendorText, size: 18),
-                ],
               ),
             ),
           );
@@ -901,53 +976,188 @@ class _RecentOrders extends StatelessWidget {
   }
 }
 
-class _PerformanceCard extends StatelessWidget {
-  const _PerformanceCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.value,
-    required this.progress,
-    required this.footer,
-  });
+/// Montant et statut d'une commande : côte à côte, ou empilés sur un écran étroit.
+class _OrderAmount extends StatelessWidget {
+  const _OrderAmount({required this.amount, required this.status, required this.color});
 
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String value;
-  final double progress;
-  final String footer;
+  final String amount;
+  final String status;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= 390 && MediaQuery.textScalerOf(context).scale(10) <= 10.5;
+    final price = Text(amount, style: const TextStyle(color: Mk.navy, fontSize: 12.5, fontWeight: FontWeight.w800));
+    final pill = Container(
+      constraints: BoxConstraints(minWidth: wide ? 84 : 0),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(color: color.withValues(alpha: .13), borderRadius: BorderRadius.circular(99)),
+      child: Text(
+        status,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w700),
+      ),
+    );
+    if (wide) {
+      return Row(mainAxisSize: MainAxisSize.min, children: [price, const SizedBox(width: 10), pill, const SizedBox(width: 4)]);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [price, const SizedBox(height: 4), pill],
+    );
+  }
+}
+
+class _OrderIcon extends StatelessWidget {
+  const _OrderIcon();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 90,
-      padding: const EdgeInsets.all(9),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFE3E8EF))),
+      width: 34,
+      height: 34,
+      decoration: const BoxDecoration(color: Mk.softBlue, shape: BoxShape.circle),
+      child: const Icon(Icons.inventory_2_outlined, color: Color(0xFF1668E3), size: 19),
+    );
+  }
+}
+
+class _PerformanceCard extends StatelessWidget {
+  const _PerformanceCard({
+    required this.icon,
+    required this.color,
+    required this.barColor,
+    required this.title,
+    required this.value,
+    required this.unit,
+    required this.progress,
+    required this.footer,
+    this.footerIcon,
+  });
+
+  final IconData icon;
+  final Color color;
+  final Color barColor;
+  final String title;
+  final String value;
+  final String unit;
+  final double progress;
+  final String footer;
+  final IconData? footerIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 12, 10, 10),
+      decoration: _cardBox(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(color: color.withValues(alpha: .14), shape: BoxShape.circle),
+                child: Icon(icon, color: color, size: 21),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(title, maxLines: 1, style: const TextStyle(color: Mk.muted, fontSize: 12, fontWeight: FontWeight.w500)),
+                    ),
+                    Text.rich(
+                      TextSpan(
+                        text: value,
+                        children: [TextSpan(text: unit, style: const TextStyle(fontSize: 14))],
+                      ),
+                      style: const TextStyle(color: Mk.navy, fontSize: 20, fontWeight: FontWeight.w800, height: 1.2),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              minHeight: 6,
+              value: progress.clamp(0.0, 1.0),
+              color: barColor,
+              backgroundColor: const Color(0xFFE3E7ED),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              if (footerIcon != null) Icon(footerIcon, color: const Color(0xFF16845B), size: 18),
+              Flexible(
+                child: Text(
+                  footer,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Color(0xFF16845B), fontSize: 11.5, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Encadré « Conseil OVANIE » avec l'illustration de matériaux.
+class _TipCard extends StatelessWidget {
+  const _TipCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: Mk.softOrange,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF6C7A6), width: 1.2),
+      ),
       child: Row(
         children: [
-          VendorCircleIcon(icon: icon, color: iconColor, background: iconColor.withValues(alpha: .10), size: 38, iconSize: 21),
-          const SizedBox(width: 8),
-          Expanded(
+          const Expanded(
+            flex: 6,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: vendorText, fontSize: 10.5, fontWeight: FontWeight.w700)),
-                Text(value, style: const TextStyle(color: vendorText, fontSize: 18, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: LinearProgressIndicator(
-                    minHeight: 5,
-                    value: progress,
-                    color: vendorOrange,
-                    backgroundColor: const Color(0xFFE3E7ED),
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.info_rounded, color: Mk.orange, size: 24),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Conseil OVANIE',
+                        style: TextStyle(color: Mk.orange, fontSize: 15, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(footer, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF16845B), fontSize: 8.5, fontWeight: FontWeight.w700)),
+                SizedBox(height: 6),
+                Text(
+                  'Ajoutez des photos complètes et une description détaillée à vos produits. '
+                  'Cela augmente vos ventes et la confiance des acheteurs !',
+                  style: TextStyle(color: Mk.muted, fontSize: 12, height: 1.4, fontWeight: FontWeight.w500),
+                ),
               ],
             ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            flex: 5,
+            child: Image.asset('assets/images/mockups/dash_tip.png', fit: BoxFit.contain, excludeFromSemantics: true),
           ),
         ],
       ),

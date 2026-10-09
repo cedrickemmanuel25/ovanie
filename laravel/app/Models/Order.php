@@ -316,6 +316,9 @@ class Order extends Model
             // Les frais initiaux ou un paiement partiel autorisent la poursuite du
             // parcours, sans jamais présenter la commande comme intégralement payée.
             $this->status = 'confirmed';
+        } elseif ($inProgress > 0 || in_array($this->status, ['confirmed', 'processing'], true)) {
+            // Paiement à la livraison : une commande confirmée ne redevient jamais « en attente ».
+            $this->status = 'confirmed';
         } else {
             $this->status = 'pending';
         }

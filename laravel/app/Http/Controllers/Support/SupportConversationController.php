@@ -96,7 +96,7 @@ class SupportConversationController extends Controller
             'requester_user_id' => ['nullable', 'exists:users,id'],
             'requester_name' => ['nullable', 'string', 'max:255'],
             'requester_email' => ['nullable', 'email', 'max:255'],
-            'requester_phone' => ['nullable', 'string', 'max:40'],
+            'requester_phone' => ['nullable', 'string', 'max:40', 'regex:/^\+?[\d\s().-]{8,}$/'],
             'channel' => ['required', Rule::in(['chat', 'email', 'whatsapp', 'phone', 'internal'])],
             'subject' => ['required', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:10000'],
@@ -196,6 +196,21 @@ class SupportConversationController extends Controller
             $data['body'],
             $request->boolean('is_internal'),
         );
+
+        // Le demandeur suit son dossier depuis son application : la réponse y est recopiée.
+        $ticket = $conversation->support_ticket_id ? \App\Models\SupportTicket::find($conversation->support_ticket_id) : null;
+        if ($ticket && ! $request->boolean('is_internal')) {
+            $ticket->messages()->create([
+                'author_id' => $request->user('admin')->id,
+                'author_type' => 'staff',
+                'body' => trim($data['body']),
+                'is_internal_note' => false,
+            ]);
+            $ticket->update(array_filter([
+                'status' => 'in_progress',
+                'first_response_at' => $ticket->first_response_at ? null : now(),
+            ]));
+        }
 
         return back()->with('success', $request->boolean('is_internal') ? 'Note interne ajoutée.' : 'Réponse humaine envoyée.');
     }
@@ -330,6 +345,12 @@ class SupportConversationController extends Controller
             'requires_human' => false,
             'resolved_at' => now(),
         ])->save();
+
+        if ($conversation->support_ticket_id) {
+            \App\Models\SupportTicket::whereKey($conversation->support_ticket_id)
+                ->whereNotIn('status', ['resolved', 'closed'])
+                ->update(['status' => 'resolved', 'resolved_at' => now()]);
+        }
 
         $audit->log([
             'support_conversation_id' => $conversation->id,

@@ -176,7 +176,7 @@
         </div>
         <div class="ov-info-item">
             <span class="ov-info-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5h4"/></svg></span>
-            <div><div class="ov-info-label">Arrivée estimée</div><div class="ov-info-value" id="ov-eta-value">—</div><div class="ov-info-help">Calculée à partir de l’itinéraire routier.</div></div>
+            <div><div class="ov-info-label">Arrivée estimée</div><div class="ov-info-value" id="ov-eta-value">—</div><div class="ov-info-help">Selon l’itinéraire.</div></div>
         </div>
         <div class="ov-info-item">
             <span class="ov-info-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.5a7 7 0 0 1 14 0M8 12.5a4 4 0 0 1 8 0M12 13v.01"/></svg></span>

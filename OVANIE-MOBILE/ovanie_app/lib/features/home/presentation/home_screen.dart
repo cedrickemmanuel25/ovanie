@@ -17,6 +17,7 @@ import '../data/marketplace_repository.dart';
 import 'best_sellers_screen.dart';
 import 'black_friday_screen.dart';
 import 'flash_sale_screen.dart';
+import 'offer_collection_screen.dart';
 import 'new_arrivals_screen.dart';
 
 typedef HomeCatalogNavigation = void Function({
@@ -171,6 +172,8 @@ class _OvanieHomeContent extends StatelessWidget {
     final flash = _section('flash');
     final bestSellers = _section('best_sellers');
     final latest = _section('latest');
+    final promotions = _section('promotions');
+    final selection = _section('selection');
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(
@@ -231,6 +234,35 @@ class _OvanieHomeContent extends StatelessWidget {
                   onViewAll: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => NewArrivalsScreen(offer: latest.catalogOffer),
+                    ),
+                  ),
+                ),
+              if (promotions != null && promotions.products.isNotEmpty)
+                _ProductSection(
+                  title: 'Offres en cours',
+                  type: _HomeProductCardType.bestSeller,
+                  section: promotions,
+                  onViewAll: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => OvanieOfferCollectionScreen(
+                        kind: OvanieOfferKind.promotions,
+                        initialOffer: promotions.catalogOffer,
+                      ),
+                    ),
+                  ),
+                ),
+              if (selection != null && selection.products.isNotEmpty)
+                _ProductSection(
+                  title: 'Sélection OVANIE',
+                  type: _HomeProductCardType.bestSeller,
+                  section: selection,
+                  onViewAll: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => OvanieOfferCollectionScreen(
+                        kind: OvanieOfferKind.selection,
+                        initialCategorySlug: selection.categorySlug,
+                        title: selection.title,
+                      ),
                     ),
                   ),
                 ),

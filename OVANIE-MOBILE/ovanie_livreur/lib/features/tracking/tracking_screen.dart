@@ -129,7 +129,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       final token = config.accessToken.trim();
       if (token.isEmpty || !token.startsWith('pk.')) {
         throw const OvanieApiException(
-          'Le token public Mapbox est absent ou invalide dans la configuration OVANIE.',
+          'La carte est momentanément indisponible.',
         );
       }
 
@@ -1470,8 +1470,8 @@ class _MapboxWaitingView extends StatelessWidget {
                     const SizedBox(height: 12),
                     Text(
                       message == null
-                          ? 'Chargement de la carte Mapbox…'
-                          : 'Carte Mapbox indisponible',
+                          ? 'Chargement de la carte…'
+                          : 'Carte indisponible',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Color(0xFF0F1838),

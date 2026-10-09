@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/sync/live_sync_service.dart';
 import '../../../core/platform/external_url_launcher.dart';
 import '../../../shared/widgets/ovanie_bottom_navigation.dart';
 import '../../shell/domain/main_navigation_store.dart';
@@ -31,7 +32,8 @@ class NotificationsScreen extends StatefulWidget {
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
+class _NotificationsScreenState extends State<NotificationsScreen>
+    with LiveSyncListener<NotificationsScreen> {
   static const _navy = Color(0xFF071B53);
   static const _subtitle = Color(0xFF465A8A);
   static const _line = Color(0xFFE0E6F0);
@@ -56,10 +58,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void initState() {
     super.initState();
     _load();
+    listenLiveSync({'notifications'}, () {
+      if (!_mutating) _load(silent: true);
+    });
   }
 
-  Future<void> _load() async {
-    if (mounted) {
+  Future<void> _load({bool silent = false}) async {
+    if (mounted && (!silent || _data == null)) {
       setState(() {
         _loading = true;
         _error = null;

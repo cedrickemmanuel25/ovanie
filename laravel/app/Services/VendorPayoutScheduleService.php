@@ -59,6 +59,19 @@ class VendorPayoutScheduleService
             return $payout;
         }
 
+        if (! $shop->hasConfiguredPayout() || ! $shop->hasCompletePayoutDestination()) {
+            $meta = $payout->meta ?? [];
+            $meta['blocked_reason'] = 'Le vendeur doit confirmer son mode et ses coordonnées de reversement.';
+            $payout->forceFill([
+                'status' => VendorPayout::STATUS_BLOCKED,
+                'eligible_at' => null,
+                'scheduled_for' => null,
+                'expected_payment_date' => null,
+                'meta' => $meta,
+            ])->save();
+            return $payout->refresh();
+        }
+
         $items = $this->itemsForShop($order, (int) $shop->id);
         if ($items->isEmpty()) {
             return $payout;

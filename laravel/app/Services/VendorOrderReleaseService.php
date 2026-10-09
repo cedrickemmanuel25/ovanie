@@ -115,7 +115,7 @@ class VendorOrderReleaseService
                 $this->workflow->notify(
                     $vendor,
                     'Nouvelle commande à préparer',
-                    "La commande {$order->order_number} ({$productCount} produit(s)) est confirmée et attend votre préparation dans {$shopName}.",
+                    "La commande {$order->order_number} (".($productCount > 1 ? "{$productCount} produits" : '1 produit').") est confirmée et attend votre préparation dans {$shopName}.",
                     [
                         'category'      => 'orders',
                         'order_id'      => $order->id,

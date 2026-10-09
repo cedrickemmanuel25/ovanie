@@ -7,15 +7,11 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Stabilise les sessions Laravel pendant les tests locaux depuis un téléphone.
+ * Stabilise les sessions Laravel pendant les tests locaux, LAN et tunnels.
  *
- * Cette protection s'active uniquement pour localhost, une adresse IP privée
- * ou un Quick Tunnel *.trycloudflare.com. Elle n'altère donc pas la
- * configuration des domaines OVANIE de production.
- *
- * Elle s'exécute AVANT StartSession afin d'éviter les 419 provoqués par une
- * ancienne configuration mise en cache (SESSION_DOMAIN=127.0.0.1, cookie de
- * production, etc.).
+ * Ce middleware s'exécute AVANT StartSession. Il neutralise notamment les
+ * cookies Secure/domain hérités de la production qui provoqueraient un 419
+ * sur http://ovanie.test:8000 ou http://pro.ovanie.test:8000.
  */
 class LocalTunnelSessionConfig
 {
@@ -43,21 +39,25 @@ class LocalTunnelSessionConfig
         }
 
         $forwardedProto = strtolower((string) $request->headers->get('x-forwarded-proto', ''));
-        $isHttpsTunnel = str_ends_with($host, '.trycloudflare.com')
-            && (str_contains($forwardedProto, 'https') || $request->isSecure());
+        $secure = $request->isSecure() || str_contains($forwardedProto, 'https');
+
+        $proDomain = strtolower(trim((string) config('ovanie.pro_domain', 'pro.ovanie.test')));
+        $isProHost = $host === $proDomain;
 
         config([
             'session.driver' => 'file',
             'session.files' => $sessionDirectory,
-            // Host-only cookie : ne jamais l'attacher à 127.0.0.1 ou ovanie.com
-            // lorsque la requête arrive depuis trycloudflare.com.
             'session.domain' => null,
             'session.path' => '/',
-            'session.cookie' => 'ovanie-v60-local-session',
+            // OVANIE classique et OVANIE Pro gardent des sessions distinctes
+            // même pendant les tests locaux.
+            'session.cookie' => $isProHost
+                ? config('ovanie.pro_session_cookie', 'ovanie_pro_local_session')
+                : 'ovanie_local_session',
             'session.http_only' => true,
             'session.same_site' => 'lax',
-            // HTTPS sur le tunnel ; HTTP autorisé uniquement pour le LAN local.
-            'session.secure' => $isHttpsTunnel,
+            // HTTP local => false. HTTPS/tunnel HTTPS => true.
+            'session.secure' => $secure,
         ]);
 
         return $next($request);
@@ -66,6 +66,11 @@ class LocalTunnelSessionConfig
     private function isLocalTestHost(string $host): bool
     {
         if ($host === 'localhost' || $host === '127.0.0.1' || $host === '::1') {
+            return true;
+        }
+
+        // Domaines de développement utilisés par OVANIE.
+        if (str_ends_with($host, '.test') || str_ends_with($host, '.localhost')) {
             return true;
         }
 

@@ -196,7 +196,7 @@ class LogisticsFleetController extends Controller
             'model' => 'required|string|max:80',
             'capacity_kg' => 'required|integer|min:1',
             'volume_m3' => 'nullable|numeric|min:0',
-            'year' => 'required|integer|min:1990|max:2100',
+            'year' => 'required|integer|min:1990|max:'.(now()->year + 1),
             'zone' => 'nullable|string|max:100',
             'driver_id' => 'nullable|integer|exists:delivery_drivers,id',
             'status' => 'required|in:available,maintenance,out_of_service',
@@ -215,14 +215,14 @@ class LogisticsFleetController extends Controller
             ]);
         }
 
-        if (filled($data['zone']) && ! $this->operationalZoneNames()->contains($data['zone'])) {
+        if (filled($data['zone'] ?? null) && ! $this->operationalZoneNames()->contains($data['zone'])) {
             throw ValidationException::withMessages([
                 'zone' => 'La zone sélectionnée n’est pas une zone de livraison OVANIE active.',
             ]);
         }
 
         $driver = null;
-        if (filled($data['driver_id'])) {
+        if (filled($data['driver_id'] ?? null)) {
             $driver = $this->realDrivers()->where('is_active', true)->find($data['driver_id']);
             if (! $driver) {
                 throw ValidationException::withMessages([
@@ -243,7 +243,7 @@ class LogisticsFleetController extends Controller
                 ]);
             }
         }
-        unset($data['driver_id']);
+        unset($data['driver_id'], $data['registration_document'], $data['insurance_document'], $data['technical_inspection'], $data['vehicle_photo']);
 
         $documents = [
             'registration' => [

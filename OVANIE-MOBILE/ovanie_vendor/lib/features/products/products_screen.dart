@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../core/sync/live_sync_service.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/ui/vendor_design.dart';
+import '../../core/ui/vendor_mockup_ui.dart';
 import '../../data/vendor_repository.dart';
+import '../notifications/vendor_notifications_screen.dart';
 import 'product_archive_screen.dart';
 import 'product_detail_screen.dart';
 import 'product_form_screen.dart';
@@ -16,7 +19,8 @@ class ProductsScreen extends StatefulWidget {
   State<ProductsScreen> createState() => _ProductsScreenState();
 }
 
-class _ProductsScreenState extends State<ProductsScreen> {
+class _ProductsScreenState extends State<ProductsScreen>
+    with LiveSyncListener<ProductsScreen> {
   final TextEditingController _search = TextEditingController();
   final ScrollController _scroll = ScrollController();
 
@@ -30,6 +34,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   int _lastPage = 1;
   int _requestSerial = 0;
   bool _loadingMore = false;
+  int _notificationCount = 0;
 
   static const Map<String, String> _statusLabels = <String, String>{
     'all': 'Tous',
@@ -54,6 +59,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
     super.initState();
     _scroll.addListener(_onScroll);
     _load();
+    _loadNotifications();
+    listenLiveSync({'shop', 'notifications'}, () {
+      if (!_loadingMore) _load(clearItems: false);
+      _loadNotifications();
+    });
   }
 
   @override
@@ -62,6 +72,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
     _scroll.dispose();
     _search.dispose();
     super.dispose();
+  }
+
+  /// Nombre de notifications non lues, pour la pastille de la cloche.
+  Future<void> _loadNotifications() async {
+    try {
+      final notifications = await VendorRepository.instance.notifications(page: 1);
+      final unread = int.tryParse('${notifications['unread_count'] ?? 0}') ?? 0;
+      if (mounted) setState(() => _notificationCount = unread);
+    } catch (_) {
+      // La liste des produits reste utilisable sans la pastille.
+    }
   }
 
   void _onScroll() {
@@ -223,65 +244,68 @@ class _ProductsScreenState extends State<ProductsScreen> {
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (sheetContext) {
         final archived = '${product['status']}'.toLowerCase() == 'archived';
         final active = product['is_active'] == true || '${product['is_active']}' == '1';
-        return SafeArea(
-          top: false,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Container(
-                  width: 44,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD5DBE5),
-                    borderRadius: BorderRadius.circular(99),
+        void run(VoidCallback action) {
+          Navigator.pop(sheetContext);
+          action();
+        }
+
+        return _Sheet(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  SizedBox(
+                    width: 84,
+                    height: 84,
+                    child: ProductNetworkImage(url: _productImage(product), fit: BoxFit.cover, borderRadius: 10),
                   ),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  leading: const Icon(Icons.photo_library_outlined, color: vendorBlue),
-                  title: const Text('Gérer les images', style: TextStyle(fontWeight: FontWeight.w800)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _openImages(product);
-                  },
-                ),
-                if (!archived)
-                  ListTile(
-                    leading: Icon(active ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: vendorBlue),
-                    title: Text(
-                      active ? 'Masquer le produit' : 'Remettre le produit en ligne',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          '${product['name'] ?? 'Produit'}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Mk.navy, fontSize: 18, fontWeight: FontWeight.w800, height: 1.2),
+                        ),
+                        const SizedBox(height: 8),
+                        _StatusPill(productStatus(product)),
+                      ],
                     ),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      _toggleVisibility(product);
-                    },
                   ),
-                ListTile(
-                  leading: Icon(
-                    archived ? Icons.restore_rounded : Icons.archive_outlined,
-                    color: archived ? vendorBlue : productOrange,
-                  ),
-                  title: Text(
-                    archived ? 'Restaurer le produit' : 'Archiver le produit',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _openArchiveAction(product);
-                  },
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: _line),
+              _SheetAction(
+                icon: Icons.image_outlined,
+                label: 'Gérer les images',
+                onTap: () => run(() => _openImages(product)),
+              ),
+              if (!archived) ...<Widget>[
+                const Divider(height: 1, color: _line),
+                _SheetAction(
+                  icon: active ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  label: active ? 'Masquer le produit' : 'Remettre le produit en ligne',
+                  onTap: () => run(() => _toggleVisibility(product)),
                 ),
               ],
-            ),
+              const Divider(height: 1, color: _line),
+              _SheetAction(
+                icon: archived ? Icons.restore_rounded : Icons.inventory_2_outlined,
+                label: archived ? 'Restaurer le produit' : 'Archiver le produit',
+                color: archived ? _blue : Mk.orange,
+                onTap: () => run(() => _openArchiveAction(product)),
+              ),
+            ],
           ),
         );
       },
@@ -289,221 +313,297 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   void _selectStatus(String status) {
+    if (status == _status) return;
     setState(() => _status = status);
     _load();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Colors.white,
-      child: Stack(
-        children: <Widget>[
-          Column(
-            children: <Widget>[
-          ProductHeader(
-            title: 'Mes produits',
-            subtitle: 'Gérez votre catalogue en toute simplicité',
-            bottom: TextField(
-              controller: _search,
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => _load(),
-              style: const TextStyle(color: vendorText, fontWeight: FontWeight.w600),
-              decoration: InputDecoration(
-                hintText: 'Rechercher un produit...',
-                hintStyle: const TextStyle(color: Color(0xFF7487A7), fontSize: 15),
-                suffixIcon: IconButton(
-                  onPressed: _load,
-                  icon: const Icon(Icons.search_rounded, color: Color(0xFF061735), size: 29),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 17),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: const BorderSide(color: productOrange, width: 1.3),
-                ),
-              ),
+  /// Feuille de choix unique (tri ou filtre) : titre centré et boutons radio.
+  Future<String?> _pickOne(String title, Map<String, String> options, String selected) {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => _Sheet(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Mk.navy, fontSize: 20, fontWeight: FontWeight.w800),
             ),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () => _load(clearItems: false),
-              child: ListView(
-                controller: _scroll,
-                padding: EdgeInsets.zero,
-                children: <Widget>[
-                  Container(
-                    transform: Matrix4.translationValues(0, -1, 0),
-                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 22),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+            const SizedBox(height: 8),
+            for (final entry in options.entries) ...<Widget>[
+              if (entry.key != options.keys.first) const Divider(height: 1, color: _line),
+              Semantics(
+                inMutuallyExclusiveGroup: true,
+                checked: entry.key == selected,
+                button: true,
+                child: InkWell(
+                  onTap: () => Navigator.pop(sheetContext, entry.key),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    child: Row(
                       children: <Widget>[
-                        _filters(),
-                        const SizedBox(height: 12),
-                        _statusTabs(),
-                        const SizedBox(height: 14),
-                        _StatsRow(stats: _stats),
-                        const SizedBox(height: 18),
-                        const Text(
-                          'Liste des produits',
-                          style: TextStyle(color: vendorText, fontSize: 19, fontWeight: FontWeight.w900),
-                        ),
-                        const SizedBox(height: 10),
-                        if (_error != null) ...<Widget>[
-                          VendorErrorBox(_error),
-                          const SizedBox(height: 10),
-                        ],
-                        if (_loading)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 48),
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        else if (_items.isEmpty)
-                          _EmptyProducts(onAdd: _openAdd)
-                        else
-                          ..._items.map((raw) {
-                            final product = Map<String, dynamic>.from(raw as Map);
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: _ProductRow(
-                                product: product,
-                                onOpen: () => _openDetail(product),
-                                onEdit: () => _openEdit(product),
-                                onMore: () => _more(product),
-                              ),
-                            );
-                          }),
-                        if (_loadingMore) ...<Widget>[
-                          const SizedBox(height: 6),
-                          const Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2.4),
-                            ),
+                        Expanded(
+                          child: Text(
+                            entry.value,
+                            style: const TextStyle(color: Mk.navy, fontSize: 15.5, fontWeight: FontWeight.w600),
                           ),
-                        ],
-                        const SizedBox(height: 76),
+                        ),
+                        Icon(
+                          entry.key == selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                          color: entry.key == selected ? Mk.orange : const Color(0xFF8A95AE),
+                          size: 26,
+                        ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-            ],
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 12,
-            child: SafeArea(
-              top: false,
-              minimum: const EdgeInsets.symmetric(horizontal: 18),
-              child: Center(
-                child: FractionallySizedBox(
-                  widthFactor: .62,
-                  child: SizedBox(
-                    height: 52,
-                    child: FilledButton.icon(
-                      onPressed: _openAdd,
-                      icon: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                        child: const Icon(Icons.add_rounded, color: productOrange, size: 22),
-                      ),
-                      label: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('Ajouter un produit', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: productOrange,
-                        elevation: 4,
-                        shadowColor: const Color(0x33000000),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-                      ),
-                    ),
-                  ),
                 ),
               ),
-            ),
-          ),
-        ],
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _filters() {
-    return Row(
-      children: <Widget>[
-        Expanded(
-          child: ProductSheetSelector<String>(
-            value: _status,
-            label: 'Filtrer les produits',
-            items: _statusLabels.keys.toList(),
-            display: (value) => _statusLabels[value]!,
-            icon: Icons.filter_alt_outlined,
-            buttonText: 'Filtres',
-            onChanged: _selectStatus,
-          ),
+  Future<void> _pickSort() async {
+    final picked = await _pickOne('Trier les produits', _sortLabels, _sort);
+    if (picked == null || picked == _sort) return;
+    setState(() => _sort = picked);
+    _load();
+  }
+
+  Future<void> _pickFilter() async {
+    final picked = await _pickOne('Filtrer les produits', _statusLabels, _status);
+    if (picked != null) _selectStatus(picked);
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VendorNotificationsScreen()));
+    if (mounted) _loadNotifications();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
+    return MkTheme(
+      lightStatusBar: false,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F7FB),
+        floatingActionButton: _AddButton(onTap: _openAdd),
+        body: Column(
+          children: <Widget>[
+            ColoredBox(
+              color: Colors.white,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(16, top + 8, 6, 8),
+                    child: Row(
+                      children: <Widget>[
+                        Image.asset('assets/images/mockups/logo_navy.png', height: 34, semanticLabel: 'OVANIE Vendeur'),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: 'Notifications',
+                          onPressed: _openNotifications,
+                          icon: Badge(
+                            isLabelVisible: _notificationCount > 0,
+                            backgroundColor: Mk.orange,
+                            label: Text(_notificationCount > 99 ? '99+' : '$_notificationCount'),
+                            child: const Icon(Icons.notifications_none_rounded, color: Mk.navy, size: 28),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: _line),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 14, 16, 0),
+                    child: Text(
+                      'Mes produits',
+                      style: TextStyle(color: Mk.navy, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -.4),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 2, 16, 12),
+                    child: Text(
+                      'Gérez votre catalogue en toute simplicité',
+                      style: TextStyle(color: Mk.muted, fontSize: 13.5, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: SizedBox(
+                            height: 46,
+                            child: TextField(
+                              controller: _search,
+                              textInputAction: TextInputAction.search,
+                              onSubmitted: (_) => _load(),
+                              style: const TextStyle(fontFamily: Mk.font, color: Mk.navy, fontSize: 14.5, fontWeight: FontWeight.w600),
+                              decoration: InputDecoration(
+                                hintText: 'Rechercher un produit…',
+                                hintStyle: const TextStyle(fontFamily: Mk.font, color: Mk.hint, fontSize: 14.5, fontWeight: FontWeight.w500),
+                                prefixIcon: const Icon(Icons.search_rounded, color: Mk.icon, size: 24),
+                                filled: true,
+                                fillColor: const Color(0xFFF3F6FB),
+                                contentPadding: EdgeInsets.zero,
+                                border: _searchBorder(_line),
+                                enabledBorder: _searchBorder(_line),
+                                focusedBorder: _searchBorder(Mk.blue),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _SquareButton(icon: Icons.filter_alt_outlined, tooltip: 'Filtrer', onTap: _pickFilter),
+                        const SizedBox(width: 8),
+                        _SquareButton(icon: Icons.swap_vert_rounded, tooltip: 'Trier', onTap: _pickSort),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _statusTabs(),
+                ],
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => _load(clearItems: false),
+                color: Mk.orange,
+                child: ListView(
+                  controller: _scroll,
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+                  children: <Widget>[
+                    if (_error != null) ...<Widget>[
+                      VendorErrorBox(_error),
+                      const SizedBox(height: 10),
+                    ],
+                    if (_loading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48),
+                        child: Center(child: CircularProgressIndicator(color: Mk.orange)),
+                      )
+                    else if (_items.isEmpty)
+                      _EmptyProducts(onAdd: _openAdd)
+                    else
+                      ..._items.map((raw) {
+                        final product = Map<String, dynamic>.from(raw as Map);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _ProductCard(
+                            product: product,
+                            onOpen: () => _openDetail(product),
+                            onEdit: () => _openEdit(product),
+                            onMore: () => _more(product),
+                          ),
+                        );
+                      }),
+                    if (_loadingMore)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2.4, color: Mk.orange),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ProductSheetSelector<String>(
-            value: _sort,
-            label: 'Trier les produits',
-            items: _sortLabels.keys.toList(),
-            display: (value) => _sortLabels[value]!,
-            icon: Icons.swap_vert_rounded,
-            buttonText: 'Trier par',
-            onChanged: (value) {
-              setState(() => _sort = value);
-              _load();
-            },
-          ),
-        ),
-      ],
+      ),
     );
   }
 
+  int? _countFor(String status) {
+    final key = switch (status) {
+      'all' => 'total',
+      'active' => 'active',
+      'draft' => 'draft',
+      'out_of_stock' => 'out_of_stock',
+      'hidden' => 'hidden',
+      'archived' => 'archived',
+      _ => null,
+    };
+    if (key == null) return null;
+    return int.tryParse('${_stats[key] ?? ''}');
+  }
+
+  /// Onglets soulignés avec le nombre de produits de chaque état.
   Widget _statusTabs() {
     return SizedBox(
-      height: 43,
+      height: 46,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         itemCount: _statusLabels.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 7),
+        separatorBuilder: (_, __) => const SizedBox(width: 18),
         itemBuilder: (context, i) {
           final entry = _statusLabels.entries.elementAt(i);
           final active = _status == entry.key;
-          return InkWell(
-            onTap: () => _selectStatus(entry.key),
-            borderRadius: BorderRadius.circular(12),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: active ? productNavy : Colors.white,
-                border: Border.all(color: active ? productNavy : productBorder),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                entry.value,
-                style: TextStyle(
-                  color: active ? Colors.white : vendorText,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                ),
+          final count = _countFor(entry.key);
+          return Semantics(
+            selected: active,
+            button: true,
+            child: InkWell(
+              onTap: () => _selectStatus(entry.key),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: <Widget>[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          entry.value,
+                          style: TextStyle(
+                            color: active ? Mk.navy : Mk.muted,
+                            fontSize: 14,
+                            fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                          ),
+                        ),
+                        if (count != null) ...<Widget>[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF1F6),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Text(
+                              '$count',
+                              style: TextStyle(
+                                color: active ? Mk.navy : Mk.muted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    height: 3,
+                    width: active ? 64 : 0,
+                    decoration: BoxDecoration(color: Mk.orange, borderRadius: BorderRadius.circular(2)),
+                  ),
+                ],
               ),
             ),
           );
@@ -513,87 +613,210 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 }
 
-class _StatsRow extends StatelessWidget {
-  const _StatsRow({required this.stats});
+const _line = Color(0xFFE4E9F1);
+const _blue = Color(0xFF1668E3);
 
-  final Map<String, dynamic> stats;
+OutlineInputBorder _searchBorder(Color color) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: color, width: 1.2),
+    );
+
+/// Image d'un produit de la liste : vignette, sinon image principale.
+Object? _productImage(Map<String, dynamic> product) {
+  for (final key in const <String>['thumb_image_url', 'card_image_url', 'main_image_url', 'image_url']) {
+    final value = '${product[key] ?? ''}'.trim();
+    if (value.isNotEmpty) return value;
+  }
+  return null;
+}
+
+/// « Catégorie • Sous-catégorie » d'un produit.
+String _productCategory(Map<String, dynamic> product) {
+  String name(Object? raw) => raw is Map ? '${raw['name'] ?? ''}'.trim() : '';
+  final category = product['category'];
+  final parent = category is Map ? name(category['parent']) : '';
+  final sub = name(product['subcategory']);
+  return <String>[parent, name(category), sub].where((part) => part.isNotEmpty).toSet().join(' • ');
+}
+
+/// Unité de vente avec une majuscule (« Sac », « Pièce »).
+String _productUnit(Map<String, dynamic> product) {
+  final raw = '${product['unit_label'] ?? product['display_unit'] ?? product['unit'] ?? ''}'.trim();
+  if (raw.isEmpty) return '';
+  // Les symboles d'unité restent en minuscules : « m² », « kg », et non « M² ».
+  if (RegExp(r'^(m²|m³|m2|m3|kg|ml|g|l)').hasMatch(raw)) return raw;
+  return raw[0].toUpperCase() + raw.substring(1);
+}
+
+/// Pastille d'état d'un produit.
+class _StatusPill extends StatelessWidget {
+  const _StatusPill(this.status);
+
+  final String status;
 
   @override
   Widget build(BuildContext context) {
-    final items = <_StatData>[
-      _StatData('${stats['total'] ?? 0}', 'produits', Icons.inventory_2_rounded, const Color(0xFF179C46)),
-      _StatData('${stats['active'] ?? 0}', 'actifs', Icons.circle, const Color(0xFF179C46)),
-      _StatData('${stats['draft'] ?? 0}', 'brouillons', Icons.description_outlined, const Color(0xFFF29900)),
-      _StatData('${stats['out_of_stock'] ?? 0}', 'rupture', Icons.warning_amber_rounded, const Color(0xFFE53935)),
-    ];
+    final color = productStatusColor(status);
     return Container(
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: productBorder), borderRadius: BorderRadius.circular(14)),
-      child: Row(
-        children: List<Widget>.generate(items.length, (index) {
-          return Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                border: index == items.length - 1 ? null : const Border(right: BorderSide(color: productBorder)),
-              ),
-              child: _StatItem(data: items[index]),
-            ),
-          );
-        }),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(color: color.withValues(alpha: .13), borderRadius: BorderRadius.circular(99)),
+      child: Text(status, style: TextStyle(color: color, fontSize: 12.5, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// Bouton carré à contour (filtrer, trier).
+class _SquareButton extends StatelessWidget {
+  const _SquareButton({required this.icon, required this.tooltip, required this.onTap});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: _line, width: 1.2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(width: 46, height: 46, child: Icon(icon, color: Mk.navy, size: 24)),
+        ),
       ),
     );
   }
 }
 
-class _StatData {
-  const _StatData(this.value, this.label, this.icon, this.color);
-  final String value;
-  final String label;
-  final IconData icon;
-  final Color color;
-}
+/// Bouton flottant « Ajouter un produit ».
+class _AddButton extends StatelessWidget {
+  const _AddButton({required this.onTap});
 
-class _StatItem extends StatelessWidget {
-  const _StatItem({required this.data});
-
-  final _StatData data;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 11),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          VendorCircleIcon(
-            icon: data.icon,
-            color: data.color,
-            background: data.color.withValues(alpha: .11),
-            size: 34,
-            iconSize: 17,
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Semantics(
+      button: true,
+      label: 'Ajouter un produit',
+      excludeSemantics: true,
+      child: Material(
+        color: Mk.orange,
+        elevation: 6,
+        shadowColor: const Color(0x66FF6A00),
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 18, 8),
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(data.value, style: const TextStyle(color: vendorText, fontSize: 18, fontWeight: FontWeight.w900)),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: const Icon(Icons.add_rounded, color: Mk.orange, size: 26),
                 ),
-                Text(data.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: vendorMuted, fontSize: 10.5)),
+                const SizedBox(width: 10),
+                const Text(
+                  'Ajouter un produit',
+                  style: TextStyle(fontFamily: Mk.font, color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w700),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _ProductRow extends StatelessWidget {
-  const _ProductRow({required this.product, required this.onOpen, required this.onEdit, required this.onMore});
+/// Feuille basse blanche à coins arrondis, avec sa poignée.
+class _Sheet extends StatelessWidget {
+  const _Sheet({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return MkTheme(
+      lightStatusBar: false,
+      child: Container(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .86),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 5,
+                    decoration: BoxDecoration(color: const Color(0xFFC9CED8), borderRadius: BorderRadius.circular(3)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                child,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ligne d'action d'une feuille : pictogramme, libellé et chevron.
+class _SheetAction extends StatelessWidget {
+  const _SheetAction({required this.icon, required this.label, required this.onTap, this.color = _blue});
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final orange = color == Mk.orange;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: <Widget>[
+            Icon(icon, color: color, size: 26),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(color: orange ? Mk.orange : Mk.navy, fontSize: 15.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Mk.icon, size: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Carte d'un produit : photo, nom, catégorie, stock, prix, état et actions.
+class _ProductCard extends StatelessWidget {
+  const _ProductCard({required this.product, required this.onOpen, required this.onEdit, required this.onMore});
 
   final Map<String, dynamic> product;
   final VoidCallback onOpen;
@@ -602,92 +825,118 @@ class _ProductRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final category = product['category'] is Map ? '${(product['category'] as Map)['name'] ?? ''}' : '';
-    final subcategory = product['subcategory'] is Map ? '${(product['subcategory'] as Map)['name'] ?? ''}' : '';
+    final category = _productCategory(product);
     final status = productStatus(product);
-    final unit = '${product['unit_label'] ?? product['unit'] ?? ''}'.trim();
+    final stock = int.tryParse('${product['stock'] ?? 0}') ?? 0;
+    final unit = _productUnit(product);
+    final stockColor = stock > 0 ? Mk.navy : const Color(0xFFE02D2D);
 
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(13),
-      child: InkWell(
-        onTap: onOpen,
-        borderRadius: BorderRadius.circular(13),
-        child: Container(
-          padding: const EdgeInsets.all(9),
-          decoration: BoxDecoration(border: Border.all(color: productBorder), borderRadius: BorderRadius.circular(13)),
-          child: Row(
-            children: <Widget>[
-              SizedBox(
-                width: 78,
-                height: 68,
-                child: ProductNetworkImage(url: product['image_url'], fit: BoxFit.cover, borderRadius: 9),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      '${product['name'] ?? 'Produit'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: vendorText, fontSize: 14, fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      <String>[category, subcategory].where((e) => e.isNotEmpty).join('  •  '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: vendorMuted, fontSize: 10.5),
-                    ),
-                    const SizedBox(height: 7),
-                    Row(
-                      children: <Widget>[
-                        Flexible(
-                          child: Text(
-                            productMoney(product['promo_price'] ?? product['price']),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: productOrange, fontSize: 13.5, fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'Stock : ${product['stock'] ?? 0}${unit.isEmpty ? '' : ' $unit'}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: vendorMuted, fontSize: 10.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _line, width: 1.1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 0, 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                SizedBox(
+                  width: 84,
+                  height: 96,
+                  child: ProductNetworkImage(url: _productImage(product), fit: BoxFit.cover, borderRadius: 10),
                 ),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 112,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    ProductStatusBadge(status),
-                    const SizedBox(height: 9),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: <Widget>[
-                        _ActionIcon(icon: Icons.edit_outlined, onTap: onEdit),
-                        const SizedBox(width: 4),
-                        _ActionIcon(icon: Icons.visibility_outlined, onTap: onOpen),
-                        const SizedBox(width: 4),
-                        _ActionIcon(icon: Icons.more_vert_rounded, onTap: onMore),
-                      ],
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  '${product['name'] ?? 'Produit'}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Mk.navy, fontSize: 14.5, fontWeight: FontWeight.w800, height: 1.2),
+                                ),
+                                if (category.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 3),
+                                    child: Text(
+                                      category,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Mk.muted, fontSize: 12, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                const SizedBox(height: 4),
+                                Text.rich(
+                                  TextSpan(
+                                    text: 'Stock : $stock',
+                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                    children: <InlineSpan>[
+                                      if (unit.isNotEmpty)
+                                        TextSpan(text: ' $unit', style: const TextStyle(fontWeight: FontWeight.w500)),
+                                    ],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: stockColor, fontSize: 12.5),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                productMoney(product['promo_price'] ?? product['price']),
+                                style: const TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w800, height: 1.2),
+                              ),
+                              const SizedBox(height: 6),
+                              _StatusPill(status),
+                            ],
+                          ),
+                          SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: IconButton(
+                              tooltip: 'Plus d’actions',
+                              padding: EdgeInsets.zero,
+                              onPressed: onMore,
+                              icon: const Icon(Icons.more_vert_rounded, color: Mk.icon, size: 22),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6, right: 12),
+                        child: Divider(height: 1, color: _line),
+                      ),
+                      Row(
+                        children: <Widget>[
+                          _CardAction(icon: Icons.edit_outlined, label: 'Modifier', onTap: onEdit),
+                          Container(width: 1, height: 18, color: _line, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                          _CardAction(icon: Icons.visibility_outlined, label: 'Voir', onTap: onOpen),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -695,10 +944,11 @@ class _ProductRow extends StatelessWidget {
   }
 }
 
-class _ActionIcon extends StatelessWidget {
-  const _ActionIcon({required this.icon, required this.onTap});
+class _CardAction extends StatelessWidget {
+  const _CardAction({required this.icon, required this.label, required this.onTap});
 
   final IconData icon;
+  final String label;
   final VoidCallback onTap;
 
   @override
@@ -706,12 +956,16 @@ class _ActionIcon extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 32,
-        height: 32,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(border: Border.all(color: productBorder), borderRadius: BorderRadius.circular(8)),
-        child: Icon(icon, color: vendorText, size: 18),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, color: Mk.icon, size: 19),
+            const SizedBox(width: 7),
+            Text(label, style: const TextStyle(color: Mk.icon, fontSize: 13, fontWeight: FontWeight.w600)),
+          ],
+        ),
       ),
     );
   }
@@ -725,17 +979,29 @@ class _EmptyProducts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 38),
-      decoration: BoxDecoration(color: productSoft, borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 34),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _line, width: 1.1),
+      ),
       child: Column(
         children: <Widget>[
-          const Icon(Icons.inventory_2_outlined, size: 48, color: vendorMuted),
+          const Icon(Icons.inventory_2_outlined, size: 46, color: Mk.hint),
           const SizedBox(height: 10),
-          const Text('Aucun produit dans cette liste', style: TextStyle(color: vendorText, fontWeight: FontWeight.w900, fontSize: 16)),
+          const Text(
+            'Aucun produit dans cette liste',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Mk.navy, fontWeight: FontWeight.w800, fontSize: 16),
+          ),
           const SizedBox(height: 5),
-          const Text('Ajoutez un produit ou changez le filtre sélectionné.', textAlign: TextAlign.center, style: TextStyle(color: vendorMuted)),
-          const SizedBox(height: 14),
-          OutlinedButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: const Text('Ajouter un produit')),
+          const Text(
+            'Ajoutez un produit ou changez le filtre sélectionné.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Mk.muted, fontSize: 13.5),
+          ),
+          const SizedBox(height: 16),
+          MkOutlineButton(label: 'Ajouter un produit', icon: Icons.add_rounded, onPressed: onAdd, height: 44),
         ],
       ),
     );

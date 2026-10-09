@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Shop;
+use App\Services\AutomatedKycDocumentInspector;
 use App\Services\SellerLogisticsValidator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -53,6 +54,7 @@ class VendorShopProfileController extends Controller
 
         $validated = $request->validate([
             'direct_payment' => ['nullable', 'boolean'],
+            'payment_mode' => ['required', Rule::in([Shop::PAYMENT_POST_DELIVERY, Shop::PAYMENT_WEEKLY])],
             'mm_operator' => ['required', Rule::in(['orange', 'mtn', 'wave', 'moov'])],
             'mm_number' => ['required', 'regex:/^[0-9+ ]{8,20}$/'],
             'mm_holder' => ['required', 'string', 'max:255'],
@@ -68,6 +70,8 @@ class VendorShopProfileController extends Controller
 
         $shop->fill([
             'direct_payment' => $request->boolean('direct_payment'),
+            'payment_mode' => $validated['payment_mode'],
+            'payout_configured_at' => now(),
             'mm_operator' => $validated['mm_operator'],
             'mm_number' => $this->cleanPhone($validated['mm_number']),
             'mm_holder' => $validated['mm_holder'],
@@ -232,14 +236,14 @@ class VendorShopProfileController extends Controller
 
             return redirect()
                 ->route('vendor.shop.documents')
-                ->with('success', 'Le document a été envoyé. Le dossier sera revérifié par OVANIE.');
+                ->with('success', 'Le fichier a passé les contrôles automatiques. Le statut du dossier a été mis à jour.');
         }
 
         $this->updateLegacyDocumentBatch($request, $shop);
 
         return redirect()
             ->route('vendor.shop.documents')
-            ->with('success', 'Vos documents ont été mis à jour. Le dossier sera revérifié par OVANIE.');
+            ->with('success', 'Les fichiers ont passé les contrôles automatiques. Le statut du dossier a été mis à jour.');
     }
 
     /**
@@ -288,6 +292,8 @@ class VendorShopProfileController extends Controller
             ]);
         }
 
+        $this->inspectProfileUploads($request, $type);
+
         DB::transaction(function () use ($request, $shop, $type) {
             if ($type === 'rccm') {
                 $this->deleteLocalFile($shop->rccm_file);
@@ -328,7 +334,7 @@ class VendorShopProfileController extends Controller
 
             // Une mise à jour documentaire relance uniquement la vérification KYC.
             // Elle ne doit pas fermer la boutique commercialement.
-            $shop->kyc_status = Shop::KYC_PENDING;
+            $shop->kyc_status = $this->automaticDocumentStatus($shop);
             $shop->save();
         });
     }
@@ -368,6 +374,8 @@ class VendorShopProfileController extends Controller
         }
 
         $request->validate($rules);
+
+        $this->inspectProfileUploads($request);
 
         DB::transaction(function () use ($request, $shop, $mode) {
             $shop->identity_upload_mode = $mode;
@@ -415,14 +423,57 @@ class VendorShopProfileController extends Controller
                 $shop->tax_file = $request->file('tax_file')->store('kyc/company', 'local');
             }
 
-            $shop->kyc_status = Shop::KYC_PENDING;
+            $shop->kyc_status = $this->automaticDocumentStatus($shop);
             $shop->save();
         });
     }
 
+    private function inspectProfileUploads(Request $request, ?string $singleType = null): void
+    {
+        $fields = [
+            'selfie' => 'selfie',
+            'identity_file' => 'identityFile',
+            'identity_file_front' => 'identityFileFront',
+            'identity_file_back' => 'identityFileBack',
+            'rccm_file' => 'rccmFile',
+            'tax_file' => 'taxFile',
+        ];
+        if ($singleType !== null && $request->hasFile('document_file')) {
+            $target = match ($singleType) {
+                'selfie' => 'selfie',
+                'identity_pdf' => 'identityFile',
+                'rccm' => 'rccmFile',
+                'tax' => 'taxFile',
+                default => null,
+            };
+            if ($target !== null) {
+                $request->files->set($target, $request->file('document_file'));
+            }
+        }
+        foreach ($fields as $source => $target) {
+            if ($request->hasFile($source)) {
+                $request->files->set($target, $request->file($source));
+            }
+        }
+        app(AutomatedKycDocumentInspector::class)->inspect($request);
+    }
+
+    private function automaticDocumentStatus(Shop $shop): string
+    {
+        $identityReady = filled($shop->selfie)
+            && (filled($shop->identity_file)
+                || (filled($shop->identity_file_front) && filled($shop->identity_file_back)));
+        $companyReady = $shop->seller_type !== 'entreprise'
+            || (filled($shop->rccm_file) && filled($shop->tax_file));
+
+        return $identityReady && $companyReady
+            ? Shop::KYC_AUTOMATED_CHECKED
+            : Shop::KYC_PENDING;
+    }
+
     private function vendorRoutePrefix(): string
     {
-        return request()->routeIs('daniel.*') ? 'daniel' : 'vendor';
+        return 'vendor';
     }
 
     private function currentShop(): Shop

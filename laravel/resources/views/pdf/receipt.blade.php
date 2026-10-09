@@ -105,7 +105,7 @@
                 <table class="delivery-head">
                     <tr>
                         <td class="delivery-no">{{ $group['number'] }}</td>
-                        <td class="delivery-name"><strong>{{ $group['label'] }}</strong><span>{{ $group['item_count'] }} article(s) · {{ $group['line_count'] }} référence(s)</span></td>
+                        <td class="delivery-name"><strong>{{ $group['label'] }}</strong><span>{{ $group['item_count'] }} {{ ($group['item_count']) > 1 ? 'articles' : 'article' }} · {{ $group['line_count'] }} {{ ($group['line_count']) > 1 ? 'références' : 'référence' }}</span></td>
                         <td class="delivery-status">{{ $group['status_label'] }}</td>
                     </tr>
                 </table>
@@ -137,7 +137,7 @@
         <table class="total-table"><tr><td>Montant total de la commande</td><td>{{ number_format($financialSummary['display_total'], 0, ',', ' ') }} FCFA</td></tr></table>
     </div>
 
-    <div class="footer">Merci pour votre confiance. Assistance OVANIE : 01 61 78 18 18.</div>
+    <div class="footer">Merci pour votre confiance. Assistance OVANIE : {{ config('public_contact.phone_display') }}.</div>
 </div>
 </body>
 </html>

@@ -117,6 +117,23 @@ String cleanOvanieText(String? raw, {String fallbackSlug = ''}) {
   return value;
 }
 
+/// Texte libre (messages, notifications, support) : corrige l'encodage mais
+/// garde la ponctuation et les paragraphes, et retire le gras Markdown.
+String cleanMessageText(String? raw) {
+  if (raw == null) return '';
+  var value = raw.trim();
+  const replacements = <String, String>{
+    'Ã©': 'é', 'Ã¨': 'è', 'Ãª': 'ê', 'Ã ': 'à', 'Ã¢': 'â', 'Ã´': 'ô',
+    'Ã®': 'î', 'Ã¯': 'ï', 'Ã§': 'ç', 'Ã‰': 'É', 'â€™': '’', 'â€“': '–',
+    'â€”': '—', 'Å“': 'œ',
+  };
+  replacements.forEach((from, to) => value = value.replaceAll(from, to));
+  value = value.replaceAllMapped(RegExp(r'\*\*(.+?)\*\*'), (m) => m.group(1)!);
+  value = value.replaceAll(RegExp(r'[ \t]+'), ' ');
+  value = value.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+  return value.trim();
+}
+
 String _titleFromSlug(String slug) {
   final value = slug.trim();
   if (value.isEmpty) return '';

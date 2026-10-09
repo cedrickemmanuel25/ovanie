@@ -514,7 +514,7 @@ class VendorOrderController extends Controller
                 $items->first()->refresh(),
                 'delivered',
                 'Livraison effectuée',
-                'Cette livraison a été remise. Vérifiez les articles reçus puis confirmez la réception depuis votre espace client.'
+                'Votre livraison a été remise. Un problème avec un article ? Signalez-le sous 48 h depuis votre espace client.'
             );
 
             $lockedOrder->refreshGlobalStatusFromItems();
@@ -733,7 +733,7 @@ class VendorOrderController extends Controller
             $sellerTrackingSession && ! $whatsappSent ? 'warning' : 'success',
             match (true) {
                 ! $sellerTrackingSession => 'Le colis est prêt et visible dans l’espace OVANIE Logistics pour enlèvement.',
-                $whatsappSent => 'Chauffeur planifié. Le lien de mission a été transmis par WhatsApp. La livraison passera en cours uniquement lorsque le chauffeur la démarrera depuis son téléphone.',
+                $whatsappSent => 'Chauffeur planifié. Le lien de mission lui a été envoyé par WhatsApp : dès qu’il quitte la boutique, le client est informé et suit la livraison.',
                 default => 'Chauffeur planifié, mais WhatsApp n’est pas encore configuré ou l’envoi a échoué. Copiez le lien de mission depuis le suivi vendeur et transmettez-le manuellement au chauffeur.',
             }
         );

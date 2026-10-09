@@ -12,28 +12,42 @@ class SmsManager
             return false;
         }
 
-        // format numéro CI
-        $phone = self::formatPhone($phone);
-
-        $driver = config('sms.default');
-
-        switch ($driver) {
-            case 'allmysms':
-                return (new AllMySmsDriver())->send($phone, $message);
-
-            default:
-                throw new \Exception("Driver SMS non supporté");
+        $phone = self::formatPhone((string) $phone);
+        if (! $phone) {
+            return false;
         }
+
+        return match (config('sms.default')) {
+            'allmysms' => (new AllMySmsDriver())->send($phone, $message),
+            default => throw new \Exception('Driver SMS non supporté'),
+        };
     }
 
-    protected static function formatPhone($phone)
+    /**
+     * Préserve un numéro déjà international (+221, +225, +33, …).
+     * Le préfixe +225 n'est appliqué qu'à un numéro réellement local.
+     */
+    protected static function formatPhone(string $phone): ?string
     {
-        $phone = preg_replace('/\D/', '', $phone);
-
-        if (str_starts_with($phone, '225')) {
-            return '+' . $phone;
+        $raw = trim($phone);
+        $digits = preg_replace('/\D+/', '', $raw) ?: '';
+        if ($digits === '') {
+            return null;
         }
 
-        return '+225' . ltrim($phone, '0');
+        if (str_starts_with($raw, '+')) {
+            return '+' . $digits;
+        }
+
+        if (str_starts_with($raw, '00') && strlen($digits) > 2) {
+            return '+' . substr($digits, 2);
+        }
+
+        // Les numéros déjà stockés avec l'indicatif CI sans « + » restent inchangés.
+        if (str_starts_with($digits, '225') && strlen($digits) >= 11) {
+            return '+' . $digits;
+        }
+
+        return '+225' . $digits;
     }
 }

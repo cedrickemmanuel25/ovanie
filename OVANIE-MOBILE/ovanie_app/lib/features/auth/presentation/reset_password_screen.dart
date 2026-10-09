@@ -149,133 +149,66 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          OvanieAuthTitleBlock(
-            title: 'Réinitialiser le mot de passe',
-            subtitle:
-                'Choisissez un nouveau mot de passe sécurisé\npour votre compte.',
+          OvanieAuthHeader(
+            icon: Icons.password_rounded,
+            title: 'Nouveau mot de passe',
+            subtitle: 'Choisissez un mot de passe d’au moins 8 caractères.',
             onBack: () => Navigator.of(context).maybePop(),
           ),
-          const SizedBox(height: 16),
-          const Center(child: OvanieRecoveryHeroIcon(reset: true)),
-          const SizedBox(height: 12),
-          const Text(
-            'Nouveau mot de passe',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: authNavy,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Votre nouveau mot de passe doit être\ndifférent des précédents.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: authMuted,
-              fontSize: 13,
-              height: 1.45,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 24),
           OvanieAuthCard(
-            padding: const EdgeInsets.fromLTRB(22, 22, 22, 25),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Créer un nouveau mot de passe',
-                  style: TextStyle(
-                    color: authNavy,
-                    fontSize: 18.5,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
                 if (_error != null) ...[
-                  const SizedBox(height: 13),
                   OvanieAuthMessage(message: _error!),
+                  const SizedBox(height: 14),
                 ],
-                const SizedBox(height: 19),
-                TextFormField(
+                OvanieAuthField(
                   initialValue: widget.email,
                   readOnly: true,
+                  hint: 'Adresse e-mail',
+                  icon: Icons.mail_outline_rounded,
                   keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(
-                    color: authNavy,
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Adresse e-mail',
-                    prefixIcon: const Icon(Icons.mail_outline_rounded, color: authNavy),
-                    filled: true,
-                    fillColor: authFieldFill,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(11),
-                      borderSide: const BorderSide(color: authBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(11),
-                      borderSide: const BorderSide(color: authNavy, width: 1.25),
-                    ),
-                  ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 OvanieAuthField(
                   controller: _password,
                   hint: 'Nouveau mot de passe',
                   icon: Icons.lock_outline_rounded,
                   obscureText: !_showPassword,
                   textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.newPassword],
                   enabled: !_busy,
-                  suffix: IconButton(
+                  suffix: OvaniePasswordToggle(
+                    visible: _showPassword,
                     onPressed: _busy
                         ? null
                         : () => setState(() => _showPassword = !_showPassword),
-                    icon: Icon(
-                      _showPassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      color: const Color(0xFF818AA2),
-                      size: 23,
-                    ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 OvanieAuthField(
                   controller: _confirmation,
                   hint: 'Confirmer le mot de passe',
                   icon: Icons.lock_outline_rounded,
                   obscureText: !_showConfirmation,
                   textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.newPassword],
                   enabled: !_busy,
                   onSubmitted: (_) => _submit(),
-                  suffix: IconButton(
+                  suffix: OvaniePasswordToggle(
+                    visible: _showConfirmation,
                     onPressed: _busy
                         ? null
-                        : () => setState(
-                              () => _showConfirmation = !_showConfirmation,
-                            ),
-                    icon: Icon(
-                      _showConfirmation
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      color: const Color(0xFF818AA2),
-                      size: 23,
-                    ),
+                        : () => setState(() => _showConfirmation = !_showConfirmation),
                   ),
                 ),
                 if (_passwordsMatch) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   const Row(
                     children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        color: Color(0xFF15934E),
-                        size: 18,
-                      ),
+                      Icon(Icons.check_circle_rounded, color: Color(0xFF15934E), size: 18),
                       SizedBox(width: 8),
                       Text(
                         'Les mots de passe correspondent',
@@ -288,9 +221,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     ],
                   ),
                 ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 OvaniePrimaryButton(
-                  label: 'Réinitialiser le mot de passe',
+                  label: 'Enregistrer le mot de passe',
                   loading: _busy,
                   onPressed: _submit,
                 ),

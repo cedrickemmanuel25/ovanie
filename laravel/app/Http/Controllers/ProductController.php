@@ -125,7 +125,7 @@ class ProductController extends Controller
             'category' => $category,
             'categories' => $this->getCatalogFilterCategories(),
             'offerStats' => $this->getCatalogOfferStats(),
-        ]);
+        ] + $this->catalogInitialPage($request, $category));
     }
 
     public function categoryPage(Request $request, string $category)
@@ -171,7 +171,7 @@ class ProductController extends Controller
                 'categoryRecord' => $categoryRecord,
                 'categories' => $this->getCatalogFilterCategories(),
                 'offerStats' => $this->getCatalogOfferStats(),
-            ]);
+            ] + $this->catalogInitialPage($request, $legacySlugs[$category]));
         }
 
         // Demande utilisateur : toute catégorie créée dans l'admin doit avoir
@@ -191,7 +191,7 @@ class ProductController extends Controller
             'categoryRecord' => $categoryRecord,
             'categories' => $this->getCatalogFilterCategories(),
             'offerStats' => $this->getCatalogOfferStats(),
-        ]);
+        ] + $this->catalogInitialPage($request, $categoryRecord->slug));
     }
 
     public function curatedPage(Request $request, string $selection)
@@ -1090,6 +1090,30 @@ class ProductController extends Controller
         return ovanie_category_label($name, $slug);
     }
 
+    /**
+     * Première page de produits rendue directement dans le HTML du catalogue : les robots et les
+     * connexions lentes voient les références sans attendre le JavaScript, qui prend ensuite le relais.
+     */
+    private function catalogInitialPage(Request $request, ?string $category = null): array
+    {
+        try {
+            $query = $this->buildCatalogQuery($request, $category);
+            $this->applyCatalogSorting($query, $request->query('sort', 'popular'), $request);
+            $page = $query->paginate($this->safePerPage($request->query('per_page')))->appends($request->query());
+
+            return [
+                'initialProducts' => $page->getCollection()->map(fn ($p) => $this->serializeProduct($p))->values()->all(),
+                'initialTotal' => $page->total(),
+                'initialPrevUrl' => $page->previousPageUrl(),
+                'initialNextUrl' => $page->nextPageUrl(),
+            ];
+        } catch (\Throwable $e) {
+            report($e);
+
+            return ['initialProducts' => [], 'initialTotal' => null, 'initialPrevUrl' => null, 'initialNextUrl' => null];
+        }
+    }
+
     private function getCatalogOfferStats()
     {
         if (!Schema::hasTable('products')) {
@@ -1306,6 +1330,7 @@ class ProductController extends Controller
 
         $product->load([
             'images',
+            'variants',
             'category.parent',
             'reviews' => fn ($query) => $query->with('user:id,name')->latest()->limit(4),
         ]);
@@ -1536,6 +1561,7 @@ class ProductController extends Controller
         $cart = Cart::where('user_id', $request->user()->id)->first();
         if ($cart) {
             $cart->items()->delete();
+            \App\Support\LiveSync::touchUser((int) $cart->user_id, 'cart');
         }
         return redirect()->route('cart.index')->with('success', 'Panier vidé');
     }

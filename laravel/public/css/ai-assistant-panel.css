@@ -353,3 +353,22 @@
 @media (max-width: 560px) {
     .ovai-panel { width: 100vw; max-width: 100vw; }
 }
+
+/* Fiches produits proposées par l'assistante. */
+.ovai-products { display: grid; gap: 10px; margin: 4px 0 12px; }
+.ovai-product { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px 12px; padding: 10px; background: #fff; border: 1px solid #e1e8f2; border-radius: 12px; }
+.ovai-product img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: #f1f5f9; }
+.ovai-product__info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ovai-product__name { color: #0b1f44; font-weight: 700; font-size: 14px; line-height: 1.3; text-decoration: none; overflow-wrap: anywhere; }
+.ovai-product__meta { color: #64748b; font-size: 12px; }
+.ovai-product__price { color: #e85400; font-size: 15px; }
+.ovai-product__actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.ovai-product__actions .ovai-btn { flex: 1 1 130px; text-align: center; text-decoration: none; }
+.ovai-product__actions .ovai-btn.is-done { background: #12805c; border-color: #12805c; color: #fff; }
+.ovai-product__out { color: #b42318; font-size: 13px; font-weight: 600; align-self: center; }
+.ovai-cart-note a { color: #0759c7; font-weight: 700; }
+
+/* Accès à l'assistante depuis le menu mobile. */
+.ov-category-drawer__item--ai { width: 100%; border: 0; background: #eef4ff; border-radius: 12px; font: inherit; text-align: left; cursor: pointer; }
+.ov-category-drawer__item--ai img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+.ov-category-drawer__item--ai small { display: block; color: #64748b; font-weight: 500; font-size: 12px; }

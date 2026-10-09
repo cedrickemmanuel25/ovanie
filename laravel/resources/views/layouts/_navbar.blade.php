@@ -5,9 +5,10 @@
     $_catalogUrl = Route::has('catalog.index') ? route('catalog.index') : url('/catalog');
     $_searchUrl = Route::has('search') ? route('search') : $_catalogUrl;
     $_loginUrl = Route::has('login') ? route('login') : url('/login');
-    $_accountUrl = auth()->check()
-        ? (Route::has('client.dashboard') ? route('client.dashboard') : $_homeUrl)
-        : $_loginUrl;
+    // Espace du compte connecté : client, vendeur, équipe interne ou livreur.
+    $_space = \App\Support\AccountSpace::current();
+    $_isClientSpace = ! $_space || $_space['key'] === 'client';
+    $_accountUrl = $_space ? $_space['url'] : $_loginUrl;
     $_favoriteUrl = auth()->check() && Route::has('client.favorites')
         ? route('client.favorites')
         : $_loginUrl;
@@ -20,7 +21,7 @@
     $_guaranteeUrl = Route::has('buyer.guarantee') ? route('buyer.guarantee') : url('/garantie-acheteur');
     $_vendorTermsUrl = Route::has('vendor.terms') ? route('vendor.terms') : url('/conditions-vendeurs');
     $_registerUrl = Route::has('register') ? route('register') : url('/register');
-    $_dashboardUrl = auth()->check() && Route::has('client.dashboard') ? route('client.dashboard') : $_loginUrl;
+    $_dashboardUrl = $_space ? $_space['url'] : $_loginUrl;
     $_ordersUrl = auth()->check() && Route::has('client.orders') ? route('client.orders') : $_loginUrl;
     $_returnsUrl = auth()->check() && Route::has('client.returns') ? route('client.returns') : $_loginUrl;
     $_disputesUrl = auth()->check() && Route::has('problem.report') ? route('problem.report', ['type' => 'litige']) : $_loginUrl;
@@ -28,12 +29,18 @@
     $_helpUrl = Route::has('help.center') ? route('help.center') : url('/centre-aide');
     $_faqUrl = Route::has('faq') ? route('faq') : url('/faq');
     $_aboutUrl = Route::has('about') ? route('about') : url('/qui-sommes-nous');
-    $_logoutUrl = Route::has('logout') ? route('logout') : url('/logout');
+    // Déconnexion de l'espace réellement connecté.
+    $_logoutRoute = match ($_space['key'] ?? 'client') {
+        'admin', 'logistique', 'support', 'commercial' => \Illuminate\Support\Facades\Auth::guard('admin')->check() ? 'admin.logout' : 'logout',
+        'livreur' => 'driver.logout',
+        default => 'logout',
+    };
+    $_logoutUrl = Route::has($_logoutRoute) ? route($_logoutRoute) : url('/logout');
     $_cartCount = (int) ($cartCount ?? 0);
     $_currentUser = auth()->user();
-    $_clientName = $_currentUser
+    $_clientName = $_space['name'] ?? ($_currentUser
         ? (trim((string) ($_currentUser->first_name ?? '')) ?: trim((string) ($_currentUser->name ?? 'Client')))
-        : '';
+        : '');
     $_greeting = now('Africa/Abidjan')->hour >= 18 ? 'Bonsoir' : 'Bonjour';
     $_publicPhone = (string) config('public_contact.phone_display', '01 61 78 00 00');
     $_publicPhoneHref = (string) config('public_contact.phone_e164', '+2250161780000');
@@ -96,31 +103,39 @@
                 <div class="ovn-account" data-account-menu>
                     <button type="button" class="ovn-header__action ovn-account__trigger" aria-expanded="false" aria-controls="ovn-account-panel">
                         <span class="ovn-account__label">
-                            @auth
+                            @if($_space)
                                 <small>{{ $_greeting }},</small><strong>{{ $_clientName }}</strong>
                             @else
                                 <small>Bonjour,</small><strong>identifiez-vous</strong>
-                            @endauth
+                            @endif
                         </span>
                         <svg class="ovn-account__chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>
                     </button>
                     <div id="ovn-account-panel" class="ovn-account__panel" role="dialog" aria-label="Menu du compte">
-                        @auth
+                        @if($_space)
                             <div class="ovn-account__heading">
                                 <span class="ovn-account__avatar">{{ mb_strtoupper(mb_substr($_clientName, 0, 1)) }}</span>
-                                <div><small>{{ $_greeting }}, {{ $_clientName }}</small><h3>Mon compte OVANIE</h3></div>
+                                <div><small>{{ $_greeting }}, {{ $_clientName }}</small><h3>{{ $_space['label'] }}</h3></div>
                             </div>
+                            @if($_isClientSpace)
                             <p>Gérez votre profil, vos commandes et votre activité sur OVANIE.</p>
+                            @else
+                            <p>Vous êtes connecté à votre {{ mb_strtolower($_space['label']) }}.</p>
+                            @endif
                             <a class="ovn-account__primary" href="{{ $_dashboardUrl }}">Mon tableau de bord <span>→</span></a>
+                            @if($_isClientSpace)
                             <div class="ovn-account__links">
                                 <a href="{{ $_ordersUrl }}">Mes commandes <span>→</span></a>
                                 <a href="{{ $_favoriteUrl }}">Mes favoris <span>→</span></a>
                                 <a href="{{ $_disputesUrl }}">Litiges <span>→</span></a>
                                 <a href="{{ $_returnsUrl }}">Retours et remboursements <span>→</span></a>
                             </div>
+                            @endif
                             <div class="ovn-account__utilities">
+                                @if($_isClientSpace)
                                 <a href="{{ $_cartUrl }}">Mon panier</a>
                                 <a href="{{ $_trackingUrl }}">Suivre une commande</a>
+                                @endif
                                 <a href="{{ $_helpUrl }}">Besoin d’aide ?</a>
                             </div>
                             <form method="POST" action="{{ $_logoutUrl }}" class="ovn-account__logout">
@@ -136,7 +151,7 @@
                                 <a href="{{ $_trackingUrl }}">Suivre une commande</a>
                                 <a href="{{ $_giftCardsUrl }}">Cartes OVANIE</a>
                                             </div>
-                        @endauth
+                        @endif
                     </div>
                 </div>
 
@@ -145,7 +160,7 @@
                     <span>Favoris</span>
                 </a>
 
-                <a href="{{ $_cartUrl }}" class="ovn-header__action ovn-header__cart ovn-cart-link" aria-label="Panier, {{ $_cartCount }} article(s)">
+                <a href="{{ $_cartUrl }}" class="ovn-header__action ovn-header__cart ovn-cart-link" aria-label="Panier, {{ $_cartCount }} {{ ($_cartCount) > 1 ? 'articles' : 'article' }}">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L21 7H6"></path></svg>
                     <b data-cart-count data-count="{{ $_cartCount }}">{{ $_cartCount }}</b>
                 </a>

@@ -203,7 +203,7 @@ class SupportAiOrchestrator
                         $scopes,
                     );
                     $authorizedContext = $this->authorizer->authorize($conversation, $rawContext);
-                    $authorizedContext = $this->restoreConversationFlags($authorizedContext, $memory);
+                    $authorizedContext = $this->restoreConversationFlags($authorizedContext, $memory, $hasPriorVisibleReply);
                     $authorizedContext['current_turn'] = $turnState;
 
                     continue;
@@ -547,7 +547,7 @@ class SupportAiOrchestrator
         ?User $requester,
     ): SupportConversationMessage {
         $agent = $this->router->selectByRole('general');
-        $welcome = 'Bienvenue sur le Support OVANIE 👋 Je suis N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.';
+        $welcome = 'Bienvenue sur le Support OVANIE 👋 Je suis Miss N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.';
 
         $turnState = [
             'intent' => 'welcome',
@@ -702,7 +702,7 @@ class SupportAiOrchestrator
     private function removeRepeatedOpening(string $body): string
     {
         $original = trim($body);
-        $standardWelcome = 'Bienvenue sur le Support OVANIE 👋 Je suis N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.';
+        $standardWelcome = 'Bienvenue sur le Support OVANIE 👋 Je suis Miss N’Nan. Dites-moi simplement ce dont vous avez besoin, et je vous aiderai.';
         $clean = str_starts_with($original, $standardWelcome)
             ? trim(mb_substr($original, mb_strlen($standardWelcome)))
             : $original;
@@ -762,7 +762,7 @@ class SupportAiOrchestrator
         foreach ($otherAgentNames as $name) {
             $body = preg_replace(
                 '/\bje\s+suis\s+'.preg_quote($name, '/').'\b/iu',
-                'Je suis N’Nan',
+                'Je suis Miss N’Nan',
                 $body,
             ) ?? $body;
         }
@@ -1158,7 +1158,7 @@ class SupportAiOrchestrator
 
     private function appendHumanEscalationMessage(string $body): string
     {
-        $phone = trim((string) config('support_ai.human_escalation_phone', '01 61 78 18 18')) ?: '01 61 78 18 18';
+        $phone = trim((string) config('support_ai.human_escalation_phone', '01 61 78 00 00')) ?: '01 61 78 00 00';
         $notice = trim((string) config('support_ai.local_rate_notice', 'appel facturé au tarif local'));
 
         $suffix = 'Je transmets votre dossier à un superviseur pour une prise en charge humaine. '

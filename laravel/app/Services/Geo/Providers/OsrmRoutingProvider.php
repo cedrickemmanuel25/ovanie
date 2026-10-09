@@ -14,11 +14,17 @@ class OsrmRoutingProvider implements RoutingProviderInterface
             return ['success' => false, 'provider' => 'osrm', 'message' => 'OSRM non configuré.'];
         }
 
+        // Service récemment injoignable : on passe directement au suivant.
+        if (\Illuminate\Support\Facades\Cache::has('geo.routing.down.osrm')) {
+            return ['success' => false, 'provider' => 'osrm', 'message' => 'Service momentanément indisponible.'];
+        }
+
         try {
             $response = Http::acceptJson()
+                ->connectTimeout(4)
                 ->withoutVerifying()
                 ->timeout((int) config('geo.routing_timeout_seconds', 15))
-                ->retry(1, 250)
+                ->retry(1, 250, fn ($e) => ! $e instanceof \Illuminate\Http\Client\ConnectionException)
                 ->get(
                     $baseUrl . "/route/v1/driving/{$fromLng},{$fromLat};{$toLng},{$toLat}",
                     [
@@ -29,7 +35,10 @@ class OsrmRoutingProvider implements RoutingProviderInterface
                         'continue_straight' => 'true',
                     ]
                 );
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Http\Client\ConnectionException) {
+                \Illuminate\Support\Facades\Cache::put('geo.routing.down.osrm', true, now()->addMinutes(2));
+            }
             return ['success' => false, 'provider' => 'osrm', 'message' => 'Service itinéraire indisponible.'];
         }
 

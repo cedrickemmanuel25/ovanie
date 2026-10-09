@@ -84,7 +84,7 @@ class _ResumePaymentScreenState extends State<ResumePaymentScreen> {
       }
       setState(() {
         _message =
-            'Paiement lancé. OVANIE vérifie maintenant sa validation auprès du serveur.';
+            'Paiement lancé. Nous vérifions sa confirmation.';
         _busy = false;
       });
       _startPolling();

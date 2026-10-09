@@ -15,7 +15,7 @@
 <div class="internal-auth-shell">
     <div class="internal-auth-brand">
         <a href="{{ route('home') }}" class="internal-auth-logo" aria-label="Retour à OVANIE">
-            <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE">
+            <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE">
         </a>
         <div class="internal-auth-brand-copy">
             <span>Portail sécurisé</span>
@@ -56,5 +56,6 @@
 
 @yield('scripts')
 @stack('scripts')
+@include('layouts.partials.live-sync')
 </body>
 </html>

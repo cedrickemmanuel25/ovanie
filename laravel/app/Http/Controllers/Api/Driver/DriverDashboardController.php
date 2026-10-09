@@ -19,6 +19,7 @@ class DriverDashboardController
         /** @var DeliveryDriver|null $driver */
         $driver = $request->user();
         abort_unless($driver instanceof DeliveryDriver, 401);
+        app(\App\Services\LogisticsShipmentWorkflowService::class)->offerOpenMissionsToDriverThrottled($driver);
 
         // La Flotte est la source prioritaire pour le véhicule affiché dans l'app.
         // Si une ancienne fiche n'a pas encore de couleur, le service l'extrait une

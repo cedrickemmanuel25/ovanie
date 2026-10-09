@@ -107,6 +107,9 @@ class MobileOrder {
 
   bool get isClosed => const {'delivered', 'cancelled', 'returned'}.contains(clientBucket);
 
+  /// Le suivi n'a plus de sens une fois la commande livrée ou clôturée.
+  bool get canTrackDelivery => actions.canTrack && !isClosed && deliveredAt == null;
+
   String get destinationLabel {
     final values = [quartier, commune, city, address]
         .where((value) => value.trim().isNotEmpty)
@@ -117,6 +120,9 @@ class MobileOrder {
   factory MobileOrder.fromJson(Map<String, dynamic> json) {
     Map<String, dynamic> map(dynamic value) =>
         value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+    final variant = json['variant'] is Map
+        ? Map<String, dynamic>.from(json['variant'] as Map)
+        : <String, dynamic>{};
     double amount(dynamic value) {
       if (value is num) return value.toDouble();
       return double.tryParse('${value ?? ''}') ?? 0;
@@ -230,6 +236,7 @@ class MobileOrderItem {
   final int? productId;
   final String productName;
   final String imageUrl;
+  final String variantLabel;
   final int quantity;
   final double unitPrice;
   final double subtotal;
@@ -244,6 +251,7 @@ class MobileOrderItem {
     required this.productId,
     required this.productName,
     required this.imageUrl,
+    required this.variantLabel,
     required this.quantity,
     required this.unitPrice,
     required this.subtotal,
@@ -258,6 +266,9 @@ class MobileOrderItem {
     final product = json['product'] is Map
         ? Map<String, dynamic>.from(json['product'] as Map)
         : <String, dynamic>{};
+    final variant = json['variant'] is Map
+        ? Map<String, dynamic>.from(json['variant'] as Map)
+        : <String, dynamic>{};
     double amount(dynamic value) {
       if (value is num) return value.toDouble();
       return double.tryParse('${value ?? ''}') ?? 0;
@@ -267,7 +278,8 @@ class MobileOrderItem {
       id: int.tryParse('${json['id'] ?? ''}') ?? 0,
       productId: int.tryParse('${product['id'] ?? ''}'),
       productName: cleanOvanieText((product['name'] ?? 'Produit OVANIE').toString()),
-      imageUrl: (product['main_image_url'] ?? '').toString().trim(),
+      imageUrl: (variant['image_url'] ?? product['main_image_url'] ?? '').toString().trim(),
+      variantLabel: cleanOvanieText((variant['label'] ?? '').toString()),
       quantity: int.tryParse('${json['quantity'] ?? ''}') ?? 0,
       unitPrice: amount(json['unit_price']),
       subtotal: amount(json['subtotal']),
@@ -301,7 +313,7 @@ class OrderTimelineEvent {
     final rawDate = (json['date'] ?? '').toString().trim();
     return OrderTimelineEvent(
       label: cleanOvanieText((json['label'] ?? 'Mise à jour').toString()),
-      message: cleanOvanieText((json['message'] ?? '').toString()),
+      message: cleanMessageText((json['message'] ?? '').toString()),
       date: rawDate.isEmpty ? null : DateTime.tryParse(rawDate)?.toLocal(),
       type: (json['type'] ?? '').toString().trim().toLowerCase(),
       state: (json['state'] ?? '').toString().trim().toLowerCase(),

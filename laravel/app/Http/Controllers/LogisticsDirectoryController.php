@@ -172,7 +172,24 @@ class LogisticsDirectoryController extends Controller
             'zones' => AbidjanCommune::where('is_active', true)->orderBy('name')->get(),
             'interventionZoneCommunes' => $interventionZoneCommunes,
             'interventionZonePoints' => $interventionZonePoints,
+            'earnings' => [
+                'cash_due' => app(\App\Services\DriverPayoutService::class)->cashDue($driver),
+                'cash_limit' => (float) config('driver_payouts.cash_limit', 50000),
+                'paid_total' => (float) \App\Models\DriverPayout::where('driver_id', $driver->id)->where('status', \App\Models\DriverPayout::STATUS_PAID)->sum('transfer_amount'),
+                'recent' => \App\Models\DriverPayout::where('driver_id', $driver->id)->latest('id')->limit(5)->get(),
+                'account' => app(\App\Services\DriverPayoutService::class)->account($driver),
+            ],
         ]);
+    }
+
+    /** La Logistique confirme avoir reçu les espèces encaissées par le livreur. */
+    public function settleDriverCash(Request $request, DeliveryDriver $driver)
+    {
+        $amount = app(\App\Services\DriverPayoutService::class)->settleCash($driver, $request->user('admin')?->id);
+
+        return back()->with('success', $amount > 0
+            ? 'Dépôt de '.number_format($amount, 0, ',', ' ').' F enregistré. Le livreur peut de nouveau recevoir des missions.'
+            : 'Aucune somme en espèces n’était due par ce livreur.');
     }
 
     /**
@@ -183,16 +200,36 @@ class LogisticsDirectoryController extends Controller
      */
     public function storeDriver(Request $request)
     {
+        // Le numéro sert d'identifiant dans l'application livreur : il est ramené à sa forme
+        // locale à 10 chiffres pour que « +225 07 01 02 03 04 » et « 0701020304 » ne fassent qu'un.
+        $digits = preg_replace('/\D+/', '', (string) $request->input('phone')) ?? '';
+        if (strlen($digits) === 13 && str_starts_with($digits, '225')) {
+            $digits = substr($digits, 3);
+        }
+        if ($digits !== '') {
+            $request->merge(['phone' => $digits]);
+        }
+
         $data = $request->validate([
             'last_name' => 'required|string|max:120',
             'first_name' => 'required|string|max:120',
-            'phone' => ['required', 'string', 'max:30', Rule::unique('delivery_drivers', 'phone')],
+            'phone' => ['required', 'string', 'regex:/^0\d{9}$/', Rule::unique('delivery_drivers', 'phone')],
         ], [
             'last_name.required' => 'Renseignez le nom du livreur.',
             'first_name.required' => 'Renseignez le prénom du livreur.',
             'phone.required' => 'Renseignez le numéro de téléphone du livreur.',
+            'phone.regex' => 'Le numéro de téléphone doit comporter 10 chiffres et commencer par 0 (exemple : 07 01 02 03 04).',
             'phone.unique' => 'Ce numéro de téléphone est déjà associé à un livreur.',
         ]);
+
+        $alreadyUsed = DeliveryDriver::query()->pluck('phone')->contains(function ($stored) use ($data): bool {
+            $stored = preg_replace('/\D+/', '', (string) $stored) ?? '';
+
+            return $stored !== '' && (str_starts_with($stored, '225') ? substr($stored, 3) : $stored) === $data['phone'];
+        });
+        if ($alreadyUsed) {
+            return back()->withErrors(['phone' => 'Ce numéro de téléphone est déjà associé à un livreur.'])->withInput();
+        }
 
         $driver = DeliveryDriver::create([
             'first_name' => $data['first_name'],
@@ -443,6 +480,11 @@ class LogisticsDirectoryController extends Controller
      */
     public function approveDriver(Request $request, DeliveryDriver $driver)
     {
+        // Un livreur seulement invité n'a encore rien envoyé : il n'y a aucun dossier à valider.
+        if ($driver->onboarding_status === DeliveryDriver::ONBOARDING_INVITED) {
+            return back()->with('error', 'Ce livreur n’a pas encore envoyé son dossier depuis l’application. Il ne peut pas être activé pour le moment.');
+        }
+
         $driver->update([
             'onboarding_status' => DeliveryDriver::ONBOARDING_ACTIVE,
             'is_active' => true,

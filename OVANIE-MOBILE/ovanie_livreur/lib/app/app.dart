@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/network/api_client.dart';
 import '../core/storage/token_storage.dart';
@@ -13,9 +14,25 @@ class OvanieLivreurApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      // Textes système (compteurs, calendrier, boutons) en français.
+      locale: const Locale('fr', 'FR'),
+      supportedLocales: const [Locale('fr', 'FR')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       debugShowCheckedModeBanner: false,
       title: 'OVANIE Livreur',
       theme: OvanieTheme.light,
+      // Même mise en page sur tous les téléphones : la taille de police
+      // système reste respectée mais plafonnée, pour qu'aucun écran ne soit
+      // coupé ou écrasé sur les petits appareils.
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(
+            textScaler: media.textScaler.clamp(minScaleFactor: .9, maxScaleFactor: 1.1),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: const _SessionGate(),
     );
   }

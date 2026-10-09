@@ -677,7 +677,7 @@ class LogisticsPilotageDataService
             return $this->settingsSnapshot = collect();
         }
 
-        $contactEmail = 'contact@ovanie.ci';
+        $contactEmail = (string) config('public_contact.email', 'contact@ovanie.com');
         if (Schema::hasTable('settings')) {
             try {
                 $contactEmail = (string) Setting::getValue('contactEmail', $contactEmail);
@@ -687,9 +687,9 @@ class LogisticsPilotageDataService
             }
         }
         if (! filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
-            $contactEmail = 'contact@ovanie.ci';
+            $contactEmail = (string) config('public_contact.email', 'contact@ovanie.com');
         }
-        $phone = trim((string) config('support_ai.support_phone', '01 61 78 18 18')) ?: '01 61 78 18 18';
+        $phone = trim((string) config('support_ai.support_phone', '01 61 78 00 00')) ?: '01 61 78 00 00';
         $definitions = [
             ['general', 'platform_name', 'Nom de la plateforme', 'OVANIE Logistics', 'text', 'Identité affichée dans l’espace logistique'],
             ['general', 'contact_email', 'E-mail de contact', $contactEmail, 'email', 'Contact opérationnel OVANIE Logistics'],

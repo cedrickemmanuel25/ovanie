@@ -104,383 +104,271 @@ class _ClientDeliveryTrackingScreenState extends State<ClientDeliveryTrackingScr
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        centerTitle: true,
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.arrow_back_rounded, color: OvanieColors.navy, size: 27),
-        ),
-        title: const Text(
-          'Suivi livraison',
-          style: TextStyle(color: OvanieColors.navy, fontSize: 21, fontWeight: FontWeight.w900),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Partager',
-            onPressed: () {},
-            icon: const Icon(Icons.ios_share_outlined, color: OvanieColors.navy),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null && _tracking == null
-              ? _TrackingError(message: _error!, onRetry: () => _load(initial: true))
-              : RefreshIndicator(
-                  onRefresh: () => _load(),
-                  child: _buildContent(),
-                ),
-    );
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator(color: OvanieColors.orange)),
+      );
+    }
+    if (_error != null && _tracking == null) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(backgroundColor: Colors.white, foregroundColor: OvanieColors.navy, elevation: 0),
+        body: _TrackingError(message: _error!, onRetry: () => _load(initial: true)),
+      );
+    }
+    return Scaffold(backgroundColor: const Color(0xFFEFF2F6), body: _buildContent());
   }
 
   Widget _buildContent() {
     final tracking = _tracking;
+    final top = MediaQuery.paddingOf(context).top;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final back = Positioned(
+      top: top + 8,
+      left: 12,
+      child: _MapButton(icon: Icons.arrow_back_rounded, onTap: () => Navigator.of(context).maybePop()),
+    );
+
     if (tracking == null) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        children: const [
-          SizedBox(height: 120),
-          Icon(Icons.local_shipping_outlined, size: 72, color: Color(0xFFB9C4D3)),
-          SizedBox(height: 18),
-          Text(
-            'La livraison est en cours de préparation.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: OvanieColors.navy, fontSize: 18, fontWeight: FontWeight.w900),
+      return Stack(
+        children: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.local_shipping_outlined, size: 64, color: Color(0xFFB9C4D3)),
+                  SizedBox(height: 16),
+                  Text(
+                    'Votre commande est en préparation',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: OvanieColors.navy, fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Le suivi s’affichera dès la prise en charge par le livreur.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: OvanieColors.muted, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
           ),
-          SizedBox(height: 8),
-          Text(
-            'Le suivi détaillé apparaîtra dès qu’une mission logistique sera créée.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: OvanieColors.muted, fontSize: 12.5, height: 1.4),
-          ),
+          back,
         ],
       );
     }
 
     final shipment = _selectedShipment;
     final order = tracking.order;
-    final orderNumber = tracking.orderNumber.trim().isNotEmpty
-        ? tracking.orderNumber
-        : widget.initialOrderNumber;
+    final orderNumber = tracking.orderNumber.trim().isNotEmpty ? tracking.orderNumber : widget.initialOrderNumber;
     final statusLabel = _statusLabel(shipment?.deliveryStatus ?? tracking.deliveryStatus);
     final progress = _progressStep(tracking, shipment);
-    final destination = shipment?.destinationLabel.trim().isNotEmpty == true
-        ? shipment!.destinationLabel
-        : (order?.address ?? '');
+    final destination = shipment?.destinationLabel.trim().isNotEmpty == true ? shipment!.destinationLabel : (order?.address ?? '');
+    final finished = shipment?.isFinished == true;
 
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
+    return Stack(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text.rich(
-                TextSpan(
-                  style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
-                  children: [
-                    const TextSpan(text: 'Commande n°  '),
-                    TextSpan(text: orderNumber, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  ],
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0F5FF),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFD7E4FF)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.local_shipping_outlined, color: Color(0xFF1266F1), size: 19),
-                  const SizedBox(width: 6),
-                  Text(statusLabel, style: const TextStyle(color: Color(0xFF1266F1), fontSize: 11.2, fontWeight: FontWeight.w800)),
-                ],
-              ),
-            ),
-          ],
+        Positioned.fill(
+          child: shipment?.hasLiveMap == true
+              ? LiveDeliveryMap(shipment: shipment!, height: screenHeight)
+              : _RouteUnavailable(destination: destination),
         ),
-        const SizedBox(height: 8),
-        _TrackingCard(
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-          child: Column(
-            children: [
-              _TrackingProgress(step: progress, tracking: tracking, shipment: shipment),
-              const SizedBox(height: 8),
-              shipment?.hasLiveMap == true
-                  ? LiveDeliveryMap(shipment: shipment!, height: 185)
-                  : _RouteUnavailable(destination: destination),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.schedule_outlined, color: Color(0xFF1266F1), size: 22),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text.rich(
-                      TextSpan(
-                        style: const TextStyle(color: OvanieColors.navy, fontSize: 10.5),
+        back,
+        Positioned(
+          top: top + 8,
+          right: 12,
+          child: _MapButton(
+            icon: Icons.refresh_rounded,
+            busy: _refreshing,
+            onTap: _refreshing ? null : () => _load(),
+          ),
+        ),
+        DraggableScrollableSheet(
+          initialChildSize: .52,
+          minChildSize: .3,
+          maxChildSize: .92,
+          builder: (context, controller) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+              boxShadow: [BoxShadow(color: Color(0x22000000), blurRadius: 18, offset: Offset(0, -4))],
+            ),
+            child: ListView(
+              controller: controller,
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(color: const Color(0xFFD9E0EB), borderRadius: BorderRadius.circular(4)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const TextSpan(text: 'Arrivée estimée :\n'),
-                          TextSpan(
-                            text: _etaLabel(shipment?.eta),
-                            style: const TextStyle(color: Color(0xFF1266F1), fontSize: 14, fontWeight: FontWeight.w900),
+                          Text(
+                            finished ? 'Commande livrée' : 'Arrivée ${_etaLabel(shipment?.eta)}',
+                            style: const TextStyle(color: OvanieColors.navy, fontSize: 20, fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Commande $orderNumber · mis à jour ${_relativeTime(shipment?.lastUpdate ?? tracking.lastUpdate)}',
+                            style: const TextStyle(color: OvanieColors.muted, fontSize: 13),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: finished ? const Color(0xFFE8F6E9) : const Color(0xFFEAF2FF),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          color: finished ? const Color(0xFF288A45) : const Color(0xFF1266F1),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _TrackingProgress(step: progress, tracking: tracking, shipment: shipment),
+                if (tracking.shipments.length > 1) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
                     children: [
-                      const Text('Dernière mise à jour :', style: TextStyle(color: Color(0xFF59657B), fontSize: 9.2)),
-                      Text(_relativeTime(shipment?.lastUpdate ?? tracking.lastUpdate), style: const TextStyle(color: OvanieColors.navy, fontSize: 9.5)),
+                      for (final item in tracking.shipments)
+                        ChoiceChip(
+                          label: Text(item.deliveryLabel.trim().isEmpty ? 'Livraison ${item.deliveryNumber}' : item.deliveryLabel),
+                          selected: item.trackingKey == _selectedTrackingKey,
+                          showCheckmark: false,
+                          onSelected: (_) => setState(() => _selectedTrackingKey = item.trackingKey),
+                        ),
                     ],
                   ),
-                  const SizedBox(width: 5),
-                  const Icon(Icons.circle, color: Color(0xFF16A34A), size: 7),
                 ],
-              ),
-            ],
-          ),
-        ),
-        if (shipment != null) ...[
-          const SizedBox(height: 7),
-          _MissionProgressCard(shipment: shipment),
-          if (shipment.otpRequired || shipment.otpVisible || shipment.isFinished) ...[
-            const SizedBox(height: 7),
-            _DeliverySecurityCard(shipment: shipment),
-          ],
-        ],
-        if (tracking.shipments.length > 1) ...[
-          const SizedBox(height: 7),
-          Row(
-            children: tracking.shipments.map((item) {
-              final selected = item.trackingKey == _selectedTrackingKey;
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: InkWell(
-                    onTap: () => setState(() => _selectedTrackingKey = item.trackingKey),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: selected ? const Color(0xFFF4F8FF) : Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: selected ? const Color(0xFF8DB7FF) : const Color(0xFFDDE3EC)),
+                if (shipment?.hasActualAssignment == true) ...[
+                  const SizedBox(height: 12),
+                  _DriverCard(shipment: shipment!),
+                ],
+                if (shipment != null && (shipment.otpRequired || shipment.otpVisible || shipment.isFinished)) ...[
+                  const SizedBox(height: 12),
+                  _DeliverySecurityCard(shipment: shipment),
+                ],
+                const SizedBox(height: 12),
+                _TrackingCard(
+                  child: Column(
+                    children: [
+                      _DataRow(icon: Icons.location_on_outlined, label: 'Adresse', value: destination.trim().isEmpty ? '—' : destination),
+                      const Divider(height: 18),
+                      _DataRow(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Destinataire',
+                        value: order?.recipientName.trim().isNotEmpty == true ? order!.recipientName : '—',
                       ),
-                      alignment: Alignment.center,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.inventory_2_outlined, color: selected ? const Color(0xFF1266F1) : OvanieColors.muted, size: 18),
-                          const SizedBox(width: 7),
-                          Text(
-                            item.deliveryLabel.trim().isEmpty ? 'Livraison ${item.deliveryNumber}' : item.deliveryLabel,
-                            style: TextStyle(color: selected ? const Color(0xFF1266F1) : OvanieColors.navy, fontSize: 10.5, fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      ),
-                    ),
+                      const Divider(height: 18),
+                      _DataRow(icon: Icons.schedule_outlined, label: 'Créneau', value: _windowLabelForShipment(shipment)),
+                    ],
                   ),
                 ),
-              );
-            }).toList(growable: false),
-          ),
-        ],
-        const SizedBox(height: 7),
-        if (shipment?.hasActualAssignment == true) _DriverCard(shipment: shipment!),
-        const SizedBox(height: 7),
-        _TrackingCard(
-          child: Column(
-            children: [
-              _DataRow(icon: Icons.location_on_outlined, label: 'Adresse de livraison', value: destination),
-              const Divider(height: 12),
-              _DataRow(icon: Icons.person_outline_rounded, label: 'Destinataire', value: tracking.order?.recipientName.trim().isNotEmpty == true ? tracking.order!.recipientName : 'Non renseigné'),
-              const Divider(height: 12),
-              _DataRow(icon: Icons.phone_outlined, label: 'Téléphone', value: tracking.order?.phone.trim().isNotEmpty == true ? tracking.order!.phone : '—'),
-              const Divider(height: 12),
-              _DataRow(icon: Icons.schedule_outlined, label: 'Créneau estimé', value: _windowLabelForShipment(shipment)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 7),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final statusCard = _TrackingCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Statut actuel', style: _TrackingText.sectionTitle),
-                    const SizedBox(height: 8),
-                    Row(
+                if (shipment != null && shipment.items.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _TrackingCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Image.asset(
-                          'assets/images/tracking_status_tricycle.png',
-                          width: constraints.maxWidth < 600 ? 72 : 118,
-                          height: constraints.maxWidth < 600 ? 78 : 110,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _currentMessageForShipment(shipment, tracking.deliveryStatus),
-                                style: TextStyle(color: OvanieColors.navy, fontSize: constraints.maxWidth < 600 ? 10.5 : 13.2, fontWeight: FontWeight.w900, height: 1.25),
-                              ),
-                              const SizedBox(height: 8),
-                              if (shipment?.hasLiveMap == true) Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-                                decoration: BoxDecoration(color: const Color(0xFFFFEFE5), borderRadius: BorderRadius.circular(18)),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.location_on_outlined, color: OvanieColors.orange, size: 17),
-                                    SizedBox(width: 5),
-                                    Text('Position GPS disponible', style: TextStyle(color: OvanieColors.orange, fontSize: 9.5)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        const Text('Articles', style: _TrackingText.sectionTitle),
+                        const SizedBox(height: 6),
+                        ...shipment.items.take(4).map((item) => _TrackingItem(item: item)),
                       ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(builder: (_) => OrderDetailScreen(orderId: widget.orderId)),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(46),
+                          foregroundColor: OvanieColors.navy,
+                          side: const BorderSide(color: OvanieColors.border),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                        label: const Text('Commande', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(builder: (_) => const SupportCenterScreen()),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(46),
+                          foregroundColor: OvanieColors.navy,
+                          side: const BorderSide(color: OvanieColors.border),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.headset_mic_outlined, size: 18),
+                        label: const Text('Aide', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+                      ),
                     ),
                   ],
                 ),
-              );
-            final itemsCard = _TrackingCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Articles concernés', style: _TrackingText.sectionTitle),
-                    const SizedBox(height: 7),
-                    if (shipment == null || shipment.items.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 18),
-                        child: Text('Articles en cours de synchronisation.', style: TextStyle(color: OvanieColors.muted, fontSize: 10)),
-                      )
-                    else
-                      ...shipment.items.take(4).map((item) => _TrackingItem(item: item)),
-                  ],
-                ),
-              );
-            if (constraints.maxWidth < 330) {
-              return Column(
-                children: [
-                  statusCard,
-                  const SizedBox(height: 8),
-                  itemsCard,
-                ],
-              );
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: statusCard),
-                const SizedBox(width: 8),
-                Expanded(child: itemsCard),
               ],
-            );
-          },
-        ),
-        const SizedBox(height: 7),
-        _TrackingCard(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Column(
-            children: [
-              Row(children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: const BoxDecoration(color: Color(0xFFEFF5FF), shape: BoxShape.circle),
-                child: const Icon(Icons.headset_mic_outlined, color: Color(0xFF1266F1), size: 24),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Un problème avec la livraison ?', style: TextStyle(color: OvanieColors.navy, fontSize: 11.5, fontWeight: FontWeight.w900)),
-                    SizedBox(height: 2),
-                    Text('Notre équipe est là pour vous aider.', style: TextStyle(color: OvanieColors.muted, fontSize: 9.5)),
-                  ],
-                ),
-              ),
-              ]),
-              const SizedBox(height: 8),
-              Row(children: [
-              Expanded(child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SupportCenterScreen())),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF1266F1),
-                  side: const BorderSide(color: Color(0xFFD5E1F6)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                icon: const Icon(Icons.headset_mic_outlined, size: 16),
-                label: const FittedBox(child: Text('Besoin d’aide', style: TextStyle(fontSize: 9.5))),
-              )),
-              const SizedBox(width: 8),
-              Expanded(child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => OrderDetailScreen(orderId: widget.orderId)),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF1266F1),
-                  side: const BorderSide(color: Color(0xFFD5E1F6)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                icon: const Icon(Icons.description_outlined, size: 16),
-                label: const FittedBox(child: Text('Voir la commande', style: TextStyle(fontSize: 9.5))),
-              )),
-              ]),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 48,
-          child: FilledButton.icon(
-            onPressed: _refreshing ? null : () => _load(),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFFF3A0B),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            icon: _refreshing
-                ? const SizedBox.square(dimension: 17, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.refresh_rounded),
-            label: const Text('Actualiser le suivi', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-          ),
-        ),
-        const SizedBox(height: 7),
-        SizedBox(
-          height: 48,
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => OrderDetailScreen(orderId: widget.orderId)),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFFF3A0B),
-              side: const BorderSide(color: Color(0xFFFF3A0B), width: 1.3),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            icon: const Icon(Icons.description_outlined),
-            label: const Text('Voir ma commande', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
           ),
         ),
       ],
     );
   }
+}
+
+class _MapButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool busy;
+  const _MapButton({required this.icon, required this.onTap, this.busy = false});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.white,
+        shape: const CircleBorder(),
+        elevation: 3,
+        shadowColor: const Color(0x33000000),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: busy
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: OvanieColors.navy),
+                  )
+                : Icon(icon, color: OvanieColors.navy),
+          ),
+        ),
+      );
 }
 
 class _TrackingProgress extends StatelessWidget {
@@ -509,7 +397,7 @@ class _TrackingProgress extends StatelessWidget {
     ];
 
     return SizedBox(
-      height: 82,
+      height: 92,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final segment = constraints.maxWidth / 5;
@@ -553,11 +441,11 @@ class _TrackingProgress extends StatelessWidget {
                         Text(
                           labels[index].$1,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: highlighted ? OvanieColors.navy : OvanieColors.muted, fontSize: 8.8, height: 1.15, fontWeight: highlighted ? FontWeight.w800 : FontWeight.normal),
+                          style: TextStyle(color: highlighted ? OvanieColors.navy : OvanieColors.muted, fontSize: 11.5, height: 1.15, fontWeight: highlighted ? FontWeight.w800 : FontWeight.normal),
                         ),
                         const SizedBox(height: 2),
                         if (labels[index].$2 != null && (done || active || delivered))
-                          Text(_shortDate(labels[index].$2), textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF5C6880), fontSize: 7.6)),
+                          Text(_shortDate(labels[index].$2), textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF5C6880), fontSize: 12)),
                       ],
                     ),
                   );
@@ -577,21 +465,16 @@ class _RouteUnavailable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        height: 150,
         width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF5F7FA),
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: const Color(0xFFDCE3EC)),
-        ),
+        padding: EdgeInsets.fromLTRB(24, 0, 24, MediaQuery.sizeOf(context).height * .5),
+        color: const Color(0xFFEFF2F6),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.location_searching_rounded, color: OvanieColors.muted, size: 36),
             const SizedBox(height: 8),
             const Text(
-              'Position réelle du livreur indisponible',
+              'Position du livreur momentanément indisponible',
               textAlign: TextAlign.center,
               style: TextStyle(color: OvanieColors.navy, fontWeight: FontWeight.w800),
             ),
@@ -602,7 +485,7 @@ class _RouteUnavailable extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: OvanieColors.muted, fontSize: 10.5),
+                style: const TextStyle(color: OvanieColors.muted, fontSize: 12),
               ),
             ],
           ],
@@ -616,158 +499,43 @@ class _DriverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = shipment.driverName;
-    final vehicle = shipment.vehicleLabel.trim().isNotEmpty
-        ? shipment.vehicleLabel
-        : 'Véhicule non renseigné';
+    final canContact = shipment.driverContactAllowed && shipment.driverPhone.trim().isNotEmpty;
+    final vehicle = shipment.vehicleLabel.trim();
+    Widget action(IconData icon, String scheme) => Material(
+          color: const Color(0xFFEAF2FF),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: canContact ? () => unawaited(ExternalUrlLauncher.open('$scheme:${shipment.driverPhone.trim()}')) : null,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Icon(icon, color: canContact ? const Color(0xFF1266F1) : const Color(0xFFA9B6CC), size: 20),
+            ),
+          ),
+        );
     return _TrackingCard(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
         children: [
-          ClipOval(
-            child: const CircleAvatar(
-              radius: 41,
-              backgroundColor: Color(0xFFEAF2FF),
-              child: Icon(Icons.person_outline_rounded, size: 42, color: Color(0xFF1266F1)),
-            ),
+          const CircleAvatar(
+            radius: 24,
+            backgroundColor: Color(0xFFEAF2FF),
+            child: Icon(Icons.person_rounded, color: Color(0xFF1266F1), size: 26),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(color: OvanieColors.navy, fontSize: 13.5, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 7),
-                Text('Véhicule :  $vehicle', style: const TextStyle(color: Color(0xFF59657B), fontSize: 10.2)),
-                const SizedBox(height: 7),
-                const Row(
-                  children: [
-                    Icon(Icons.shield_outlined, color: Color(0xFF16A34A), size: 17),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Informations visibles uniquement pendant la livraison',
-                        style: TextStyle(color: Color(0xFF16A34A), fontSize: 9.2, height: 1.25),
-                      ),
-                    ),
-                  ],
-                ),
+                Text(shipment.driverName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.navy, fontSize: 15, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(vehicle.isEmpty ? 'Votre livreur' : vehicle, style: const TextStyle(color: OvanieColors.muted, fontSize: 13)),
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 148,
-            child: Column(
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  height: 39,
-                  child: OutlinedButton.icon(
-                    onPressed: !shipment.driverContactAllowed || shipment.driverPhone.trim().isEmpty
-                        ? null
-                        : () { unawaited(ExternalUrlLauncher.open('tel:${shipment.driverPhone.trim()}')); },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF1266F1),
-                      side: const BorderSide(color: Color(0xFF1266F1)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                    ),
-                    icon: const Icon(Icons.call_outlined, size: 17),
-                    label: const Text('Appeler', style: TextStyle(fontSize: 10.2)),
-                  ),
-                ),
-                const SizedBox(height: 7),
-                SizedBox(
-                  width: double.infinity,
-                  height: 39,
-                  child: OutlinedButton.icon(
-                    onPressed: !shipment.driverContactAllowed || shipment.driverPhone.trim().isEmpty
-                        ? null
-                        : () { unawaited(ExternalUrlLauncher.open('sms:${shipment.driverPhone.trim()}')); },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF1266F1),
-                      side: const BorderSide(color: Color(0xFF1266F1)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                    ),
-                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17),
-                    label: const Text('Message', style: TextStyle(fontSize: 10.2)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MissionProgressCard extends StatelessWidget {
-  final ClientShipmentTracking shipment;
-  const _MissionProgressCard({required this.shipment});
-
-  @override
-  Widget build(BuildContext context) {
-    final total = shipment.pickupCount;
-    final ready = shipment.readyPickupCount.clamp(0, total == 0 ? 0 : total);
-    final percent = shipment.preparationPercent.clamp(0, 100);
-    final mission = shipment.missionNumber.trim();
-
-    return _TrackingCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.route_outlined, color: Color(0xFF1266F1), size: 21),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Organisation de la livraison', style: _TrackingText.sectionTitle),
-                    if (mission.isNotEmpty)
-                      Text('Mission $mission', style: const TextStyle(color: OvanieColors.muted, fontSize: 9.5)),
-                  ],
-                ),
-              ),
-              if (shipment.driverReserved)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(color: const Color(0xFFEAF8F2), borderRadius: BorderRadius.circular(20)),
-                  child: const Text('Livreur réservé', style: TextStyle(color: Color(0xFF087A55), fontSize: 9, fontWeight: FontWeight.w900)),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            shipment.missionLabel.trim().isNotEmpty ? shipment.missionLabel : _statusLabel(shipment.deliveryStatus),
-            style: const TextStyle(color: OvanieColors.navy, fontWeight: FontWeight.w900, fontSize: 12),
-          ),
-          if (!shipment.isInTransit && !shipment.isArrived && !shipment.isFinished) ...[
-            const SizedBox(height: 9),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(99),
-              child: LinearProgressIndicator(
-                minHeight: 7,
-                value: percent / 100,
-                backgroundColor: const Color(0xFFE7ECF3),
-                color: const Color(0xFF1266F1),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    total > 0 ? '$ready / $total point${total > 1 ? 's' : ''} vendeur prêt${ready > 1 ? 's' : ''}' : 'Préparation en cours',
-                    style: const TextStyle(color: OvanieColors.muted, fontSize: 9.5),
-                  ),
-                ),
-                Text('$percent %', style: const TextStyle(color: OvanieColors.navy, fontSize: 10, fontWeight: FontWeight.w900)),
-              ],
-            ),
-          ],
+          action(Icons.chat_bubble_outline_rounded, 'sms'),
+          const SizedBox(width: 8),
+          action(Icons.call_outlined, 'tel'),
         ],
       ),
     );
@@ -816,7 +584,7 @@ class _DeliverySecurityCard extends StatelessWidget {
                   shipment.securityMessage.trim().isNotEmpty
                       ? shipment.securityMessage
                       : 'Ne communiquez jamais votre code avant d’avoir reçu et vérifié tous les articles.',
-                  style: const TextStyle(color: OvanieColors.muted, fontSize: 9.5, height: 1.4),
+                  style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5, height: 1.4),
                 ),
               ],
             ),
@@ -838,9 +606,9 @@ class _DataRow extends StatelessWidget {
         children: [
           Icon(icon, color: OvanieColors.navy, size: 19),
           const SizedBox(width: 10),
-          SizedBox(width: 112, child: Text(label, style: const TextStyle(color: Color(0xFF59657B), fontSize: 10.2))),
+          SizedBox(width: 112, child: Text(label, style: const TextStyle(color: Color(0xFF59657B), fontSize: 12))),
           const SizedBox(width: 10),
-          Expanded(child: Text(value, textAlign: TextAlign.right, style: const TextStyle(color: OvanieColors.navy, fontSize: 10.7, fontWeight: FontWeight.w700))),
+          Expanded(child: Text(value, textAlign: TextAlign.right, style: const TextStyle(color: OvanieColors.navy, fontSize: 12, fontWeight: FontWeight.w700))),
         ],
       );
 }
@@ -865,10 +633,10 @@ class _TrackingItem extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.navy, fontSize: 9.8, fontWeight: FontWeight.w800)),
+              child: Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.navy, fontSize: 11.5, fontWeight: FontWeight.w800)),
             ),
             const SizedBox(width: 5),
-            Text('x${item.quantity}', style: const TextStyle(color: OvanieColors.navy, fontSize: 10.5, fontWeight: FontWeight.w800)),
+            Text('x${item.quantity}', style: const TextStyle(color: OvanieColors.navy, fontSize: 12, fontWeight: FontWeight.w800)),
           ],
         ),
       );
@@ -959,18 +727,6 @@ String _statusLabel(String status) {
   }
 }
 
-String _currentMessageForShipment(ClientShipmentTracking? shipment, String fallbackStatus) {
-  if (shipment == null) return _currentMessage(fallbackStatus);
-  if (shipment.isFinished) return 'Votre commande a été livrée et confirmée';
-  if (shipment.isArrived) return 'Votre livreur est arrivé. Vérifiez tous vos articles avant de donner votre code.';
-  if (shipment.isInTransit) return 'Le livreur est en route vers votre adresse';
-  if (shipment.isCollecting) return 'Le livreur récupère actuellement les articles chez le ou les vendeurs';
-  if (shipment.isReadyForPickup) return 'Tous les vendeurs sont prêts. Le livreur peut commencer les collectes';
-  if (shipment.isWaitingVendor) return 'Votre mission est réservée. Le livreur attend la fin de préparation des vendeurs';
-  if (shipment.deliveryStatus == 'waiting_driver') return 'OVANIE recherche un livreur partenaire compatible';
-  return 'Votre commande est en cours de préparation chez le vendeur';
-}
-
 String _currentMessage(String status) {
   switch (status.toLowerCase()) {
     case 'delivered':
@@ -1005,6 +761,10 @@ String _etaLabel(DateTime? eta) {
 
 String _windowLabelForShipment(ClientShipmentTracking? shipment) {
   if (shipment == null) return 'À confirmer';
+  // Une échéance planifiée (fin de journée prévue) n'est pas une heure d'arrivée.
+  if (shipment.etaSource == 'planned' && shipment.eta != null) {
+    return 'Au plus tard ${_etaLabel(shipment.eta).replaceFirst(' vers ', ' à ')}';
+  }
   final start = shipment.etaWindowStart;
   final end = shipment.etaWindowEnd;
   if (start != null && end != null) {

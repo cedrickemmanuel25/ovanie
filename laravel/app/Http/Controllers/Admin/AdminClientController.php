@@ -159,8 +159,8 @@ class AdminClientController extends Controller
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($client->id)],
-            'phone' => ['nullable', 'string', 'max:50'],
-            'secondary_phone' => ['nullable', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:50', 'regex:/^\+?[\d\s().-]{8,}$/'],
+            'secondary_phone' => ['nullable', 'string', 'max:50', 'regex:/^\+?[\d\s().-]{8,}$/'],
             'city' => ['nullable', 'string', 'max:120'],
             'status' => ['required', Rule::in(['active', 'inactive', 'blocked', 'suspended'])],
         ], [

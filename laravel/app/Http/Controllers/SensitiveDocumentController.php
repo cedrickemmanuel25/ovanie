@@ -39,8 +39,19 @@ class SensitiveDocumentController extends Controller
     public function vendorReturn(ReturnModel $return, int $document = 0): Response
     {
         abort_unless((int) $return->vendor_id === (int) auth()->id(), 403);
+        return $this->serve(self::returnProofPaths($return)->get($document));
+    }
+
+    // Lien signé à durée limitée : l'application vendeur affiche l'image sans session web.
+    public function signedVendorReturn(ReturnModel $return, int $document): Response
+    {
+        return $this->serve(self::returnProofPaths($return)->get($document));
+    }
+
+    public static function returnProofPaths(ReturnModel $return): \Illuminate\Support\Collection
+    {
         $paths = collect([$return->photo_proof]);
-        foreach (['documents', 'proofs', 'attachments'] as $key) {
+        foreach (['photo_proofs', 'documents', 'proofs', 'attachments'] as $key) {
             foreach ((array) data_get($return->meta, $key, []) as $entry) {
                 $paths->push(is_string($entry) ? $entry : data_get($entry, 'path'));
             }
@@ -48,7 +59,7 @@ class SensitiveDocumentController extends Controller
         foreach ((array) data_get($return->meta, 'vendor_decision.proofs', []) as $entry) {
             $paths->push(is_string($entry) ? $entry : data_get($entry, 'path'));
         }
-        return $this->serve($paths->filter()->unique()->values()->get($document));
+        return $paths->filter()->unique()->values();
     }
 
     public function clientReturn(ReturnModel $return): Response

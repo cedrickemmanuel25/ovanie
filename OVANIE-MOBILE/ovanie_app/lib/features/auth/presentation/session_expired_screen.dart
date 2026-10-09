@@ -52,7 +52,7 @@ class SessionExpiredScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    'OVANIE a confirmé que votre jeton de connexion n’est plus valide. Reconnectez-vous pour continuer.',
+                    'Par sécurité, reconnectez-vous pour continuer.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: OvanieColors.muted,

@@ -46,8 +46,8 @@ CONDITIONS GÉNÉRALES D&#39;UTILISATION (CGU) OVANIE Version 2026
 ARTICLE 2 : ÉDITEUR DE LA PLATEFORME
 OVANIE est exploitée par :
 OVANIE.com
-Adresse : Abidjan
-Téléphone : 01 61 78 18 18
+Adresse : Feh Kessé, Bingerville, Abidjan, Côte d’Ivoire
+Téléphone : 01 61 78 00 00
 Email : contact@ovanie.com
 Site internet : OVANIE.com
 ARTICLE 9 : PAIEMENT

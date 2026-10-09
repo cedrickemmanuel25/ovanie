@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/sync/live_sync_service.dart';
 import '../../../core/storage/device_storage.dart';
 import '../../../core/utils/formatters.dart';
 import '../../auth/domain/session_store.dart';
@@ -32,7 +33,8 @@ class ProductDetailScreen extends StatefulWidget {
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
-class _ProductDetailScreenState extends State<ProductDetailScreen> {
+class _ProductDetailScreenState extends State<ProductDetailScreen>
+    with LiveSyncListener<ProductDetailScreen> {
   final MarketplaceRepository _repository = const MarketplaceRepository();
   late ProductModel _product;
   List<ProductModel> _similar = const <ProductModel>[];
@@ -41,6 +43,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   int _selectedTab = 0;
   bool _loading = true;
   Object? _error;
+  ProductVariantModel? _selectedVariant;
 
   @override
   void initState() {
@@ -49,17 +52,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _quantity = _minimumQuantity(_product);
     RecentlyViewedStore.instance.record(_product);
     _loadDetail();
+    // Prix, stock, photos modifiés par le vendeur sur le web.
+    listenLiveSync(const {}, () => _loadDetail(silent: true), watch: 'product:${_product.id}');
   }
 
   int _minimumQuantity(ProductModel product) {
     return product.minOrderQuantity <= 0 ? 1 : product.minOrderQuantity;
   }
 
-  Future<void> _loadDetail() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _loadDetail({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       var fresh = _product;
@@ -87,6 +94,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       if (!mounted) return;
       setState(() {
         _product = fresh;
+        _selectedVariant = null;
         _quantity = _minimumQuantity(fresh);
         _similar = similar;
       });
@@ -109,25 +117,43 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     FavoritesStore.instance.toggle(_product);
   }
 
+  int get _availableStock => _selectedVariant?.stock ?? _product.stock;
+
   void _changeQuantity(int direction) {
     final step = _minimumQuantity(_product);
     final next = _quantity + (direction * step);
     if (next < step) return;
-    if (_product.stock > 0 && next > _product.stock) return;
+    if (_availableStock > 0 && next > _availableStock) return;
     setState(() => _quantity = next);
   }
 
   void _selectQuantity(int quantity) {
     final minimum = _minimumQuantity(_product);
     var next = quantity < minimum ? minimum : quantity;
-    if (_product.stock > 0 && next > _product.stock) next = _product.stock;
+    if (_availableStock > 0 && next > _availableStock) next = _availableStock;
     setState(() => _quantity = next);
   }
 
-  bool get _canBuy => _product.canAddToCart && _product.stock > 0;
+  bool get _canBuy => _product.canAddToCart &&
+      (_product.variants.isEmpty ? _product.stock >= _minimumQuantity(_product) : (_selectedVariant?.stock ?? 0) >= _minimumQuantity(_product));
+
+  void _selectVariant(ProductVariantModel variant) {
+    setState(() {
+      _selectedVariant = variant;
+      _galleryIndex = 0;
+      final minimum = _minimumQuantity(_product);
+      _quantity = variant.stock >= minimum ? minimum : variant.stock.clamp(0, minimum).toInt();
+    });
+  }
 
   void _addToCart({bool openCart = false}) {
-    final result = CartStore.instance.addQuantity(_product, _quantity);
+    if (_product.variants.isNotEmpty && _selectedVariant == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choisissez une couleur ou un modèle avant d’ajouter au panier.')),
+      );
+      return;
+    }
+    final result = CartStore.instance.addQuantity(_product, _quantity, variant: _selectedVariant);
     if (!result.success) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -196,10 +222,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     const SizedBox(height: 8),
                     _HeroProductBlock(
                       product: _product,
+                      overrideImageUrl: _selectedVariant?.imageUrl,
                       galleryIndex: _galleryIndex,
                       onGalleryChanged: (index) => setState(() => _galleryIndex = index),
                       onShare: _share,
                     ),
+                    if (_product.variants.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _VariantSelector(
+                        variants: _product.variants,
+                        selected: _selectedVariant,
+                        onSelected: _selectVariant,
+                      ),
+                    ],
                     if (_product.isNegotiable && _canBuy) ...[
                       const SizedBox(height: 14),
                       _NegotiateSection(product: _product, quantity: _quantity),
@@ -353,7 +388,7 @@ class _ProductHeader extends StatelessWidget {
                         decoration: const BoxDecoration(color: OvanieColors.orange, shape: BoxShape.circle),
                         child: Text(
                           CartStore.instance.itemsCount > 99 ? '99+' : '${CartStore.instance.itemsCount}',
-                          style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900),
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900),
                         ),
                       ),
                     ),
@@ -408,14 +443,90 @@ class _Breadcrumb extends StatelessWidget {
   }
 }
 
+class _VariantSelector extends StatelessWidget {
+  final List<ProductVariantModel> variants;
+  final ProductVariantModel? selected;
+  final ValueChanged<ProductVariantModel> onSelected;
+
+  const _VariantSelector({required this.variants, required this.selected, required this.onSelected});
+
+  Color? _color(String hex) {
+    final value = hex.replaceAll('#', '').trim();
+    if (value.length != 6) return null;
+    final parsed = int.tryParse('FF$value', radix: 16);
+    return parsed == null ? null : Color(parsed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFD),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE1E6ED)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Choisissez votre modèle', style: TextStyle(color: OvanieColors.navy, fontSize: 14, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text(selected == null ? 'Sélection obligatoire avant ajout au panier' : selected!.label, style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: variants.map((variant) {
+              final active = selected?.id == variant.id;
+              final enabled = variant.stock > 0;
+              final swatch = _color(variant.colorHex);
+              return InkWell(
+                onTap: enabled ? () => onSelected(variant) : null,
+                borderRadius: BorderRadius.circular(10),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: active ? OvanieColors.navy.withValues(alpha: .06) : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: active ? OvanieColors.orange : const Color(0xFFD8E0EA), width: active ? 1.6 : 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (variant.imageUrl.isNotEmpty)
+                        ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(variant.imageUrl, width: 34, height: 34, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox.shrink()))
+                      else if (swatch != null)
+                        Container(width: 24, height: 24, decoration: BoxDecoration(color: swatch, borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFFD4DCE6)))),
+                      if (variant.imageUrl.isNotEmpty || swatch != null) const SizedBox(width: 8),
+                      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(variant.value, style: TextStyle(color: enabled ? OvanieColors.navy : OvanieColors.muted, fontWeight: FontWeight.w800, fontSize: 12)),
+                        Text(enabled ? '${variant.stock} disponible(s)' : 'Rupture', style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5)),
+                      ]),
+                      if (active) ...[const SizedBox(width: 7), const Icon(Icons.check_circle_rounded, color: OvanieColors.orange, size: 17)],
+                    ],
+                  ),
+                ),
+              );
+            }).toList(growable: false),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HeroProductBlock extends StatelessWidget {
   final ProductModel product;
   final int galleryIndex;
+  final String? overrideImageUrl;
   final ValueChanged<int> onGalleryChanged;
   final VoidCallback onShare;
 
   const _HeroProductBlock({
     required this.product,
+    this.overrideImageUrl,
     required this.galleryIndex,
     required this.onGalleryChanged,
     required this.onShare,
@@ -423,6 +534,7 @@ class _HeroProductBlock extends StatelessWidget {
 
   List<String> get _images {
     final values = <String>[];
+    if (overrideImageUrl?.trim().isNotEmpty == true) values.add(overrideImageUrl!.trim());
     for (final image in product.galleryUrls) {
       if (image.trim().isNotEmpty && !values.contains(image)) values.add(image);
     }
@@ -538,7 +650,7 @@ class _GalleryPanel extends StatelessWidget {
                       ),
                       child: Text(
                         '-${product.discountPercent}%',
-                        style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w900),
+                        style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w900),
                       ),
                     ),
                   ),
@@ -648,20 +760,11 @@ class _ProductSummary extends StatelessWidget {
                   product.availabilityLabel.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900),
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900),
                 ),
               ),
             ),
-            const SizedBox(width: 5),
-            Expanded(
-              child: Text(
-                product.slug.trim().isEmpty ? '' : 'Réf. ${product.slug}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-                style: const TextStyle(color: OvanieColors.muted, fontSize: 8.2),
-              ),
-            ),
+
           ],
         ),
         const SizedBox(height: 8),
@@ -682,7 +785,7 @@ class _ProductSummary extends StatelessWidget {
             'Marque : ${product.brand}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: OvanieColors.navy, fontSize: 10.5),
+            style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
           ),
         ],
         const SizedBox(height: 8),
@@ -694,13 +797,13 @@ class _ProductSummary extends StatelessWidget {
             const Icon(Icons.star_rounded, color: OvanieColors.warning, size: 15),
             Text(
               '${product.rating?.toStringAsFixed(1) ?? '—'} (${product.reviewsCount} avis)',
-              style: const TextStyle(color: OvanieColors.navy, fontSize: 9.5, fontWeight: FontWeight.w700),
+              style: const TextStyle(color: OvanieColors.navy, fontSize: 11.5, fontWeight: FontWeight.w700),
             ),
             if (product.sales > 0) ...[
-              const Text(' | ', style: TextStyle(color: OvanieColors.muted, fontSize: 9.5)),
+              const Text(' | ', style: TextStyle(color: OvanieColors.muted, fontSize: 11.5)),
               Text(
                 '${product.sales} ventes',
-                style: const TextStyle(color: OvanieColors.navy, fontSize: 9.5, fontWeight: FontWeight.w700),
+                style: const TextStyle(color: OvanieColors.navy, fontSize: 11.5, fontWeight: FontWeight.w700),
               ),
             ],
           ],
@@ -734,7 +837,7 @@ class _ProductSummary extends StatelessWidget {
                     SizedBox(width: 4),
                     Text(
                       'Prix négociable',
-                      style: TextStyle(color: OvanieColors.orange, fontSize: 9.5, fontWeight: FontWeight.w800),
+                      style: TextStyle(color: OvanieColors.orange, fontSize: 11.5, fontWeight: FontWeight.w800),
                     ),
                   ],
                 ),
@@ -763,7 +866,7 @@ class _ProductSummary extends StatelessWidget {
                 ),
                 child: Text(
                   '-${product.discountPercent}%',
-                  style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900),
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900),
                 ),
               ),
             ],
@@ -783,7 +886,7 @@ class _ProductSummary extends StatelessWidget {
                     fact,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: OvanieColors.navy, fontSize: 9.5, height: 1.2),
+                    style: const TextStyle(color: OvanieColors.navy, fontSize: 11.5, height: 1.2),
                   ),
                 ),
               ],
@@ -809,7 +912,7 @@ List<String> _productFacts(ProductModel product) {
     facts.addAll(const [
       'Produit vérifié OVANIE',
       'Qualité professionnelle',
-      'Disponibilité synchronisée avec le catalogue',
+      'Disponibilité à jour',
     ]);
   }
   return facts;
@@ -1283,7 +1386,7 @@ class _NegotiationSheetState extends State<_NegotiationSheet> {
                     decoration: BoxDecoration(color: const Color(0xFFFDEDEC), borderRadius: BorderRadius.circular(6)),
                     child: Text(
                       'Dernière offre : ${_formatNegotiationDuration(_remainingSeconds!)} restantes',
-                      style: const TextStyle(color: OvanieColors.danger, fontSize: 10.5, fontWeight: FontWeight.w800),
+                      style: const TextStyle(color: OvanieColors.danger, fontSize: 12, fontWeight: FontWeight.w800),
                     ),
                   ),
                 ],
@@ -1422,7 +1525,7 @@ class _QuantitySection extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: active ? OvanieColors.orange : OvanieColors.navy,
-                                  fontSize: 10.5,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -1431,7 +1534,7 @@ class _QuantitySection extends StatelessWidget {
                                 totalWeight > 0 ? '${ProductModel.compactNumber(totalWeight)} kg' : product.homeSubtitle,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: OvanieColors.muted, fontSize: 9.5),
+                                style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5),
                               ),
                             ],
                           ),
@@ -1442,7 +1545,7 @@ class _QuantitySection extends StatelessWidget {
                             top: 0,
                             child: Text(
                               '-$tierDiscount%',
-                              style: const TextStyle(color: Color(0xFF18A957), fontSize: 8.5, fontWeight: FontWeight.w800),
+                              style: const TextStyle(color: Color(0xFF18A957), fontSize: 11, fontWeight: FontWeight.w800),
                             ),
                           ),
                       ],
@@ -1550,12 +1653,12 @@ class _DeliveryPanel extends StatelessWidget {
                 SizedBox(height: 3),
                 Text(
                   'Délai de livraison confirmé avant validation',
-                  style: TextStyle(color: OvanieColors.navy, fontSize: 9.5),
+                  style: TextStyle(color: OvanieColors.navy, fontSize: 11.5),
                 ),
                 SizedBox(height: 3),
                 Text(
                   'Voir les options de livraison ›',
-                  style: TextStyle(color: OvanieColors.orange, fontSize: 9.5, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: OvanieColors.orange, fontSize: 11.5, fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -1567,12 +1670,12 @@ class _DeliveryPanel extends StatelessWidget {
               children: [
                 Text(
                   'Frais de livraison affichés avant validation',
-                  style: TextStyle(color: OvanieColors.navy, fontSize: 9.5),
+                  style: TextStyle(color: OvanieColors.navy, fontSize: 11.5),
                 ),
                 SizedBox(height: 8),
                 Text(
                   'Retour possible selon les conditions OVANIE',
-                  style: TextStyle(color: OvanieColors.navy, fontSize: 9.5),
+                  style: TextStyle(color: OvanieColors.navy, fontSize: 11.5),
                 ),
               ],
             ),
@@ -1620,7 +1723,7 @@ class _TrustRow extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: OvanieColors.navy, fontSize: 8.5, fontWeight: FontWeight.w800),
+                    style: const TextStyle(color: OvanieColors.navy, fontSize: 11, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -1628,7 +1731,7 @@ class _TrustRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: OvanieColors.muted, fontSize: 7.8),
+                    style: const TextStyle(color: OvanieColors.muted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1681,7 +1784,7 @@ class _ProductTabs extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: active ? OvanieColors.orange : OvanieColors.navy,
-                    fontSize: 9.5,
+                    fontSize: 11.5,
                     fontWeight: active ? FontWeight.w800 : FontWeight.w600,
                   ),
                 ),
@@ -1725,7 +1828,7 @@ class _TabContent extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 4),
             child: Text(
               '• $line',
-              style: const TextStyle(color: OvanieColors.navy, fontSize: 10.8, height: 1.35),
+              style: const TextStyle(color: OvanieColors.navy, fontSize: 12, height: 1.35),
             ),
           ),
         ),
@@ -1791,13 +1894,13 @@ class _Characteristics extends StatelessWidget {
                   width: 120,
                   child: Text(
                     entry.key,
-                    style: const TextStyle(color: OvanieColors.navy, fontSize: 10.5, fontWeight: FontWeight.w800),
+                    style: const TextStyle(color: OvanieColors.navy, fontSize: 12, fontWeight: FontWeight.w800),
                   ),
                 ),
                 Expanded(
                   child: Text(
                     entry.value,
-                    style: const TextStyle(color: OvanieColors.muted, fontSize: 10.5),
+                    style: const TextStyle(color: OvanieColors.muted, fontSize: 12),
                   ),
                 ),
               ],
@@ -1908,14 +2011,14 @@ class _SimilarProductCard extends StatelessWidget {
                 product.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: OvanieColors.navy, fontSize: 10.5, height: 1.15, fontWeight: FontWeight.w800),
+                style: const TextStyle(color: OvanieColors.navy, fontSize: 12, height: 1.15, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 3),
               Text(
                 product.homeSubtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: OvanieColors.muted, fontSize: 9),
+                style: const TextStyle(color: OvanieColors.muted, fontSize: 11.5),
               ),
               const SizedBox(height: 5),
               Text(

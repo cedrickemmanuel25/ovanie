@@ -17,6 +17,7 @@ class AppelOffre extends Model
 
     protected $fillable = [
         'user_id',
+        'pro_user_id',
         'company_id',
         'secteur',
         'category', // ✅ AJOUTE ÇA
@@ -36,6 +37,11 @@ class AppelOffre extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function proUser()
+    {
+        return $this->belongsTo(ProUser::class, 'pro_user_id');
     }
 
     protected $casts = [

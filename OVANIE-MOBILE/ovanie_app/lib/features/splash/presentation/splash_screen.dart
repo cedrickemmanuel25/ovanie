@@ -91,7 +91,7 @@ class _SplashScreenState extends State<SplashScreen> {
       }
 
       if (SessionStore.instance.isAuthenticated) {
-        _setStep('Synchronisation de votre panier…');
+        _setStep('Préparation de votre panier…');
         await const CartApiRepository().refreshLocalCartFromServer();
 
         // Les favoris ne bloquent pas l'ouverture de l'accueil mais sont

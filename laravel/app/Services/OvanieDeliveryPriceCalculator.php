@@ -12,30 +12,20 @@ class OvanieDeliveryPriceCalculator
 {
     public function __construct(
         private readonly LogisticsVehicleResolver $vehicleResolver,
-        private readonly CommuneRelationResolver $communeRelationResolver,
     ) {}
 
     /**
-     * Retourne le tarif fixe défini pour une relation de communes et un
-     * véhicule. La matrice communale est la source tarifaire principale pour
-     * une livraison avec une commune de départ et une commune d'arrivée.
+     * Prix d'une livraison OVANIE (formule unique, sans plancher ni plafond) :
+     *
+     *   livraison = tarif de base
+     *             + distance (km) × prix/km
+     *             + poids (kg)    × prix/kg
+     *             + volume (m³)   × prix/m³
+     *             + frais éventuels (suppléments automatiques)
+     *
+     * Les quatre tarifs sont ceux du véhicule choisi selon le poids et le
+     * volume (Tarification > Véhicules & tarifs).
      */
-    public function fixedDestinationRelation(array $destination, string $vehicleCode): ?array
-    {
-        $relation = $this->communeRelationResolver->resolve(
-            $destination['origin_commune'] ?? null,
-            $destination['destination_commune'] ?? null,
-            $destination['destination_city'] ?? null,
-            $destination['delivery_zone'] ?? null,
-            $vehicleCode,
-        );
-
-        return ($relation['pricing_mode'] ?? null) === 'fixed_destination_vehicle'
-            && (float) ($relation['fixed_tariff'] ?? 0) > 0
-                ? $relation
-                : null;
-    }
-
     public function calculate(Collection $items, array $route, array $destination, ?DeliveryServiceRate $legacyRate = null): array
     {
         $weightKg = $this->weightKg($items);
@@ -83,127 +73,55 @@ class OvanieDeliveryPriceCalculator
             ];
         }
 
-        // La carte véhicule ne porte plus le prix des trajets normaux. Elle est
-        // facultative et sert seulement à surcharger capacité/statut. Le tarif
-        // principal vient de la matrice commune -> commune.
         $rate = $vehicle['rate_card'] ?? null;
-        $relation = $this->communeRelationResolver->resolve(
-            $destination['origin_commune'] ?? null,
-            $destination['destination_commune'] ?? null,
-            $destination['destination_city'] ?? null,
-            $destination['delivery_zone'] ?? null,
-            $vehicle['code'],
-        );
-
-        $originCommune = trim((string) ($destination['origin_commune'] ?? ''));
-        $destinationCommune = trim((string) ($destination['destination_commune'] ?? ''));
-        $hasExplicitCommunePair = $originCommune !== '' && $destinationCommune !== '';
-        $fixedTariff = $hasExplicitCommunePair && ($relation['pricing_mode'] ?? null) === 'fixed_destination_vehicle'
-            ? max(0, (int) round((float) ($relation['fixed_tariff'] ?? 0)))
-            : 0;
-
-        // Pour un trajet commune -> commune, OVANIE applique obligatoirement
-        // le prix de la matrice tarifaire. On ne remplace jamais silencieusement
-        // un tarif communal manquant par une formule au kilomètre.
-        if ($hasExplicitCommunePair && $fixedTariff <= 0) {
-            return [
-                'price' => 0.0,
-                'vehicle_code' => $vehicle['code'],
-                'vehicle_label' => $vehicle['label'],
-                'weight_kg' => round($weightKg, 3),
-                'volume_m3' => round($volumeM3, 4),
-                'distance_km' => (float) ($route['distance_km'] ?? 0),
-                'duration_minutes' => $route['duration_minutes'] ?? null,
-                'components' => [],
-                'relation' => $relation,
-                'rate_card_id' => $rate?->id,
-                'rate_source' => 'missing_commune_tariff',
-            ];
+        if (! self::hasFormulaRates($rate)) {
+            return $this->result(0.0, $vehicle, $weightKg, $volumeM3, $route, [], $rate?->id, 'missing_vehicle_rate');
         }
 
-        $distanceKm = (float) ($route['distance_km'] ?? 0);
-        $hasFragile = (bool) ($destination['fragile'] ?? false);
-        $requiresUnloading = (bool) ($destination['unloading'] ?? false);
-        $isUrgent = (bool) ($destination['urgent'] ?? false);
-        $hasHandling = (bool) ($destination['handling'] ?? false);
-        $packageCount = max(1, (int) ($destination['package_count'] ?? 1));
+        $distanceKm = max(0.0, (float) ($route['distance_km'] ?? 0));
+        $components = [
+            'base_fee' => (float) $rate->base_fee,
+            'distance_fee' => $distanceKm * (float) $rate->price_per_km,
+            'weight_fee' => $weightKg * (float) $rate->price_per_kg,
+            'volume_fee' => $volumeM3 * (float) $rate->price_per_m3,
+        ];
+        $price = array_sum($components);
 
-        if ($fixedTariff > 0) {
-            // Le montant saisi pour Cocody -> Adjamé, par exemple, est déjà le
-            // coût principal du trajet pour ce véhicule. Distance, poids et
-            // volume servent au choix du véhicule et au suivi, pas à recalculer
-            // une deuxième fois le prix de ce trajet.
-            $components = ['commune_route_fee' => $fixedTariff];
-            $price = $fixedTariff;
-            $margin = 0.0;
-            $rateSource = 'logistics_pricing_matrix';
-        } else {
-            // Compatibilité uniquement pour les anciens cas sans commune de
-            // départ unique (ex. tournée consolidée). Aucune configuration
-            // monétaire n'est demandée dans l'interface Véhicules & capacités.
-            if (! $rate) {
-                return [
-                    'price' => 0.0,
-                    'vehicle_code' => $vehicle['code'],
-                    'vehicle_label' => $vehicle['label'],
-                    'weight_kg' => round($weightKg, 3),
-                    'volume_m3' => round($volumeM3, 4),
-                    'distance_km' => $distanceKm,
-                    'duration_minutes' => $route['duration_minutes'] ?? null,
-                    'components' => [],
-                    'relation' => $relation,
-                    'rate_card_id' => null,
-                    'rate_source' => 'missing_legacy_reference_rate',
-                ];
-            }
-
-            $components = [
-                'base_fee' => (float) $rate->base_fee,
-                'distance_fee' => $distanceKm * (float) $rate->price_per_km,
-                'weight_fee' => $weightKg * (float) $rate->price_per_kg,
-                'volume_fee' => $volumeM3 * (float) $rate->price_per_m3,
-            ];
-            $subtotal = array_sum($components);
-            $margin = $this->margin($rate, $subtotal);
-            $price = $subtotal + $margin;
-
-            if ($rate->min_fee !== null) {
-                $price = max($price, (float) $rate->min_fee);
-            }
-            if ($rate->max_fee !== null && (float) $rate->max_fee > 0) {
-                $price = min($price, (float) $rate->max_fee);
-            }
-            $rateSource = 'vehicle_rate_card';
-        }
-
-        [$customTotal, $customComponents] = $this->customSupplements($price, [
-            'fragile' => $hasFragile,
-            'handling' => $hasHandling,
-            'unloading' => $requiresUnloading,
-            'urgent' => $isUrgent,
+        [$supplementTotal, $supplementComponents] = $this->customSupplements($price, [
+            'fragile' => (bool) ($destination['fragile'] ?? false),
+            'handling' => (bool) ($destination['handling'] ?? false),
+            'unloading' => (bool) ($destination['unloading'] ?? false),
+            'urgent' => (bool) ($destination['urgent'] ?? false),
             'weight_kg' => $weightKg,
             'volume_m3' => $volumeM3,
-            'package_count' => $packageCount,
+            'package_count' => max(1, (int) ($destination['package_count'] ?? 1)),
             'traffic_delay_minutes' => (int) ($route['traffic_delay_minutes'] ?? 0),
         ], $items);
-        $price += $customTotal;
-        $components = array_merge($components, $customComponents);
-
-        if ($margin !== 0.0) {
-            $components['ovanie_margin'] = $margin;
-        }
 
         return $this->result(
-            (int) round($price),
+            (float) round($price + $supplementTotal),
             $vehicle,
             $weightKg,
             $volumeM3,
             $route,
-            $components,
-            $relation,
-            $rate?->id,
-            $rateSource,
+            array_merge($components, $supplementComponents),
+            $rate->id,
+            'vehicle_rate_card',
         );
+    }
+
+    /**
+     * Un véhicule est tarifé dès qu'au moins un des quatre tarifs de la
+     * formule est renseigné (un tarif de base seul est accepté).
+     */
+    public static function hasFormulaRates(?DeliveryVehicleRateCard $rate): bool
+    {
+        if (! $rate) {
+            return false;
+        }
+
+        return (float) $rate->base_fee + (float) $rate->price_per_km
+            + (float) $rate->price_per_kg + (float) $rate->price_per_m3 > 0;
     }
 
     public function weightKg(Collection $items): float
@@ -304,7 +222,6 @@ class OvanieDeliveryPriceCalculator
         float $volumeM3,
         array $route,
         array $components,
-        array $relation,
         ?int $rateCardId,
         string $rateSource
     ): array {
@@ -315,14 +232,13 @@ class OvanieDeliveryPriceCalculator
             'weight_kg' => round($weightKg, 3),
             'volume_m3' => round($volumeM3, 4),
             'distance_km' => (float) ($route['distance_km'] ?? 0),
-            'duration_minutes' => $route['duration_minutes'] ?? data_get($relation, 'meta.estimated_delay_minutes'),
+            'duration_minutes' => $route['duration_minutes'] ?? null,
             'traffic_delay_minutes' => $route['traffic_delay_minutes'] ?? null,
             'no_traffic_duration_minutes' => $route['no_traffic_duration_minutes'] ?? null,
             'route_geometry' => $route['route_geometry'] ?? null,
             'routing_provider' => $route['provider'] ?? null,
             'route_source' => $route['source'] ?? null,
             'components' => $components,
-            'relation' => $relation,
             'rate_card_id' => $rateCardId,
             'rate_source' => $rateSource,
         ];

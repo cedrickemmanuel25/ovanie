@@ -200,9 +200,47 @@ class SellerDeliverySupervisionService
             $this->refreshRoute($session->fresh());
         }
 
+        $this->detectAutomaticDeparture($session->fresh(), $location);
         $this->detectAutomaticArrival($session->fresh(), $location);
 
         return $location;
+    }
+
+    /**
+     * Départ automatique : mission acceptée et chauffeur qui s'éloigne de la
+     * boutique (au-delà de 1,5 × le rayon d'arrivée, précision GPS suffisante).
+     */
+    private function detectAutomaticDeparture(SellerDeliveryTrackingSession $session, SellerDriverLocation $location): void
+    {
+        if ($session->mission_status !== 'accepted') {
+            return;
+        }
+
+        $shop = $session->shop;
+        if (! $shop || ! is_numeric($shop->latitude) || ! is_numeric($shop->longitude)) {
+            return;
+        }
+
+        $radius = (float) config('delivery.auto_arrival_radius_m', 150);
+        if (is_numeric($location->accuracy) && (float) $location->accuracy > $radius) {
+            return;
+        }
+
+        $distance = $this->distanceMeters(
+            (float) $location->latitude,
+            (float) $location->longitude,
+            (float) $shop->latitude,
+            (float) $shop->longitude,
+        );
+        if ($distance <= $radius * 1.5) {
+            return;
+        }
+
+        try {
+            $this->startDelivery($session);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     public function acceptSession(SellerDeliveryTrackingSession $session): SellerDeliveryTrackingSession

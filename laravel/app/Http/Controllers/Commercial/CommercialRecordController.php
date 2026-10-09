@@ -145,7 +145,7 @@ class CommercialRecordController extends Controller
                             ->orWhereNull('geo_status')
                             ->orWhereNotIn('geo_status', [Shop::GEO_STATUS_RELIABLE, Shop::GEO_STATUS_VERIFIED]);
                     }),
-                'kyc_pending' => $query->where('kyc_status', '!=', Shop::KYC_VERIFIED),
+                'kyc_pending' => $query->whereNotIn('kyc_status', [Shop::KYC_VERIFIED, Shop::KYC_AUTOMATED_CHECKED]),
                 'no_products' => $query->doesntHave('products'),
                 default => null,
             };

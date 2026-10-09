@@ -25,7 +25,14 @@
                     <td><span class="record-title">{{ $record['primary'] ?: 'Sans libellé' }}</span><span class="record-sub">#{{ $record['id'] ?? '—' }}</span></td>
                     <td>{{ $record['secondary'] ?: 'Non renseigné' }}</td>
                     <td>{{ \Illuminate\Support\Str::limit((string)($record['detail'] ?? ''), 90) }}</td>
-                    <td><span class="status {{ strtolower((string)$record['status']) }}">{{ str_replace('_',' ',(string)$record['status']) }}</span></td>
+                    <td><span class="status {{ strtolower((string)$record['status']) }}">{{ [
+    'pending' => 'En attente', 'paid' => 'Payé', 'escrow_held' => 'Payé (séquestre)', 'released_to_vendor' => 'Reversé',
+    'failed' => 'Échoué', 'cancelled' => 'Annulé', 'refunded' => 'Remboursé', 'processing' => 'En traitement',
+    'confirmed' => 'Confirmée', 'shipped' => 'En livraison', 'delivered' => 'Livrée', 'completed' => 'Terminée',
+    'approved' => 'Validée', 'active' => 'Actif', 'inactive' => 'Inactif', 'suspended' => 'Suspendu', 'rejected' => 'Refusée',
+    'accepted' => 'Acceptée', 'open' => 'Ouvert', 'answered' => 'Répondu', 'escalated' => 'Escaladé', 'resolved' => 'Résolu',
+    'closed' => 'Clôturé', 'linked' => 'Lié à un dossier', 'new' => 'Nouveau', 'in_transit' => 'En route', 'reported' => 'Signalé',
+][(string) $record['status']] ?? ucfirst(str_replace('_', ' ', (string) $record['status'])) }}</span></td>
                     <td>{{ optional($record['created_at'])->format('d/m/Y H:i') }}</td>
                     <td>@if(auth()->user()->hasStaffPermission('tickets.write'))<a class="btn" href="{{ route('support.tickets.create', $record['ticket_query'] ?? []) }}"><i data-lucide="ticket-plus"></i>Ouvrir un ticket</a>@else<span class="record-sub">Lecture seule</span>@endif</td>
                 </tr>

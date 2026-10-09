@@ -9,6 +9,7 @@ use App\Services\OrderFinancialSummaryService;
 use App\Services\OrderWorkflowService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Collection;
 
 class ClientOrderResource extends JsonResource
 {
@@ -22,7 +23,7 @@ class ClientOrderResource extends JsonResource
     public function toArray(Request $request): array
     {
         $order = $this->resource;
-        $order->loadMissing(['items.product', 'payments', 'returns']);
+        $order->loadMissing(['items.product', 'items.variant', 'payments', 'returns']);
 
         $paymentPresentation = app(ClientPaymentPresentationService::class);
         $financial = app(OrderFinancialSummaryService::class)->summarize($order);
@@ -60,7 +61,9 @@ class ClientOrderResource extends JsonResource
             'status_label' => $this->orderStatusLabel($order->status),
             'payment' => [
                 'status' => $order->payment_status,
-                'status_label' => $paymentPresentation->statusLabel($order->payment_status),
+                'status_label' => $this->codAwaitingVerification($order)
+                    ? 'Réglé à la livraison · confirmation en cours'
+                    : $paymentPresentation->statusLabel($order->payment_status),
                 'state' => $paymentState,
                 'attempt_status' => $attemptStatus ?: null,
                 'attempt_status_label' => $attemptStatus !== ''
@@ -84,8 +87,8 @@ class ClientOrderResource extends JsonResource
                 'total' => $financial['display_total'],
             ],
             'delivery' => [
-                'status' => $order->delivery_status,
-                'status_label' => $this->deliveryStatusLabel($order->delivery_status),
+                'status' => $deliveryStatus = ($order->delivery_status ?: app(\App\Services\OrderDeliveryStatusAggregator::class)->aggregate($order->items)),
+                'status_label' => $this->deliveryStatusLabel($deliveryStatus, $order->items),
                 'destination_type' => $order->delivery_destination_type,
                 'address' => $order->delivery_address ?: $order->address,
                 'commune' => $order->delivery_commune,
@@ -112,8 +115,13 @@ class ClientOrderResource extends JsonResource
                     'id' => $item->product_id ? (int) $item->product_id : null,
                     'name' => $item->product?->name ?: 'Produit indisponible',
                     'slug' => $item->product?->slug,
-                    'main_image_url' => $item->product?->main_image_url,
+                    'main_image_url' => $item->variant_image_snapshot ?: $item->variant?->card_url ?: $item->product?->main_image_url,
                 ],
+                'variant' => $item->product_variant_id ? [
+                    'id' => (int) $item->product_variant_id,
+                    'label' => $item->variant_label_snapshot ?: $item->variant?->label,
+                    'image_url' => $item->variant_image_snapshot ?: $item->variant?->card_url,
+                ] : null,
                 'quantity' => (int) $item->quantity,
                 'unit_price' => (float) $item->price,
                 'subtotal' => $item->subtotal !== null
@@ -128,6 +136,21 @@ class ClientOrderResource extends JsonResource
             'created_at' => $order->created_at?->toIso8601String(),
             'updated_at' => $order->updated_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Paiement à la livraison déjà déclaré encaissé par le vendeur : le client a
+     * payé, seule la vérification interne OVANIE reste à faire.
+     */
+    private function codAwaitingVerification($order): bool
+    {
+        return in_array($order->payment_method, ['cash_on_delivery', 'pay_on_delivery'], true)
+            && ! in_array($order->payment_status, ['paid', 'escrow_held', 'released_to_vendor', 'refunded'], true)
+            && (in_array($order->status, ['completed', 'delivered'], true)
+                || \App\Models\VendorPaymentVerificationRequest::query()
+                    ->where('order_id', $order->id)
+                    ->where('status', 'pending')
+                    ->exists());
     }
 
     private function orderStatusLabel(?string $status): string
@@ -146,8 +169,16 @@ class ClientOrderResource extends JsonResource
         };
     }
 
-    private function deliveryStatusLabel(?string $status): string
+    private function deliveryStatusLabel(?string $status, ?Collection $items = null): string
     {
+        if (in_array($status, [null, '', 'pending'], true)) {
+            $vendorStatuses = collect($items)->map(fn ($item) => $item->vendor_status ?: 'pending');
+
+            return $vendorStatuses->isNotEmpty() && $vendorStatuses->every(fn ($s) => $s === 'pending')
+                ? 'En attente de confirmation du vendeur'
+                : 'Commande confirmée par le vendeur';
+        }
+
         return match ($status) {
             'preparing' => 'Préparation de la commande',
             'ready_for_pickup' => 'Prête pour prise en charge',

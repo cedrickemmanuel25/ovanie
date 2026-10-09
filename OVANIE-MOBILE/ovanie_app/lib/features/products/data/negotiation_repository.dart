@@ -71,7 +71,7 @@ class NegotiationRepository {
     final data = response.data;
     if (data is! Map || status == 401 || status == 403 || status >= 500) {
       ApiClient.ensureSuccess(response);
-      throw const OvanieApiException('Réponse inattendue du serveur.');
+      throw const OvanieApiException('Une erreur est survenue. Réessayez dans un instant.');
     }
 
     final map = Map<String, dynamic>.from(data);

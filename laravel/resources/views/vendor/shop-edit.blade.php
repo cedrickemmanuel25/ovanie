@@ -89,15 +89,14 @@
         'Grand-Bassam',
     ])->filter()->unique()->values();
 
-    $logisticsIsSeller = ($shop->logistics_type ?? 'ovanie') === 'seller';
-    $logisticsLabel = $logisticsIsSeller ? 'Logistique vendeur' : 'OVANIE Logistics';
+    $logisticsConfigured = $shop->hasConfirmedLogistics();
+    $logisticsIsSeller = $logisticsConfigured && $shop->usesSellerLogistics();
+    $logisticsLabel = $shop->logistics_mode_label;
 
     $shopActive = ($shop->status ?? null) === \App\Models\Shop::STATUS_APPROVED
         && (bool) ($shop->is_active ?? false);
 
-    $paymentConfigured = filled($shop->mm_operator)
-        && filled($shop->mm_number)
-        && filled($shop->mm_holder);
+    $paymentConfigured = $shop->hasConfiguredPayout();
 
     $identityReady = filled($shop->identity_file)
         || (filled($shop->identity_file_front) && filled($shop->identity_file_back));
@@ -149,6 +148,7 @@
         $identityReady,
         filled($shop->rccm_file),
         $paymentConfigured,
+        $logisticsConfigured,
     ];
 
     $completionScore = (int) round(
@@ -1043,7 +1043,7 @@
                     <h3>Mode logistique</h3>
                     <span class="se-pill blue">{{ $logisticsLabel }}</span>
                     <p class="se-stat-desc" style="margin-top:8px;">
-                        {{ $logisticsIsSeller ? 'Vous gérez la livraison de vos commandes.' : 'OVANIE organise vos livraisons.' }}
+                        {{ ! $logisticsConfigured ? 'Choisissez votre mode logistique pour les prochaines commandes.' : ($logisticsIsSeller ? 'Vous gérez la livraison de vos commandes.' : 'OVANIE organise vos livraisons.') }}
                     </p>
                 </div>
             </div>
@@ -1345,11 +1345,11 @@
                         <label>Mode logistique</label>
 
                         <div class="se-logistics-switch">
-                            <span class="se-logistics-choice {{ $logisticsIsSeller ? 'is-active' : '' }}">
+                            <span class="se-logistics-choice {{ $logisticsConfigured && $logisticsIsSeller ? 'is-active' : '' }}">
                                 Ma propre logistique
                             </span>
 
-                            <span class="se-logistics-choice {{ ! $logisticsIsSeller ? 'is-active' : '' }}">
+                            <span class="se-logistics-choice {{ $logisticsConfigured && ! $logisticsIsSeller ? 'is-active' : '' }}">
                                 OVANIE Logistics
                             </span>
                         </div>
@@ -1357,8 +1357,10 @@
                         <p class="se-help">
                             Tout changement s’applique uniquement aux nouvelles commandes.
                         </p>
-                        <a class="se-link" href="{{ route('vendor.delivery.mode') }}">Changer de mode logistique</a>
-                        <a class="se-link" href="{{ route($logisticsIsSeller ? 'vendor.delivery.edit' : 'vendor.delivery.location') }}">Modifier mes informations logistiques</a>
+                        <a class="se-link" href="{{ route($logisticsConfigured ? 'vendor.delivery.mode' : 'vendor.delivery.index') }}">{{ $logisticsConfigured ? 'Changer de mode logistique' : 'Choisir mon mode logistique' }}</a>
+                        @if($logisticsConfigured)
+                            <a class="se-link" href="{{ route($logisticsIsSeller ? 'vendor.delivery.edit' : 'vendor.delivery.location') }}">Modifier mes informations logistiques</a>
+                        @endif
                     </div>
 
                     <div class="se-field">
@@ -1403,9 +1405,11 @@
                             class="se-textarea"
                             rows="4"
                             readonly
-                        >{{ $logisticsIsSeller
-                            ? 'Les zones, communes, tarifs et délais détaillés se configurent dans l’espace Livraison.'
-                            : 'OVANIE organise la livraison à partir de la position enregistrée de votre boutique.' }}</textarea>
+                        >{{ ! $logisticsConfigured
+                            ? 'Choisissez d’abord OVANIE Logistics ou votre propre logistique dans l’espace Livraison.'
+                            : ($logisticsIsSeller
+                                ? 'Les zones, communes, tarifs et délais détaillés se configurent dans l’espace Livraison.'
+                                : 'OVANIE organise la livraison à partir de la position enregistrée de votre boutique.') }}</textarea>
                     </div>
 
                     @if($logisticsIsSeller)

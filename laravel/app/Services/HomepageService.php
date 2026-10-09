@@ -36,7 +36,7 @@ class HomepageService
         }
 
         $ttl = max(10, (int) config('homepage.cache.public_ttl_seconds', 120));
-        $version = (string) config('homepage.cache.version', 'v4-home-professional');
+        $version = (string) config('homepage.cache.version', 'v4-home-professional') . '-catalog-parity-v1';
 
         $payload = Cache::remember(
             "homepage.public.{$version}",
@@ -65,6 +65,30 @@ class HomepageService
         $payload['favoriteProductIds'] = $this->favoriteProductIds($user, $visibleProductIds);
 
         return $payload;
+    }
+
+    /**
+     * État léger interrogé par la page d'accueil pour basculer automatiquement
+     * les encarts (ventes flash, Black Friday) et relancer les comptes à rebours.
+     */
+    public function status(): array
+    {
+        $payload = $this->build();
+        $flash = collect($payload['flashProducts'] ?? []);
+        $blackFriday = collect($payload['blackFridayProducts'] ?? []);
+
+        return [
+            'flash' => [
+                'count' => $flash->count(),
+                'ends_at' => $this->nearestFlashEnd($flash),
+            ],
+            'black_friday' => [
+                'visible' => (bool) ($payload['isBlackFridayDay'] ?? false) && $blackFriday->isNotEmpty(),
+            ],
+            'flash_panel_mode' => $payload['flashPanelMode'] ?? 'latest',
+            'right_panel_mode' => $payload['rightPanelMode'] ?? 'discovery',
+            'generated_at' => now()->toIso8601String(),
+        ];
     }
 
     private function buildPublicPayload(): array
@@ -661,7 +685,7 @@ class HomepageService
 
     private function publicProductCount(): int
     {
-        return (int) $this->visibility->query([])->count();
+        return (int) $this->visibility->query([], true)->count();
     }
 
     private function verifiedSellerCount(): int
@@ -672,15 +696,9 @@ class HomepageService
 
         $query = Shop::query();
 
-        if (
-            Schema::hasColumn('shops', 'logistics_status')
-            && Schema::hasColumn('shops', 'logistics_type')
-            && Schema::hasColumn('shops', 'status')
-            && Schema::hasColumn('shops', 'is_active')
-        ) {
-            return (int) $query->canPublishProducts()->count();
-        }
-
+        // Le compteur « vendeurs vérifiés » correspond aux boutiques déjà validées
+        // par OVANIE. Une régularisation logistique/reversement en attente ne doit pas
+        // faire disparaître la boutique ni réduire ce compteur public.
         if (Schema::hasColumn('shops', 'status')) {
             $query->whereIn('status', ['approved', 'active', 'actif']);
         }

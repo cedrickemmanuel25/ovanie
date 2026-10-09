@@ -1,5 +1,6 @@
 @extends('admin.layouts.app')
 
+@section('page-title', 'Ajouter une bannière')
 @section('title', 'Ajouter une bannière')
 
 @section('content')

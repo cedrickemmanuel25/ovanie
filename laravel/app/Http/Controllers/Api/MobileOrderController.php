@@ -315,7 +315,7 @@ class MobileOrderController extends Controller
                 'delivery_commune' => $resolved['commune']
                     ?: $registry->canonicalCommune($request->input('delivery_commune'))
                     ?: $request->input('delivery_commune'),
-                'delivery_quartier' => $resolved['quartier'] ?: $request->input('delivery_quartier'),
+                'delivery_quartier' => $request->input('delivery_quartier') ?: $resolved['quartier'],
                 'delivery_city' => ($resolved['is_abidjan'] ?? false)
                     ? null
                     : ($resolved['city'] ?? $request->input('delivery_city')),

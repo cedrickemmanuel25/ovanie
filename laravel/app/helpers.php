@@ -124,7 +124,9 @@ if (! function_exists('ovanie_public_text')) {
 
         $isBroken = str_contains($text, '??')
             || str_contains($text, '�')
-            || preg_match('/(?:Ã.|Â.|â.|Å.)/u', $text) === 1;
+            // Séquences réellement cassées seulement : un « â » ou un « Â » suivi d'une lettre est du
+            // français correct (câble, plâtre, bâtiment, ÂGE) et ne doit pas faire reconstruire le texte.
+            || preg_match('/(?:Ã|â€|Â[^\p{L}\s]|Å[^\p{L}\s])/u', $text) === 1;
 
         if ($isBroken && $slug) {
             $rebuilt = ovanie_humanize_slug($slug, $text);

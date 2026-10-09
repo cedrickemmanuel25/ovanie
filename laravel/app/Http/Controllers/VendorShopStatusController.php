@@ -63,9 +63,11 @@ class VendorShopStatusController extends Controller
                 'title' => 'Dossier documentaire',
                 'description' => $shop->kyc_status === Shop::KYC_VERIFIED
                     ? 'Les documents sont vérifiés.'
+                    : ($shop->kyc_status === Shop::KYC_AUTOMATED_CHECKED
+                        ? 'Les fichiers transmis ont passé les contrôles automatiques de format et de lisibilité minimale. Leur authenticité n’est pas certifiée.'
                     : ($identityDocumentsComplete
                         ? 'Les documents requis sont présents et restent suivis séparément du statut commercial.'
-                        : 'Complétez les documents d’identité manquants.'),
+                        : 'Complétez les documents d’identité manquants.')),
                 'done' => $identityDocumentsComplete,
             ],
             [

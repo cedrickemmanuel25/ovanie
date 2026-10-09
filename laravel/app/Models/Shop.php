@@ -15,6 +15,8 @@ class Shop extends Model
     public const STATUS_REJECTED = 'rejected';
 
     public const KYC_PENDING = 'pending';
+    /** Documents contrôlés automatiquement ; leur authenticité n'est pas certifiée. */
+    public const KYC_AUTOMATED_CHECKED = 'automated_checked';
     public const KYC_VERIFIED = 'verified';
     public const KYC_REJECTED = 'rejected';
 
@@ -69,6 +71,7 @@ class Shop extends Model
         'geo_precision_score',
         'geo_status',
         'geo_verified_at',
+        'admin_google_maps_reference',
         'identity_country',
         'identity_type',
         'identity_number',
@@ -85,6 +88,12 @@ class Shop extends Model
         'logistics_type',
         'payment_mode',
         'payout_onboarding_started_at',
+        'logistics_confirmed_at',
+        'logistics_configured_by_admin_id',
+        'logistics_configured_by_admin_at',
+        'payout_configured_at',
+        'payout_configured_by_admin_id',
+        'payout_configured_by_admin_at',
         'status',
         'kyc_status',
         'logistics_status',
@@ -104,6 +113,10 @@ class Shop extends Model
         'geo_verified_at' => 'datetime',
         'approved_at' => 'datetime',
         'payout_onboarding_started_at' => 'datetime',
+        'logistics_confirmed_at' => 'datetime',
+        'logistics_configured_by_admin_at' => 'datetime',
+        'payout_configured_at' => 'datetime',
+        'payout_configured_by_admin_at' => 'datetime',
     ];
 
     public function user()
@@ -124,6 +137,18 @@ class Shop extends Model
     public function commercialManager()
     {
         return $this->belongsTo(User::class, 'managed_by_commercial_id');
+    }
+
+    public function configurationAssignments()
+    {
+        return $this->hasMany(ShopConfigurationAssignment::class);
+    }
+
+    public function activeConfigurationAssignment()
+    {
+        return $this->hasOne(ShopConfigurationAssignment::class)
+            ->whereIn('status', [ShopConfigurationAssignment::STATUS_PENDING, ShopConfigurationAssignment::STATUS_IN_PROGRESS])
+            ->latestOfMany();
     }
 
     public function officialCommune(): BelongsTo
@@ -206,13 +231,140 @@ class Shop extends Model
 
     public function getLogisticsModeLabelAttribute(): string
     {
+        if ($this->needsLogisticsConfiguration()) {
+            return 'À configurer';
+        }
+
         return $this->usesSellerLogistics()
             ? 'Logistique vendeur'
             : 'OVANIE Logistics';
     }
 
+    public function hasConfirmedLogistics(): bool
+    {
+        return ! $this->needsLogisticsConfiguration();
+    }
+
+    public function hasConfiguredPayout(): bool
+    {
+        return ! $this->needsPayoutConfiguration();
+    }
+
+    public function hasCompletePayoutDestination(): bool
+    {
+        return in_array($this->payment_mode, [self::PAYMENT_POST_DELIVERY, self::PAYMENT_WEEKLY], true)
+            && filled($this->mm_operator)
+            && filled($this->mm_number)
+            && filled($this->mm_holder);
+    }
+
+    public function configurationReady(): bool
+    {
+        return $this->hasConfirmedLogistics() && $this->hasConfiguredPayout();
+    }
+
+    /**
+     * Indique si la configuration opérationnelle de la boutique est complète.
+     *
+     * Cette méthode est le point d’entrée partagé par le dashboard web et
+     * l’API vendeur mobile. Elle reste volontairement distincte de
+     * canPublishProducts() : une boutique peut avoir terminé sa configuration
+     * tout en restant non publiable si elle n’est pas encore approuvée/active.
+     */
+    public function hasCompleteConfiguration(): bool
+    {
+        return $this->configurationReady();
+    }
+
+    public function needsLogisticsConfiguration(): bool
+    {
+        if (! in_array($this->logistics_type, ['ovanie', 'seller'], true)) {
+            return true;
+        }
+
+        if (! $this->logistics_confirmed_at || $this->logistics_status !== self::LOGISTICS_READY) {
+            return true;
+        }
+
+        return $this->usesSellerLogistics()
+            ? ! $this->hasCompleteSellerLogistics()
+            : ! $this->hasCompleteOvaniePickupLocation();
+    }
+
+    /**
+     * Le vendeur a réellement choisi son mode de livraison (à l'ouverture de la boutique ou depuis
+     * son espace). La colonne logistics_type a une valeur par défaut : seule la date de confirmation
+     * distingue un vrai choix d'une ancienne boutique à qui la question n'a jamais été posée.
+     */
+    public function hasChosenLogisticsMode(): bool
+    {
+        return $this->logistics_confirmed_at !== null
+            && in_array($this->logistics_type, ['ovanie', 'seller'], true);
+    }
+
+    public function needsPayoutConfiguration(): bool
+    {
+        return ! $this->payout_configured_at || ! $this->hasCompletePayoutDestination();
+    }
+
+    public function scopeNeedsLogisticsConfiguration(Builder $query): Builder
+    {
+        return $query->where(function (Builder $needs) {
+            $needs->whereNull('logistics_confirmed_at')
+                ->orWhereNull('logistics_type')
+                ->orWhereNotIn('logistics_type', ['ovanie', 'seller'])
+                ->orWhereNull('logistics_status')
+                ->orWhere('logistics_status', '!=', self::LOGISTICS_READY)
+                ->orWhere(function (Builder $ovanie) {
+                    $ovanie->where('logistics_type', 'ovanie')
+                        ->where(function (Builder $missing) {
+                            $missing->whereNull('address')->orWhere('address', '')
+                                ->orWhereNull('commune')->orWhere('commune', '')
+                                ->orWhereNull('district')->orWhere('district', '')
+                                ->orWhereNull('latitude')
+                                ->orWhereNull('longitude')
+                                ->orWhereNull('geo_status')
+                                ->orWhere('geo_status', self::GEO_STATUS_VERIFICATION_REQUIRED);
+                        });
+                })
+                ->orWhere(function (Builder $seller) {
+                    $seller->where('logistics_type', 'seller')
+                        ->where(function (Builder $missing) {
+                            $missing->whereDoesntHave('sellerDeliveryProfile', function (Builder $profile) {
+                                $profile->where('is_enabled', true)
+                                    ->whereNotNull('default_delay')->where('default_delay', '!=', '')
+                                    ->whereNotNull('conditions')->where('conditions', '!=', '')
+                                    ->where('max_weight_kg', '>', 0)
+                                    ->where('max_volume_m3', '>', 0);
+                            })->orWhereDoesntHave('sellerDeliveryZones', function (Builder $zones) {
+                                $zones->where('is_active', true)
+                                    ->whereNotNull('commune')->where('commune', '!=', '')
+                                    ->whereNotNull('delivery_price')
+                                    ->whereNotNull('estimated_delay')->where('estimated_delay', '!=', '');
+                            });
+                        });
+                });
+        });
+    }
+
+    public function scopeNeedsPayoutConfiguration(Builder $query): Builder
+    {
+        return $query->where(function (Builder $needs) {
+            $needs->whereNull('payout_configured_at')
+                ->orWhereNull('payment_mode')
+                ->orWhereNotIn('payment_mode', [self::PAYMENT_POST_DELIVERY, self::PAYMENT_WEEKLY])
+                ->orWhereNull('mm_operator')->orWhere('mm_operator', '')
+                ->orWhereNull('mm_number')->orWhere('mm_number', '')
+                ->orWhereNull('mm_holder')->orWhere('mm_holder', '');
+        });
+    }
+
     public function getPaymentModeLabelAttribute(): string
     {
+        if ($this->needsPayoutConfiguration()) {
+            return 'À configurer';
+        }
+
         return $this->payment_mode === self::PAYMENT_POST_DELIVERY
             ? 'Paiement après livraison (72 h)'
             : 'Paiement hebdomadaire';
@@ -271,6 +423,32 @@ class Shop extends Model
         };
     }
 
+    public function getConfigurationLocationVerifiedAttribute(): bool
+    {
+        return $this->latitude !== null
+            && $this->longitude !== null
+            && filled($this->commune)
+            && filled($this->district)
+            && in_array($this->geo_status, [self::GEO_STATUS_VERIFIED, self::GEO_STATUS_RELIABLE], true);
+    }
+
+    public function getConfigurationLocationLabelAttribute(): string
+    {
+        if (! $this->configuration_location_verified) {
+            return 'À vérifier avec le vendeur';
+        }
+
+        $parts = collect([
+            trim((string) $this->commune),
+            trim((string) $this->district),
+            trim((string) $this->landmark),
+        ])->filter()->unique(fn ($value) => mb_strtolower($value));
+
+        return $parts->isNotEmpty()
+            ? $parts->implode(' · ')
+            : 'À vérifier avec le vendeur';
+    }
+
     public function hasCompleteOvaniePickupLocation(): bool
     {
         return filled($this->address)
@@ -283,6 +461,10 @@ class Shop extends Model
 
     public function canPublishProducts(): bool
     {
+        if (! $this->configurationReady()) {
+            return false;
+        }
+
         if ($this->status !== self::STATUS_APPROVED || ! $this->is_active) {
             return false;
         }
@@ -322,21 +504,27 @@ class Shop extends Model
     public function scopeCanPublishProducts(Builder $query): Builder
     {
         return $query
+            ->whereNotNull('logistics_confirmed_at')
+            ->whereNotNull('payout_configured_at')
+            ->whereIn('payment_mode', [self::PAYMENT_POST_DELIVERY, self::PAYMENT_WEEKLY])
+            ->whereNotNull('mm_operator')->where('mm_operator', '!=', '')
+            ->whereNotNull('mm_number')->where('mm_number', '!=', '')
+            ->whereNotNull('mm_holder')->where('mm_holder', '!=', '')
             ->where('status', self::STATUS_APPROVED)
             ->where('is_active', true)
             ->where('logistics_status', self::LOGISTICS_READY)
+            ->whereIn('logistics_type', ['ovanie', 'seller'])
             ->where(function (Builder $logistics) {
                 $logistics
                     ->where(function (Builder $ovanie) {
-                        $ovanie->where(function (Builder $mode) {
-                            $mode->whereNull('logistics_type')
-                                ->orWhere('logistics_type', '!=', 'seller');
-                        })
+                        $ovanie->where('logistics_type', 'ovanie')
                             ->whereNotNull('address')->where('address', '!=', '')
                             ->whereNotNull('commune')->where('commune', '!=', '')
                             ->whereNotNull('district')->where('district', '!=', '')
                             ->whereNotNull('latitude')
-                            ->whereNotNull('longitude');
+                            ->whereNotNull('longitude')
+                            ->whereNotNull('geo_status')
+                            ->where('geo_status', '!=', self::GEO_STATUS_VERIFICATION_REQUIRED);
                     })
                     ->orWhere(function (Builder $seller) {
                         $seller->where('logistics_type', 'seller')
@@ -355,6 +543,21 @@ class Shop extends Model
                             });
                     });
             });
+    }
+
+    public function scopeAccessibleToCommercial(Builder $query, int $commercialId, ?string $capability = null): Builder
+    {
+        return $query->where(function (Builder $access) use ($commercialId, $capability) {
+            $access->where('created_by_commercial_id', $commercialId)
+                ->orWhere('managed_by_commercial_id', $commercialId)
+                ->orWhereHas('configurationAssignments', function (Builder $mission) use ($commercialId, $capability) {
+                    $mission->where('commercial_id', $commercialId)
+                        ->whereIn('status', [ShopConfigurationAssignment::STATUS_PENDING, ShopConfigurationAssignment::STATUS_IN_PROGRESS]);
+                    if ($capability === 'products') {
+                        $mission->where('manage_products', true);
+                    }
+                });
+        });
     }
 
     public function scopeActive(Builder $query): Builder

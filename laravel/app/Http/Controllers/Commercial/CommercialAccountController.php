@@ -94,6 +94,10 @@ class CommercialAccountController extends Controller
             ? $locations->creationPayload($data)
             : [];
 
+        if ($data['account_type'] === 'vendor') {
+            app(\App\Services\AutomatedKycDocumentInspector::class)->inspect($request);
+        }
+
         [$user, $shop] = DB::transaction(function () use ($request, $data, $commercial, $phone, $geoPayload) {
             $user = User::create([
                 'created_by_commercial_id' => $commercial->id,
@@ -142,12 +146,14 @@ class CommercialAccountController extends Controller
                 'identity_number' => Str::upper($data['identityNumber']),
                 'identity_upload_mode' => $data['identityUploadMode'],
                 'payment_mode' => $data['payment_mode'],
+                'logistics_confirmed_at' => now(),
+                'payout_configured_at' => now(),
                 'mm_operator' => $data['mmOperator'],
                 'mm_number' => $data['mmNumber'],
                 'mm_holder' => $data['mmHolder'],
                 'direct_payment' => false,
                 'status' => Shop::STATUS_APPROVED,
-                'kyc_status' => Shop::KYC_PENDING,
+                'kyc_status' => Shop::KYC_AUTOMATED_CHECKED,
                 'is_active' => true,
                 'approved_at' => now(),
                 ...$geoPayload,

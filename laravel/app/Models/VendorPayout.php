@@ -148,6 +148,10 @@ class VendorPayout extends Model
     {
         $reason = (string) data_get($this->meta, 'blocked_reason', '');
 
+        if (str_contains($reason, 'Configurez et confirmez')) {
+            return 'Configuration requise';
+        }
+
         return str_contains($reason, 'retour')
             || str_contains($reason, 'réclamation')
             || str_contains($reason, 'contrôle')
@@ -182,13 +186,23 @@ class VendorPayout extends Model
             'wave' => 'Wave',
             'bank', 'bank_transfer' => 'Virement bancaire',
             'cash' => 'Espèces',
-            'paydunya_payout', 'vendor_payout', 'mobile_money' => 'Mobile Money vendeur',
+            'paydunya_payout', 'vendor_payout', 'mobile_money' => match ((string) $this->shop?->mm_operator) {
+                'wave' => 'Wave',
+                'orange', 'orange_money' => 'Orange Money',
+                'mtn', 'mtn_money' => 'MTN Mobile Money',
+                'moov', 'moov_money' => 'Moov Money',
+                default => 'Mobile Money',
+            },
             default => ucfirst(str_replace('_', ' ', $method)),
         };
     }
 
     public function getPaymentModeLabelAttribute(): string
     {
+        if (! in_array($this->payment_mode_snapshot, [Shop::PAYMENT_POST_DELIVERY, Shop::PAYMENT_WEEKLY], true)) {
+            return 'À configurer';
+        }
+
         return $this->payment_mode_snapshot === Shop::PAYMENT_POST_DELIVERY
             ? 'Paiement après livraison (72 h)'
             : 'Paiement hebdomadaire';

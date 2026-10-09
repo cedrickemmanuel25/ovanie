@@ -355,6 +355,13 @@ class CommercialMobileShopController extends Controller
             }
         }
 
+        foreach (['identity_file' => 'identityFile', 'identity_file_front' => 'identityFileFront', 'identity_file_back' => 'identityFileBack'] as $source => $target) {
+            if ($request->hasFile($source)) {
+                $request->files->set($target, $request->file($source));
+            }
+        }
+        app(\App\Services\AutomatedKycDocumentInspector::class)->inspect($request);
+
         $fullName = trim(preg_replace('/\s+/', ' ', (string) $data['full_name']) ?? '');
         $parts = preg_split('/\s+/', $fullName) ?: [];
         $firstName = array_shift($parts) ?: $fullName;
@@ -462,8 +469,10 @@ class CommercialMobileShopController extends Controller
                 'direct_payment' => false,
                 'logistics_type' => (string) $data['logistics_type'],
                 'payment_mode' => (string) $data['payment_mode'],
+                'logistics_confirmed_at' => now(),
+                'payout_configured_at' => now(),
                 'status' => Shop::STATUS_APPROVED,
-                'kyc_status' => Shop::KYC_PENDING,
+                'kyc_status' => Shop::KYC_AUTOMATED_CHECKED,
                 'is_active' => true,
                 'approved_at' => now(),
                 ...$locationPayload,

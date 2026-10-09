@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/ui/vendor_mockup_ui.dart';
 import '../../data/vendor_repository.dart';
 import '../orders/order_ui.dart';
+import '../orders/order_widgets.dart';
+import '../shell/vendor_tabs.dart';
+import '../support/vendor_support_screen.dart';
 import 'data_ui.dart';
 import 'finance_ui.dart';
-import '../support/vendor_support_screen.dart';
 
+/// Suivi d'une demande concernant un versement : la demande est envoyée à
+/// l'ouverture si elle n'existe pas encore, puis l'écran en montre les étapes.
 class PayoutFollowUpScreen extends StatefulWidget {
   const PayoutFollowUpScreen({super.key, required this.payoutId, this.initialPayout});
   final int payoutId;
@@ -30,295 +35,241 @@ class _PayoutFollowUpScreenState extends State<PayoutFollowUpScreen> {
     _start();
   }
 
+  bool get _requested => '${_p['vendor_followup_requested_at'] ?? ''}'.isNotEmpty;
+
   Future<void> _start() async {
-    final alreadyRequested = ('${_p['vendor_followup_requested_at'] ?? ''}').isNotEmpty;
-    if (!alreadyRequested) {
-      setState(() => _sending = true);
-      try {
-        await VendorRepository.instance.requestPayoutFollowUp(widget.payoutId);
-      } catch (e) {
-        if (mounted) setState(() => _error = ApiClient.friendlyError(e));
-      } finally {
-        if (mounted) setState(() => _sending = false);
-      }
+    // Sans donnée de départ, on lit d'abord le versement : une demande déjà
+    // enregistrée n'est jamais renvoyée.
+    if (_p.isEmpty) await _load();
+    if (!mounted || _p.isEmpty || _requested) {
+      if (mounted) setState(() => _loading = false);
+      return;
     }
-    await _load();
+    setState(() => _sending = true);
+    try {
+      await VendorRepository.instance.requestPayoutFollowUp(widget.payoutId);
+    } catch (e) {
+      if (mounted) setState(() => _error = ApiClient.friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+    await _load(keepError: true);
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = _p.isEmpty);
+  /// Relit le versement ; n'envoie jamais de nouvelle demande.
+  Future<void> _load({bool keepError = false}) async {
+    if (!mounted) return;
+    setState(() => _loading = true);
     try {
-      final data = await VendorRepository.instance.payout(widget.payoutId);
-      final detail = data['payout'];
+      final data = await VendorRepository.instance.payout(widget.payoutId, fresh: true);
+      final detail = orderMap(data['payout']);
       if (!mounted) return;
       setState(() {
-        if (detail is Map) _p = Map<String, dynamic>.from(detail);
-        _error = null;
+        if (detail.isNotEmpty) _p = detail;
+        if (!keepError) _error = null;
       });
     } catch (e) {
-      if (mounted && _p.isEmpty) setState(() => _error = ApiClient.friendlyError(e));
+      if (mounted) setState(() => _error = ApiClient.friendlyError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  void _support(String reference) => Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => VendorSupportScreen(
+          initialCategory: 'payouts',
+          initialContextType: 'vendor_payout',
+          initialContextId: widget.payoutId,
+          initialSubject: 'Assistance versement $reference',
+          startNew: true,
+        ),
+      ));
+
   @override
   Widget build(BuildContext context) {
-    final requestedAt = orderHumanDate(_p['vendor_followup_requested_at']);
-    final hasResponse = ('${_p['admin_note'] ?? ''}').trim().isNotEmpty;
-    final closed = ['paid', 'cancelled'].contains('${_p['status'] ?? ''}');
-    final reference = 'SV-${_p['payout_reference'] ?? _p['reference'] ?? widget.payoutId}';
+    final reference = screenText(_p['payout_reference'] ?? _p['reference'], '${widget.payoutId}');
+    final requestedOn = orderShortDate(_p['vendor_followup_requested_at']);
+    return OrderPage(
+      tab: VendorTab.finance,
+      title: 'Suivi de ma demande',
+      subtitle: 'Suivez l’évolution de votre demande de versement.',
+      loading: _loading || _sending,
+      error: _error,
+      hasContent: _p.isNotEmpty,
+      emptyMessage: 'Ce versement est indisponible.',
+      onRefresh: _load,
+      actions: [
+        MkBarButton(label: 'Retour', icon: Icons.arrow_back_rounded, onTap: () => Navigator.of(context).pop()),
+        MkBarButton(
+          label: 'Actualiser le statut',
+          icon: Icons.sync_rounded,
+          filled: true,
+          loading: _loading && _p.isNotEmpty,
+          onTap: _sending ? null : _load,
+        ),
+      ],
+      children: [
+        _amountCard(reference, requestedOn),
+        _stepsCard(requestedOn),
+        _noteCard(),
+        _helpCard(reference),
+      ],
+    );
+  }
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: OrderHeader(
-                showBack: true,
-                title: 'Suivi de ma demande de versement',
-                subtitle: 'Suivez l’évolution de votre demande en temps réel.',
-                titleTrailing: HeaderRefBadge(
-                  reference: '# $reference',
-                  dateLabel: requestedAt.isEmpty ? null : 'Créée le $requestedAt',
-                ),
-              ),
-            ),
-            if (_loading)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(child: CircularProgressIndicator(color: orderOrange)),
-              )
-            else
-              SliverToBoxAdapter(
-                child: ColoredBox(
-                  color: const Color(0xFF031D47),
-                  child: OrderSheet(
-                    child: OrderResponsiveBody(
-                      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+  // ---- Montant ----------------------------------------------------------------
+  Widget _amountCard(String reference, String requestedOn) {
+    final state = _sending
+        ? 'Envoi de la demande…'
+        : !_requested
+            ? 'Demande non envoyée'
+            : ['paid', 'cancelled'].contains('${_p['status']}')
+                ? 'Demande clôturée'
+                : 'Demande de suivi en cours';
+    final wide = MediaQuery.sizeOf(context).width >= 380;
+    return OrderCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const FinanceIconDisc(Icons.volunteer_activism_rounded, color: Mk.orange, size: 52),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Montant du versement',
+                      style: TextStyle(color: Mk.muted, fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                    FinanceAmount(_p['amount'], size: 27),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                      decoration: BoxDecoration(color: Mk.softOrange, borderRadius: BorderRadius.circular(99)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (_error != null) ...[
-                            Container(
-                              padding: const EdgeInsets.all(13),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF1F0),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFF2B8B5)),
-                              ),
-                              child: Text(_error!, style: const TextStyle(color: Color(0xFFB42318), fontSize: 12.5)),
+                          const Icon(Icons.hourglass_top_rounded, color: Color(0xFFB54400), size: 16),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              state,
+                              style: const TextStyle(color: Color(0xFFB54400), fontSize: 12.5, fontWeight: FontWeight.w700),
                             ),
-                            const SizedBox(height: 14),
-                          ],
-
-                          // ---- Montant + infos ------------------------------
-                          OrderCard(
-                            padding: const EdgeInsets.all(16),
-                            child: dataPair(
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: 58,
-                                    height: 58,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: orderOrange.withValues(alpha: .11),
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: const Icon(Icons.volunteer_activism_outlined, color: orderOrange, size: 27),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Montant du versement',
-                                          style: TextStyle(color: orderMuted, fontSize: 12, fontWeight: FontWeight.w700),
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          orderMoney(_p['amount']),
-                                          style: const TextStyle(color: orderText, fontSize: 24, fontWeight: FontWeight.w900),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                'Réf. demande : $reference',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(color: orderMuted, fontSize: 12),
-                                              ),
-                                            ),
-                                            InkWell(
-                                              onTap: () => Clipboard.setData(ClipboardData(text: reference)),
-                                              child: const Padding(
-                                                padding: EdgeInsets.only(left: 6),
-                                                child: Icon(Icons.copy_outlined, size: 16, color: orderBlue),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                                          decoration: BoxDecoration(
-                                            color: orderOrange.withValues(alpha: .11),
-                                            borderRadius: BorderRadius.circular(99),
-                                          ),
-                                          child: Text(
-                                            _sending ? 'Envoi de la demande...' : 'Demande de suivi en cours',
-                                            style: const TextStyle(color: orderOrange, fontSize: 12, fontWeight: FontWeight.w700),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  dataInfoRow(Icons.event_outlined, 'Date de la demande', requestedAt.isEmpty ? '—' : requestedAt),
-                                  dataInfoRow(Icons.account_balance_outlined, 'Méthode de paiement', screenText(_p['payment_method_label'])),
-                                  dataInfoRow(Icons.phone_iphone_outlined, 'Numéro de compte', screenText(_p['phone'])),
-                                ],
-                              ),
-                              breakpoint: 520,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-
-                          // ---- Étapes de traitement ----------------------------
-                          Row(
-                            children: [
-                              const Icon(Icons.add_task_outlined, color: orderText, size: 20),
-                              const SizedBox(width: 9),
-                              const Text(
-                                'Étapes de traitement',
-                                style: TextStyle(color: orderText, fontSize: 15, fontWeight: FontWeight.w800),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          OrderCard(
-                            child: Column(
-                              children: [
-                                _step(1, 'Demande envoyée', 'Votre demande de suivi a été enregistrée avec succès.', requestedAt, requestedAt.isNotEmpty),
-                                _step(2, 'En cours de traitement', 'Notre équipe vérifie les informations auprès de notre partenaire de paiement.',
-                                    requestedAt.isNotEmpty ? requestedAt : '', requestedAt.isNotEmpty),
-                                _step(3, 'Réponse disponible', 'Vous serez notifié dès que nous aurons une réponse.',
-                                    hasResponse ? orderHumanDate(_p['updated_at']) : '', hasResponse),
-                                _step(4, 'Clôturée', 'La demande sera clôturée après résolution.',
-                                    closed ? orderHumanDate(_p['paid_at']) : '', closed, isLast: true),
-                              ],
-                            ),
-                          ),
-
-                          if (hasResponse) ...[
-                            const SizedBox(height: 18),
-                            Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF4E5),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFF0B429)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: const [
-                                      Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFB07500), size: 18),
-                                      SizedBox(width: 8),
-                                      Text('Dernière mise à jour', style: TextStyle(color: Color(0xFF7A4E00), fontWeight: FontWeight.w800, fontSize: 13.5)),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text('${_p['admin_note']}', style: const TextStyle(color: Color(0xFF7A4E00), fontSize: 12.5, height: 1.4)),
-                                ],
-                              ),
-                            ),
-                          ],
-
-                          const SizedBox(height: 18),
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: orderSoftBlue,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFD8E7FF)),
-                            ),
-                            child: dataPair(
-                              const Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(Icons.info_rounded, color: orderBlue, size: 20),
-                                      SizedBox(width: 8),
-                                      Text('Besoin d’aide ?', style: TextStyle(color: orderText, fontSize: 15, fontWeight: FontWeight.w800)),
-                                    ],
-                                  ),
-                                  SizedBox(height: 6),
-                                  Text(
-                                    'Notre équipe support est à votre écoute pour toute question concernant vos versements.',
-                                    style: TextStyle(color: Color(0xFF16458D), fontSize: 12.5, height: 1.35),
-                                  ),
-                                ],
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                                  builder: (_) => VendorSupportScreen(
-                                    initialCategory: 'payouts',
-                                    initialContextType: 'vendor_payout',
-                                    initialContextId: widget.payoutId,
-                                    initialSubject: 'Assistance versement $reference',
-                                    startNew: true,
-                                  ),
-                                )),
-                                icon: const Icon(Icons.headset_mic_outlined, size: 18),
-                                label: const Text('Contacter le support', style: TextStyle(fontSize: 12.5)),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: orderBlue,
-                                  backgroundColor: Colors.white,
-                                  side: const BorderSide(color: orderBlue),
-                                  minimumSize: const Size(0, 46),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-                                ),
-                              ),
-                              breakpoint: 420,
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-                          Row(
-                            children: [
-                              Expanded(child: OrderSecondaryButton(label: 'Retour', onPressed: () => Navigator.of(context).pop())),
-                              const SizedBox(width: 12),
-                              Expanded(flex: 2, child: OrderPrimaryButton(label: 'Actualiser le statut', icon: Icons.refresh_rounded, onPressed: _load)),
-                            ],
                           ),
                         ],
                       ),
                     ),
+                  ],
+                ),
+              ),
+              if (wide)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Image.asset('assets/images/mockups/fin_wallet.jpg', width: 104, excludeFromSemantics: true),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: InkWell(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: reference));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Référence copiée.')));
+              },
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text.rich(
+                        TextSpan(
+                          text: 'Réf. demande : ',
+                          children: [
+                            TextSpan(text: reference, style: const TextStyle(color: Mk.navy, fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                        maxLines: 1,
+                        style: const TextStyle(color: Mk.muted, fontSize: 12.5, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.copy_rounded, size: 17, color: orderBlue, semanticLabel: 'Copier la référence'),
+                    ],
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+          ),
+          const Divider(height: 22, color: orderBorder),
+          FinanceInfoLine(
+            icon: Icons.calendar_today_outlined,
+            label: 'Date de la demande',
+            value: requestedOn.isEmpty ? '—' : requestedOn,
+          ),
+          FinanceInfoLine(
+            icon: Icons.credit_card_outlined,
+            label: 'Méthode de paiement',
+            value: screenText(_p['payment_method_label']),
+          ),
+          FinanceInfoLine(
+            icon: Icons.person_outline_rounded,
+            label: 'Numéro de compte',
+            value: screenText(payoutPhoneLabel(_p['phone'])),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _step(int number, String title, String description, String date, bool done, {bool isLast = false}) {
+  // ---- Étapes -------------------------------------------------------------------
+  Widget _stepsCard(String requestedOn) {
+    final hasResponse = '${_p['admin_note'] ?? ''}'.trim().isNotEmpty;
+    final closed = ['paid', 'cancelled'].contains('${_p['status'] ?? ''}');
+    final steps = <(String, String, String, bool)>[
+      ('Demande envoyée', 'Votre demande de suivi a été enregistrée avec succès.', requestedOn, _requested),
+      (
+        'En cours de traitement',
+        'Notre équipe vérifie les informations auprès de notre partenaire de paiement.',
+        '',
+        _requested && (hasResponse || closed),
+      ),
+      (
+        'Réponse disponible',
+        hasResponse ? 'Une réponse de notre équipe est disponible ci-dessous.' : 'Vous serez notifié dès que nous aurons une réponse.',
+        hasResponse ? orderShortDate(_p['updated_at']) : '',
+        hasResponse,
+      ),
+      (
+        'Clôturée',
+        closed ? 'La demande est clôturée.' : 'La demande sera clôturée après résolution.',
+        closed ? orderShortDate(_p['paid_at'] ?? _p['updated_at']) : '',
+        closed,
+      ),
+    ];
+    final current = _requested ? steps.indexWhere((step) => !step.$4) : -1;
+    return OrderCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const OrderSectionTitle('Étapes de traitement'),
+          const SizedBox(height: 14),
+          for (var i = 0; i < steps.length; i++)
+            _step(steps[i], done: steps[i].$4, current: i == current, isLast: i == steps.length - 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _step((String, String, String, bool) step, {required bool done, required bool current, required bool isLast}) {
+    final color = done ? orderGreen : (current ? Mk.orange : const Color(0xFFB6C0D4));
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -326,41 +277,111 @@ class _PayoutFollowUpScreenState extends State<PayoutFollowUpScreen> {
           Column(
             children: [
               Container(
-                width: 28,
-                height: 28,
+                width: 26,
+                height: 26,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: done ? orderOrange : Colors.white,
+                  color: color,
                   shape: BoxShape.circle,
-                  border: Border.all(color: done ? orderOrange : const Color(0xFFC9D3E1), width: 1.6),
+                  border: Border.all(color: color.withValues(alpha: .25), width: 3, strokeAlign: BorderSide.strokeAlignOutside),
                 ),
-                child: done ? const Icon(Icons.check_rounded, color: Colors.white, size: 16) : null,
+                child: done ? const Icon(Icons.check_rounded, color: Colors.white, size: 17) : null,
               ),
-              if (!isLast) Expanded(child: Container(width: 2, color: done ? orderOrange.withValues(alpha: .4) : const Color(0xFFE0E5EC))),
+              if (!isLast) Expanded(child: Container(width: 3, color: done ? orderGreen : const Color(0xFFDCE2EC))),
             ],
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Padding(
               padding: EdgeInsets.only(bottom: isLast ? 0 : 18),
-              child: Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(title, style: TextStyle(color: done ? orderText : orderMuted, fontSize: 14, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 3),
-                        Text(description, style: const TextStyle(color: orderMuted, fontSize: 12, height: 1.35)),
-                      ],
-                    ),
+                  Text(
+                    step.$1,
+                    style: TextStyle(color: done || current ? Mk.navy : Mk.icon, fontSize: 14.5, fontWeight: FontWeight.w800),
                   ),
-                  Text(date.isEmpty ? '-' : date, style: const TextStyle(color: orderMuted, fontSize: 11)),
+                  const SizedBox(height: 2),
+                  Text(step.$2, style: const TextStyle(color: Mk.muted, fontSize: 13, height: 1.4, fontWeight: FontWeight.w500)),
+                  if (step.$3.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(step.$3, style: const TextStyle(color: Mk.icon, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
                 ],
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // ---- Message --------------------------------------------------------------------
+  Widget _noteCard() {
+    final note = '${_p['admin_note'] ?? ''}'.trim();
+    final order = screenText(orderMap(_p['order'])['order_number'], '');
+    final String message;
+    if (note.isNotEmpty) {
+      message = note;
+    } else if (_p['status'] == 'blocked') {
+      message = order.isEmpty
+          ? 'Le versement sera libéré après confirmation de la livraison de la commande.'
+          : 'Le versement sera libéré après confirmation de livraison de la commande $order.';
+    } else {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: const Color(0xFFFFF6DC), borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.sms_outlined, color: Color(0xFF8A5200), size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: Color(0xFF7A4500), fontSize: 13.5, height: 1.4, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- Aide -------------------------------------------------------------------------
+  Widget _helpCard(String reference) {
+    final wide = MediaQuery.sizeOf(context).width >= 380;
+    return OrderCard(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const OrderSectionTitle('Besoin d’aide ?'),
+                const SizedBox(height: 4),
+                const Text(
+                  'Notre équipe support est à votre écoute pour toute question concernant vos versements.',
+                  style: TextStyle(color: Mk.muted, fontSize: 13, height: 1.4, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                MkBarButton(
+                  label: 'Contacter le support',
+                  icon: Icons.headset_mic_outlined,
+                  color: orderBlue,
+                  height: 44,
+                  onTap: () => _support(reference),
+                ),
+              ],
+            ),
+          ),
+          if (wide)
+            Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: Image.asset('assets/images/mockups/fin_support.jpg', width: 96, excludeFromSemantics: true),
+            ),
         ],
       ),
     );

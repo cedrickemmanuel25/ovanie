@@ -16,16 +16,20 @@ import '../../products/domain/product_model.dart';
 import '../../products/presentation/product_detail_screen.dart';
 import '../data/marketplace_repository.dart';
 
-enum OvanieOfferKind { flash, bestSellers, latest, blackFriday }
+enum OvanieOfferKind { flash, bestSellers, latest, blackFriday, promotions, selection }
 
 class OvanieOfferCollectionScreen extends StatefulWidget {
   final OvanieOfferKind kind;
   final String? initialOffer;
+  final String? initialCategorySlug;
+  final String? title;
 
   const OvanieOfferCollectionScreen({
     super.key,
     required this.kind,
     this.initialOffer,
+    this.initialCategorySlug,
+    this.title,
   });
 
   @override
@@ -63,11 +67,15 @@ class _OvanieOfferCollectionScreenState
     return maxValue;
   }
 
-  String get _offer {
+  String? get _offer {
     if (widget.initialOffer != null && widget.initialOffer!.trim().isNotEmpty) {
       return widget.initialOffer!.trim();
     }
     switch (widget.kind) {
+      case OvanieOfferKind.promotions:
+        return 'promo';
+      case OvanieOfferKind.selection:
+        return null;
       case OvanieOfferKind.flash:
         return 'vente-flash';
       case OvanieOfferKind.bestSellers:
@@ -80,7 +88,12 @@ class _OvanieOfferCollectionScreenState
   }
 
   String get _title {
+    if (widget.title != null && widget.title!.trim().isNotEmpty) return widget.title!.trim();
     switch (widget.kind) {
+      case OvanieOfferKind.promotions:
+        return 'Offres en cours';
+      case OvanieOfferKind.selection:
+        return 'Sélection OVANIE';
       case OvanieOfferKind.flash:
         return 'Vente flash';
       case OvanieOfferKind.bestSellers:
@@ -95,6 +108,7 @@ class _OvanieOfferCollectionScreenState
   @override
   void initState() {
     super.initState();
+    _categorySlug = widget.initialCategorySlug;
     _load(reset: true);
   }
 
@@ -555,6 +569,8 @@ class _OfferSearchField extends StatelessWidget {
       OvanieOfferKind.bestSellers => 'Rechercher parmi les meilleures ventes...',
       OvanieOfferKind.latest => 'Rechercher dans les nouveautés...',
       OvanieOfferKind.blackFriday => 'Rechercher une offre Black Friday...',
+      OvanieOfferKind.promotions => 'Rechercher une offre...',
+      OvanieOfferKind.selection => 'Rechercher dans la sélection...',
     };
 
     return TextField(

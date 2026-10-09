@@ -1,5 +1,6 @@
 @extends('admin.layouts.app')
 
+@section('page-title', 'Ajouter une publicité')
 @section('title', 'Ajouter une pub accueil')
 
 @section('content')

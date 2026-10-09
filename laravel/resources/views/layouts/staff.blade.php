@@ -16,7 +16,9 @@
         ['section' => 'Outils'],
         ['label' => 'Recherche OVANIE', 'icon' => 'search', 'route' => 'support.search'],
         ['label' => 'Réponses & procédures', 'icon' => 'book-open-check', 'route' => 'support.knowledge.index'],
+        ['label' => 'Catalogue produits', 'icon' => 'package', 'route' => 'support.products.index'],
         ['section' => 'Suivi interne'],
+        ['label' => 'Missions boutiques', 'icon' => 'clipboard-check', 'route' => 'support.configuration-missions.index'],
         ['label' => 'Transferts aux équipes OVANIE', 'icon' => 'forward', 'route' => 'support.handoffs.index'],
     ];
 
@@ -36,6 +38,7 @@
         ['section' => 'Prospection vendeurs'],
         ['label' => 'Ma mission de prospection', 'icon' => 'route', 'route' => 'commercial.prospecting.areas'],
         ['label' => 'Vendeurs prospectés', 'icon' => 'store-plus', 'route' => 'commercial.prospecting.prospects.index'],
+        ['label' => 'Missions boutiques', 'icon' => 'clipboard-check', 'route' => 'commercial.configuration-missions.index'],
         ['section' => 'Données marketplace'],
         ['label' => 'Produits', 'icon' => 'package', 'route' => 'commercial.products.index'],
         ['label' => 'Suivi commandes', 'icon' => 'clipboard-list', 'route' => 'commercial.orders.index'],
@@ -136,7 +139,7 @@
         @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
         @if(session('error'))<div class="alert alert-error">{{ session('error') }}</div>@endif
         @if($errors->any())<div class="alert alert-error">{{ $errors->first() }}</div>@endif
-        @yield('content')
+        @hasSection('content_class')<div class="@yield('content_class')">@yield('content')</div>@else @yield('content') @endif
     </div></main>
 </div>
 <script>
@@ -150,5 +153,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 </script>
 @stack('scripts')
+@include('layouts.partials.live-sync')
 </body>
 </html>

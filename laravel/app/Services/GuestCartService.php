@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Cart;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -29,69 +30,62 @@ class GuestCartService
     public function raw(Request $request): array
     {
         $raw = $request->session()->get(self::SESSION_KEY, []);
-
-        if (! is_array($raw)) {
-            return [];
-        }
-
+        if (! is_array($raw)) return [];
         $normalized = [];
-        foreach ($raw as $productId => $entry) {
-            $id = (int) $productId;
-            if ($id <= 0) {
-                continue;
-            }
-
-            $quantity = is_array($entry)
-                ? (int) ($entry['quantity'] ?? 0)
-                : (int) $entry;
-
-            if ($quantity > 0) {
-                $normalized[$id] = ['quantity' => $quantity];
-            }
+        foreach ($raw as $key => $entry) {
+            if (! is_array($entry)) $entry = ['quantity' => (int) $entry];
+            $productId = (int) ($entry['product_id'] ?? explode(':', (string) $key)[0] ?? 0);
+            $variantId = isset($entry['product_variant_id']) ? (int) $entry['product_variant_id'] : null;
+            $quantity = (int) ($entry['quantity'] ?? 0);
+            if ($productId <= 0 || $quantity <= 0) continue;
+            $lineKey = $this->lineKey($productId, $variantId);
+            $normalized[$lineKey] = ['product_id' => $productId, 'product_variant_id' => $variantId, 'quantity' => $quantity];
         }
-
         return $normalized;
     }
 
-    public function quantityFor(Request $request, int $productId): int
+    public function quantityFor(Request $request, int $productId, ?int $variantId = null): int
     {
-        return (int) ($this->raw($request)[$productId]['quantity'] ?? 0);
+        return (int) ($this->raw($request)[$this->lineKey($productId, $variantId)]['quantity'] ?? 0);
     }
 
-    public function add(Request $request, Product $product, int $quantity): int
+    public function add(Request $request, Product $product, int $quantity, ?ProductVariant $variant = null): int
     {
         $raw = $this->raw($request);
         $productId = (int) $product->getKey();
-        $stock = max(0, (int) ($product->stock ?? 0));
+        $variantId = $variant?->id;
+        $key = $this->lineKey($productId, $variantId);
+        $stock = max(0, (int) ($variant?->stock ?? $product->stock ?? 0));
         $minimum = max(1, (int) ($product->min_order_quantity ?? 1));
-        $next = max($minimum, (int) ($raw[$productId]['quantity'] ?? 0) + max(1, $quantity));
+        $next = max($minimum, (int) ($raw[$key]['quantity'] ?? 0) + max(1, $quantity));
 
         if ($stock > 0) {
             $next = min($next, $stock);
         }
 
-        $raw[$productId] = ['quantity' => $next];
+        $raw[$key] = ['product_id' => $productId, 'product_variant_id' => $variantId, 'quantity' => $next];
         $request->session()->put(self::SESSION_KEY, $raw);
 
         return $next;
     }
 
-    public function update(Request $request, int $productId, int $quantity): void
+    public function update(Request $request, int $productId, int $quantity, ?int $variantId = null): void
     {
         $raw = $this->raw($request);
 
-        if (! isset($raw[$productId])) {
+        $key = $this->lineKey($productId, $variantId);
+        if (! isset($raw[$key])) {
             return;
         }
 
-        $raw[$productId] = ['quantity' => max(1, $quantity)];
+        $raw[$key]['quantity'] = max(1, $quantity);
         $request->session()->put(self::SESSION_KEY, $raw);
     }
 
-    public function remove(Request $request, int $productId): void
+    public function remove(Request $request, int $productId, ?int $variantId = null): void
     {
         $raw = $this->raw($request);
-        unset($raw[$productId]);
+        unset($raw[$this->lineKey($productId, $variantId)]);
         $request->session()->put(self::SESSION_KEY, $raw);
     }
 
@@ -126,7 +120,7 @@ class GuestCartService
             return ['cart' => $this->virtualCart(collect()), 'messages' => []];
         }
 
-        $ids = array_keys($raw);
+        $ids = collect($raw)->pluck('product_id')->unique()->values()->all();
         $eligibleIds = $this->visibility->query([], false)
             ->whereIn('products.id', $ids)
             ->pluck('products.id')
@@ -142,8 +136,9 @@ class GuestCartService
         $normalized = [];
         $items = collect();
 
-        foreach ($raw as $productId => $entry) {
-            $productId = (int) $productId;
+        foreach ($raw as $lineKey => $entry) {
+            $productId = (int) ($entry['product_id'] ?? 0);
+            $variantId = isset($entry['product_variant_id']) ? (int) $entry['product_variant_id'] : null;
             /** @var Product|null $product */
             $product = $products->get($productId);
 
@@ -152,7 +147,9 @@ class GuestCartService
                 continue;
             }
 
-            $stock = max(0, (int) ($product->stock ?? 0));
+            $variant = $variantId ? $product->variants()->whereKey($variantId)->where('is_active', true)->first() : null;
+            if ($product->variants()->where('is_active', true)->exists() && ! $variant) continue;
+            $stock = max(0, (int) ($variant?->stock ?? $product->stock ?? 0));
             $minimum = max(1, (int) ($product->min_order_quantity ?? 1));
 
             if ($stock < $minimum) {
@@ -166,16 +163,20 @@ class GuestCartService
                 $messages[] = "La quantité de {$product->name} a été ajustée au stock disponible ({$stock}).";
             }
 
-            $normalized[$productId] = ['quantity' => $quantity];
+            $normalized[$lineKey] = ['product_id' => $productId, 'product_variant_id' => $variantId, 'quantity' => $quantity];
 
             $item = new stdClass();
             // Pour un panier visiteur, l'identifiant temporaire est le product_id.
             // CheckoutController sait le convertir en vrai cart_item_id après login.
-            $item->id = $productId;
+            $item->id = crc32($lineKey);
             $item->product_id = $productId;
+            $item->product_variant_id = $variantId;
+            $item->variant = $variant;
+            $item->variant_label_snapshot = $variant?->label;
+            $item->variant_image_snapshot = $variant ? ($variant->card_url ?: $variant->image_url) : null;
             $item->product = $product;
             $item->quantity = $quantity;
-            $item->price = (float) ($product->final_price ?? $product->price ?? 0);
+            $item->price = (float) ($variant?->price_override ?? $product->final_price ?? $product->price ?? 0);
             $item->price_source = 'catalog';
             $item->negotiation_id = null;
             $items->push($item);
@@ -200,7 +201,7 @@ class GuestCartService
         $cart = Cart::firstOrCreate(['user_id' => $user->id]);
 
         if ($raw !== []) {
-            $ids = array_keys($raw);
+            $ids = collect($raw)->pluck('product_id')->unique()->values()->all();
             $eligibleIds = $this->visibility->query([], false)
                 ->whereIn('products.id', $ids)
                 ->pluck('products.id')
@@ -212,8 +213,9 @@ class GuestCartService
                 ->get()
                 ->keyBy(fn (Product $product) => (int) $product->id);
 
-            foreach ($raw as $productId => $entry) {
-                $productId = (int) $productId;
+            foreach ($raw as $lineKey => $entry) {
+                $productId = (int) ($entry['product_id'] ?? 0);
+                $variantId = isset($entry['product_variant_id']) ? (int) $entry['product_variant_id'] : null;
                 /** @var Product|null $product */
                 $product = $products->get($productId);
 
@@ -221,7 +223,9 @@ class GuestCartService
                     continue;
                 }
 
-                $stock = max(0, (int) ($product->stock ?? 0));
+                $variant = $variantId ? $product->variants()->whereKey($variantId)->where('is_active', true)->first() : null;
+                if ($product->variants()->where('is_active', true)->exists() && ! $variant) continue;
+                $stock = max(0, (int) ($variant?->stock ?? $product->stock ?? 0));
                 $minimum = max(1, (int) ($product->min_order_quantity ?? 1));
                 if ($stock < $minimum) {
                     continue;
@@ -229,7 +233,7 @@ class GuestCartService
 
                 $guestQuantity = max($minimum, (int) ($entry['quantity'] ?? 1));
                 $guestQuantity = min($guestQuantity, $stock);
-                $item = $cart->items()->where('product_id', $productId)->first();
+                $item = $cart->items()->where('product_id', $productId)->where('product_variant_id', $variantId)->first();
 
                 // Ne jamais écraser un prix négocié existant par un panier visiteur.
                 if ($item && ($item->price_source ?? 'catalog') === 'negotiated') {
@@ -237,10 +241,13 @@ class GuestCartService
                 }
 
                 $quantity = min($stock, (int) ($item?->quantity ?? 0) + $guestQuantity);
-                $unitPrice = (float) ($product->final_price ?? $product->price ?? 0);
+                $unitPrice = (float) ($variant?->price_override ?? $product->final_price ?? $product->price ?? 0);
 
                 if ($item) {
                     $item->forceFill([
+                        'product_variant_id' => $variant?->id,
+                        'variant_label_snapshot' => $variant?->label,
+                        'variant_image_snapshot' => $variant ? ($variant->card_url ?: $variant->image_url) : null,
                         'quantity' => $quantity,
                         'price' => $unitPrice,
                         'price_source' => 'catalog',
@@ -249,6 +256,9 @@ class GuestCartService
                 } else {
                     $cart->items()->create([
                         'product_id' => $productId,
+                        'product_variant_id' => $variant?->id,
+                        'variant_label_snapshot' => $variant?->label,
+                        'variant_image_snapshot' => $variant ? ($variant->card_url ?: $variant->image_url) : null,
                         'original_product_id' => $productId,
                         'fulfillment_product_id' => $productId,
                         'original_shop_id' => $product->shop_id,
@@ -284,6 +294,11 @@ class GuestCartService
         $request->session()->forget(self::SESSION_KEY);
 
         return $cart->fresh('items.product');
+    }
+
+    private function lineKey(int $productId, ?int $variantId = null): string
+    {
+        return $productId . ':' . ($variantId ?: 0);
     }
 
     private function virtualCart(Collection $items): object

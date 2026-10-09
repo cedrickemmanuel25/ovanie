@@ -13,6 +13,17 @@ return [
         'web' => [
             'driver' => 'session',
             'provider' => 'users',
+            // Connexion mémorisée (cookie « remember ») : le client ou le
+            // vendeur reste connecté 1 an tant qu'il ne se déconnecte pas.
+            'remember' => (int) env('AUTH_WEB_REMEMBER_MINUTES', 525600),
+        ],
+
+        /*
+         * OVANIE Pro : comptes complètement séparés des comptes publics OVANIE.
+         */
+        'pro' => [
+            'driver' => 'session',
+            'provider' => 'pro_users',
         ],
 
         /*
@@ -58,12 +69,24 @@ return [
             'driver' => 'eloquent',
             'model' => App\Models\DeliveryDriver::class,
         ],
+
+        'pro_users' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\ProUser::class,
+        ],
     ],
 
     'passwords' => [
         'users' => [
             'provider' => 'users',
             'table' => 'password_reset_tokens',
+            'expire' => 60,
+            'throttle' => 60,
+        ],
+
+        'pro_users' => [
+            'provider' => 'pro_users',
+            'table' => 'pro_password_reset_tokens',
             'expire' => 60,
             'throttle' => 60,
         ],

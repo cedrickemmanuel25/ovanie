@@ -41,7 +41,7 @@
                     <tr class="territory-clickable-row" data-zone-row-url="{{ route('logistics.zones.show',$zone) }}" tabindex="0">
                         <td><span class="territory-row-dot {{ $zone->is_active ? 'active' : '' }}"></span><a class="territory-code" href="{{ route('logistics.zones.show',$zone) }}">{{ $zone->code }}</a></td>
                         <td><a class="territory-zone-name-link" href="{{ route('logistics.zones.show',$zone) }}">{{ $zone->name }}</a></td><td>{{ $zone->region }}</td><td>{{ $zone->communes->count() }}</td>
-                        <td><span class="territory-status {{ $zone->is_active?'active':'inactive' }}"><i></i>{{ $zone->is_active?'Active':'Inactive' }}</span></td>
+                        <td><span class="territory-status {{ $zone->is_active?'active':'inactive' }}"><i></i>{{ $zone->is_active?'Active':'Désactivée' }}</span></td>
                         <td>{{ $zone->average_delay_hours }}h</td>
                         <td><span class="territory-activity-count">{{ (int)($metric['activity_7d'] ?? 0) }}</span>@if(($metric['activity_7d'] ?? 0)>0)<span class="territory-growth"><x-operations.icon name="next"/> {{ $growth>0?'+':'' }}{{ $growth }} %</span>@else<span class="territory-zero">—</span>@endif</td>
                         <td><a class="territory-more" href="{{ route('logistics.zones.show',$zone) }}" aria-label="Voir {{ $zone->name }}"><x-operations.icon name="more"/></a></td>
@@ -62,7 +62,7 @@
             <article class="territory-panel territory-selected-card">
                 <h3><span><span class="territory-round-icon"><x-operations.icon name="list"/></span> Zone sélectionnée</span>@if($featured)<a href="{{ route('logistics.zones.show',$featured) }}"><x-operations.icon name="edit"/> Ouvrir</a>@endif</h3>
                 @if($featured)
-                <div class="selected-zone-title"><a href="{{ route('logistics.zones.show',$featured) }}">{{ $featured->code }}</a><strong>{{ $featured->name }}</strong><span class="territory-status {{ $featured->is_active?'active':'inactive' }}"><i></i>{{ $featured->is_active?'Active':'Inactive' }}</span></div>
+                <div class="selected-zone-title"><a href="{{ route('logistics.zones.show',$featured) }}">{{ $featured->code }}</a><strong>{{ $featured->name }}</strong><span class="territory-status {{ $featured->is_active?'active':'inactive' }}"><i></i>{{ $featured->is_active?'Active':'Désactivée' }}</span></div>
                 <div class="selected-zone-body">
                     <dl><dt>Région</dt><dd>{{ $featured->region }}</dd><dt>Communes couvertes</dt><dd>{{ $featured->communes->count() }} communes <a href="{{ route('logistics.zones.show',$featured) }}">Voir le détail</a></dd><dt>Délai moyen</dt><dd>{{ $featured->average_delay_hours }}h</dd><dt>Livraisons (7 jours)</dt><dd>{{ (int)($featuredMetrics['activity_7d'] ?? 0) }} livraison(s)</dd></dl>
                     <div class="principal-communes"><b>Communes</b>@forelse($featured->communes->take(5) as $commune)<span><x-operations.icon name="pin"/> {{ $commune->name }}</span>@empty<span>Aucune commune associée</span>@endforelse<a href="{{ route('logistics.zones.show',$featured) }}">Voir toutes les communes ({{ $featured->communes->count() }}) <x-operations.icon name="next"/></a></div>

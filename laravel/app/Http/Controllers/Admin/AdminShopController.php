@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Shop;
 use App\Models\User;
+use App\Services\Geo\AdminGoogleMapsLocationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use ZipArchive;
 
 class AdminShopController extends Controller
@@ -37,7 +40,7 @@ class AdminShopController extends Controller
         if ($request->filled('readiness')) {
             match ($request->input('readiness')) {
                 'kyc_pending' => $query->where(function ($builder) {
-                    $builder->whereNull('kyc_status')->orWhere('kyc_status', '!=', Shop::KYC_VERIFIED);
+                    $builder->whereNull('kyc_status')->orWhereNotIn('kyc_status', [Shop::KYC_VERIFIED, Shop::KYC_AUTOMATED_CHECKED]);
                 }),
                 'gps_missing' => $query->where(function ($builder) {
                     $builder->whereNull('latitude')->orWhereNull('longitude');
@@ -107,7 +110,7 @@ class AdminShopController extends Controller
             'managed_by_commercial_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
-        if (! empty($data['managed_by_commercial_id']) && ! User::whereKey($data['managed_by_commercial_id'])->where('role', 'commercial')->exists()) {
+        if (! empty($data['managed_by_commercial_id']) && ! User::whereKey($data['managed_by_commercial_id'])->where('role', 'commercial')->where('status', 'active')->exists()) {
             return back()->with('error', 'Le gestionnaire sélectionné doit être un commercial actif.');
         }
 
@@ -132,6 +135,208 @@ class AdminShopController extends Controller
         ])->loadCount(['products', 'orders']);
 
         return view('admin.shops.show', compact('shop'));
+    }
+
+    /**
+     * Formulaire administratif de configuration opérationnelle.
+     * L'administrateur peut régulariser une ancienne boutique sans utiliser le GPS
+     * de son propre appareil. Pour OVANIE Logistics, il colle uniquement une
+     * référence Google Maps ; latitude/longitude restent des données techniques.
+     */
+    public function operationalConfiguration(Shop $shop)
+    {
+        $shop->load([
+            'user',
+            'sellerDeliveryProfile',
+            'sellerDeliveryZones',
+        ]);
+
+        $sellerZone = $shop->sellerDeliveryZones
+            ->sortByDesc(fn ($zone) => (bool) $zone->is_active)
+            ->first();
+
+        return view('admin.shops.operational-configuration', compact('shop', 'sellerZone'));
+    }
+
+    /**
+     * Enregistre la logistique et le reversement au nom du vendeur.
+     */
+    public function updateOperationalConfiguration(
+        Request $request,
+        Shop $shop,
+        AdminGoogleMapsLocationService $locationResolver
+    ) {
+        $logisticsType = (string) $request->input('logistics_type');
+        $isOvanie = $logisticsType === 'ovanie';
+        $isSeller = $logisticsType === 'seller';
+        $needsNewReference = $isOvanie && ($shop->latitude === null || $shop->longitude === null);
+
+        $data = $request->validate([
+            'logistics_type' => ['required', Rule::in(['ovanie', 'seller'])],
+
+            'google_maps_reference' => [
+                'nullable',
+                Rule::requiredIf($needsNewReference),
+                'string',
+                'max:1000',
+            ],
+            'address' => ['nullable', Rule::requiredIf($isOvanie), 'string', 'max:255'],
+            'commune' => ['nullable', Rule::requiredIf($isOvanie), 'string', 'max:120'],
+            'district' => ['nullable', Rule::requiredIf($isOvanie), 'string', 'max:120'],
+            'landmark' => ['nullable', 'string', 'max:255'],
+
+            'seller_default_delay' => ['nullable', Rule::requiredIf($isSeller), 'string', 'max:120'],
+            'seller_conditions' => ['nullable', Rule::requiredIf($isSeller), 'string', 'max:2000'],
+            'seller_max_weight_kg' => ['nullable', Rule::requiredIf($isSeller), 'numeric', 'gt:0'],
+            'seller_max_volume_m3' => ['nullable', Rule::requiredIf($isSeller), 'numeric', 'gt:0'],
+            'seller_zone_commune' => ['nullable', Rule::requiredIf($isSeller), 'string', 'max:120'],
+            'seller_zone_price' => ['nullable', Rule::requiredIf($isSeller), 'numeric', 'min:0'],
+            'seller_zone_delay' => ['nullable', Rule::requiredIf($isSeller), 'string', 'max:120'],
+
+            'payment_mode' => ['required', Rule::in([Shop::PAYMENT_POST_DELIVERY, Shop::PAYMENT_WEEKLY])],
+            'mm_operator' => ['required', Rule::in(['orange', 'mtn', 'wave', 'moov'])],
+            'mm_number' => ['required', 'regex:/^[0-9+ ]{8,20}$/'],
+            'mm_holder' => ['required', 'string', 'max:255'],
+            'admin_confirmation' => ['required', 'accepted'],
+        ], [
+            'google_maps_reference.required' => 'Collez la position Google Maps de la boutique. Aucune carte ni GPS administrateur n’est utilisé.',
+            'address.required' => 'Renseignez l’adresse ou le point de retrait de la boutique.',
+            'commune.required' => 'Renseignez la commune de la boutique.',
+            'district.required' => 'Renseignez le quartier de la boutique.',
+            'seller_default_delay.required' => 'Renseignez le délai habituel de livraison du vendeur.',
+            'seller_conditions.required' => 'Renseignez les conditions de livraison du vendeur.',
+            'seller_zone_commune.required' => 'Renseignez au moins une zone de livraison.',
+            'seller_zone_price.required' => 'Renseignez le tarif de cette zone.',
+            'seller_zone_delay.required' => 'Renseignez le délai de cette zone.',
+            'admin_confirmation.accepted' => 'Confirmez que ces informations ont été communiquées ou vérifiées avec le vendeur.',
+        ]);
+
+        $adminId = Auth::guard('admin')->id() ?: auth()->id();
+
+        DB::transaction(function () use ($shop, $data, $isOvanie, $locationResolver, $adminId) {
+            if ($isOvanie) {
+                $location = null;
+                $reference = trim((string) ($data['google_maps_reference'] ?? ''));
+
+                if ($reference !== '') {
+                    $location = $locationResolver->resolve(
+                        $reference,
+                        $data['address'] ?? null,
+                        $data['commune'] ?? null,
+                        $data['district'] ?? null,
+                        $data['landmark'] ?? null,
+                    );
+                } elseif ($shop->latitude !== null && $shop->longitude !== null) {
+                    $location = [
+                        'latitude' => (float) $shop->latitude,
+                        'longitude' => (float) $shop->longitude,
+                        'address' => $data['address'] ?? $shop->address,
+                        'commune' => $data['commune'] ?? $shop->commune,
+                        'district' => $data['district'] ?? $shop->district,
+                        'landmark' => $data['landmark'] ?? $shop->landmark,
+                        'region' => $shop->region,
+                        'city' => $shop->city,
+                        'source' => $shop->geo_source ?: 'admin_google_maps',
+                        'precision' => $shop->geo_precision ?: 'high',
+                        'precision_score' => $shop->geo_precision_score ?: 90,
+                    ];
+                }
+
+                $score = (int) ($location['precision_score'] ?? 0);
+                $geoStatus = $score >= 85
+                    ? Shop::GEO_STATUS_VERIFIED
+                    : ($score >= 60 ? Shop::GEO_STATUS_RELIABLE : Shop::GEO_STATUS_REVIEW_RECOMMENDED);
+
+                $shop->forceFill([
+                    'logistics_type' => 'ovanie',
+                    'address' => trim((string) ($location['address'] ?? $data['address'] ?? '')),
+                    'commune' => trim((string) ($location['commune'] ?? $data['commune'] ?? '')),
+                    'district' => trim((string) ($location['district'] ?? $data['district'] ?? '')),
+                    'landmark' => trim((string) ($location['landmark'] ?? $data['landmark'] ?? '')) ?: null,
+                    'region' => trim((string) ($location['region'] ?? $shop->region ?? '')) ?: $shop->region,
+                    'city' => trim((string) ($location['city'] ?? $shop->city ?? '')) ?: $shop->city,
+                    'latitude' => (float) $location['latitude'],
+                    'longitude' => (float) $location['longitude'],
+                    'geo_accuracy' => null,
+                    'geo_source' => (string) ($location['source'] ?? 'admin_google_maps'),
+                    'geo_precision' => (string) ($location['precision'] ?? 'high'),
+                    'geo_precision_score' => $score ?: 90,
+                    'geo_status' => $geoStatus,
+                    'geo_verified_at' => now(),
+                    'admin_google_maps_reference' => $reference !== '' ? $reference : $shop->admin_google_maps_reference,
+                    'logistics_status' => Shop::LOGISTICS_READY,
+                    'logistics_confirmed_at' => now(),
+                    'logistics_configured_by_admin_id' => $adminId,
+                    'logistics_configured_by_admin_at' => now(),
+                ])->save();
+
+                $shop->sellerDeliveryProfile()->update([
+                    'is_enabled' => false,
+                    'status' => 'disabled',
+                ]);
+                $shop->sellerDeliveryZones()->update(['is_active' => false]);
+            } else {
+                $profile = $shop->sellerDeliveryProfile()->updateOrCreate(
+                    ['shop_id' => $shop->id],
+                    [
+                        'is_enabled' => true,
+                        'default_delay' => trim((string) $data['seller_default_delay']),
+                        'max_weight_kg' => (float) $data['seller_max_weight_kg'],
+                        'max_volume_m3' => (float) $data['seller_max_volume_m3'],
+                        'conditions' => trim((string) $data['seller_conditions']),
+                        'status' => 'ready',
+                        'validated_at' => now(),
+                        'validated_by' => $adminId,
+                    ]
+                );
+
+                $zone = $shop->sellerDeliveryZones()->oldest('id')->first();
+                $zonePayload = [
+                    'shop_id' => $shop->id,
+                    'seller_delivery_profile_id' => $profile->id,
+                    'city' => $shop->city,
+                    'commune' => trim((string) $data['seller_zone_commune']),
+                    'district' => null,
+                    'delivery_price' => (float) $data['seller_zone_price'],
+                    'estimated_delay' => trim((string) $data['seller_zone_delay']),
+                    'max_weight_kg' => (float) $data['seller_max_weight_kg'],
+                    'max_volume_m3' => (float) $data['seller_max_volume_m3'],
+                    'is_active' => true,
+                ];
+
+                if ($zone) {
+                    $zone->update($zonePayload);
+                } else {
+                    $shop->sellerDeliveryZones()->create($zonePayload);
+                }
+
+                $shop->forceFill([
+                    'logistics_type' => 'seller',
+                    'logistics_status' => Shop::LOGISTICS_READY,
+                    'logistics_confirmed_at' => now(),
+                    'logistics_configured_by_admin_id' => $adminId,
+                    'logistics_configured_by_admin_at' => now(),
+                ])->save();
+            }
+
+            $shop->forceFill([
+                'payment_mode' => $data['payment_mode'],
+                'mm_operator' => $data['mm_operator'],
+                'mm_number' => preg_replace('/\s+/', '', trim((string) $data['mm_number'])),
+                'mm_holder' => trim((string) $data['mm_holder']),
+                'payout_configured_at' => now(),
+                'payout_configured_by_admin_id' => $adminId,
+                'payout_configured_by_admin_at' => now(),
+            ])->save();
+        });
+
+        $shop->refresh();
+
+        return redirect()
+            ->route('admin.shops.show', $shop)
+            ->with('success', $shop->configurationReady()
+                ? 'Logistique et reversement configurés par l’administration. La boutique est opérationnellement régularisée.'
+                : 'La configuration a été enregistrée. Certaines informations restent à compléter.');
     }
 
     /**
@@ -201,6 +406,34 @@ class AdminShopController extends Controller
         return back()->with('success', $message);
     }
 
+    public function requireConfiguration(Request $request, Shop $shop)
+    {
+        $data = $request->validate([
+            'configure_logistics' => ['nullable', 'boolean'],
+            'configure_payout' => ['nullable', 'boolean'],
+        ]);
+
+        $logistics = $request->boolean('configure_logistics');
+        $payout = $request->boolean('configure_payout');
+
+        if (! $logistics && ! $payout) {
+            return back()->with('error', 'Choisissez au moins une configuration à faire confirmer par le vendeur.');
+        }
+
+        $changes = [];
+        if ($logistics) {
+            $changes['logistics_confirmed_at'] = null;
+            $changes['logistics_status'] = Shop::LOGISTICS_INCOMPLETE;
+        }
+        if ($payout) {
+            $changes['payout_configured_at'] = null;
+        }
+
+        $shop->forceFill($changes)->save();
+
+        return back()->with('success', 'La boutique sera dirigée vers la régularisation obligatoire lors de la prochaine connexion vendeur.');
+    }
+
     /**
      * Télécharge le dossier complet vendeur dans un ZIP.
      * Compatible avec les fichiers privés stockés sur local et les fichiers publics.
@@ -264,7 +497,13 @@ class AdminShopController extends Controller
      */
     public function destroy(Shop $shop)
     {
-        $shop->delete();
+        // Une boutique qui a déjà des commandes, des produits vendus ou des paiements reste liée à cet historique :
+        // la base refuse sa suppression. On l'explique au lieu d'afficher une erreur technique.
+        try {
+            \Illuminate\Support\Facades\DB::transaction(fn () => $shop->delete());
+        } catch (\Illuminate\Database\QueryException $exception) {
+            return back()->with('error', 'Cette boutique ne peut pas être supprimée : elle est liée à des commandes, des produits ou des paiements. Vous pouvez la suspendre à la place.');
+        }
 
         return redirect()
             ->route('admin.shops.index')

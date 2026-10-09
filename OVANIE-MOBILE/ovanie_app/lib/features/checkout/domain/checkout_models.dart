@@ -144,6 +144,8 @@ class CheckoutPreview {
   final double totalWeightKg;
   final double totalVolumeM3;
   final String recommendedVehicle;
+  /// Distance boutique -> point de livraison (km), si connue.
+  final double? deliveryDistanceKm;
   final String deliveryZone;
   final String deliveryCommune;
   final String deliveryQuartier;
@@ -165,6 +167,7 @@ class CheckoutPreview {
     required this.totalWeightKg,
     required this.totalVolumeM3,
     required this.recommendedVehicle,
+    this.deliveryDistanceKm,
     required this.deliveryZone,
     required this.deliveryCommune,
     required this.deliveryQuartier,
@@ -199,6 +202,9 @@ class CheckoutPreview {
       totalWeightKg: asDouble(json['total_weight_kg']),
       totalVolumeM3: asDouble(json['total_volume_m3']),
       recommendedVehicle: text(json['recommended_vehicle']),
+      deliveryDistanceKm: json['delivery_distance_km'] == null
+          ? null
+          : double.tryParse('${json['delivery_distance_km']}'),
       deliveryZone: text(resolved['zone']),
       deliveryCommune: text(resolved['commune']),
       deliveryQuartier: text(resolved['quartier']),

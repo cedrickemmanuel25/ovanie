@@ -552,13 +552,22 @@
 
     <section class="ls-card">
         <h2>Mode actuel</h2>
-        <strong class="ls-mode">{{ $shop->usesSellerLogistics() ? 'Ma propre logistique' : 'OVANIE Logistics' }}</strong>
-        <p>{{ $shop->usesSellerLogistics() ? 'Vous gérez vos zones, tarifs et délais de livraison.' : 'OVANIE organise la collecte et la livraison de vos nouvelles commandes.' }}</p>
-        <div class="ls-actions">
-            <a class="ls-button" href="{{ route('vendor.delivery.mode') }}">Changer de mode logistique</a>
-            <a class="ls-button secondary" href="{{ route($shop->usesSellerLogistics() ? 'vendor.delivery.edit' : 'vendor.delivery.location') }}">Modifier mes informations logistiques</a>
-        </div>
-        <p class="ls-notice">Tout changement s’applique uniquement aux nouvelles commandes. Les commandes déjà créées ou en cours conservent leur mode logistique.</p>
+        @if(!$shop->hasConfirmedLogistics())
+            <strong class="ls-mode">À configurer</strong>
+            <p>Cette boutique a été créée avant la confirmation du mode logistique. Choisissez maintenant qui prendra en charge vos futures livraisons.</p>
+            <div class="ls-actions">
+                <a class="ls-button" href="{{ route('vendor.delivery.location') }}">Choisir OVANIE Logistics</a>
+                <a class="ls-button secondary" href="{{ route('vendor.delivery.edit') }}">Choisir ma propre logistique</a>
+            </div>
+        @else
+            <strong class="ls-mode">{{ $shop->usesSellerLogistics() ? 'Ma propre logistique' : 'OVANIE Logistics' }}</strong>
+            <p>{{ $shop->usesSellerLogistics() ? 'Vous gérez vos zones, tarifs et délais de livraison.' : 'OVANIE organise la collecte et la livraison de vos nouvelles commandes.' }}</p>
+            <div class="ls-actions">
+                <a class="ls-button" href="{{ route('vendor.delivery.mode') }}">Changer de mode logistique</a>
+                <a class="ls-button secondary" href="{{ route($shop->usesSellerLogistics() ? 'vendor.delivery.edit' : 'vendor.delivery.location') }}">Modifier mes informations logistiques</a>
+            </div>
+            <p class="ls-notice">Tout changement s’applique uniquement aux nouvelles commandes. Les commandes déjà créées ou en cours conservent leur mode logistique.</p>
+        @endif
     </section>
 
     @if(session('success'))
@@ -603,7 +612,7 @@
         <article class="dl-overview-card">
             <span class="dl-overview-icon"><i data-lucide="map-pin"></i></span>
             <div class="dl-overview-copy">
-                <span>Nombre de communes<br>configurées</span>
+                <span>Communes configurées</span>
                 <strong>{{ $stats['active_communes'] > 0 ? $stats['active_communes'] : '—' }}</strong>
                 <a href="{{ route('vendor.delivery.edit') }}">Configurer</a>
             </div>

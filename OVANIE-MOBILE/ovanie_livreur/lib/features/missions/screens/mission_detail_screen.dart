@@ -5,8 +5,10 @@ import '../../../core/network/api_client.dart';
 import '../data/mission_repository.dart';
 import '../models/driver_mission.dart';
 import '../widgets/mission_dialogs.dart';
+import '../widgets/mission_live_map.dart';
 import '../widgets/mission_sections.dart';
 import '../widgets/mission_ui.dart';
+import '../../history/mission_history_detail_screen.dart';
 import 'mission_accepted_screen.dart';
 
 class MissionDetailScreen extends StatefulWidget {
@@ -98,14 +100,8 @@ class _MissionDetailScreenState extends State<MissionDetailScreen> {
       body: Column(
         children: [
           MissionPageHeader(
-            title: 'Détail de mission',
-            subtitle: mission == null
-                ? 'Mission'
-                : mission.isToAccept
-                    ? 'Mission à réserver'
-                    : mission.isDelivered
-                        ? 'Mission livrée'
-                        : mission.statusLabel,
+            title: 'Mission',
+            subtitle: mission?.missionNumber ?? widget.missionNumber,
             showBack: true,
             onBack: () => Navigator.of(context).pop(),
             trailing: mission == null ? null : MissionStatusPill.forMission(mission),
@@ -139,19 +135,21 @@ class _MissionDetailScreenState extends State<MissionDetailScreen> {
                         ],
                       ),
                     )
+                  else if (mission != null && mission.isHistory)
+                    MissionArchiveSections(mission: mission)
                   else if (mission != null) ...[
                     MissionOverviewBlock(mission: mission),
                     if (mission.isToAccept) ...[
                       const SizedBox(height: 12),
                       const MissionTintMessage(
-                        text: 'Réserver cette mission confirme votre engagement. Vous ne partez pas immédiatement : OVANIE vous donnera le signal lorsque tous les vendeurs seront prêts.',
+                        text: 'Vous partirez au signal de collecte, quand les vendeurs seront prêts.',
                         warning: true,
                         icon: Icons.lock_clock_rounded,
                       ),
                     ],
                     const SizedBox(height: 12),
-                    if (mission.isToAccept && mission.netAmount > 0) ...[
-                      _EarningsCard(netAmount: mission.netAmount),
+                    if (mission.netAmount > 0) ...[
+                      MissionEarningsCard(netAmount: mission.netAmount),
                       const SizedBox(height: 12),
                     ],
                     MissionPreparationStops(stops: mission.pickupStops, title: 'Collectes prévues'),
@@ -187,74 +185,14 @@ class _DeliveryPreview extends StatelessWidget {
         children: [
           const MissionSectionTitle('Livraison'),
           const SizedBox(height: 13),
-          MissionRouteMap(
+          MissionLiveMap(
             route: mission.routePlan,
             points: mission.mapPoints,
-            height: 178,
           ),
           const SizedBox(height: 10),
           MissionDestinationBox(
             destination: mission.displayDestination,
             subtitle: 'Livraison client',
-          ),
-          const SizedBox(height: 10),
-          const MissionTintMessage(
-            text: 'Après réservation, la collecte restera verrouillée jusqu’à ce que tous les points vendeurs soient prêts.',
-            icon: Icons.info_rounded,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EarningsCard extends StatelessWidget {
-  const _EarningsCard({required this.netAmount});
-
-  final double netAmount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF9F3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFBFEBD9)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: const BoxDecoration(color: OvanieColors.green, shape: BoxShape.circle),
-            child: const Icon(Icons.payments_rounded, color: Colors.white, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Gain prévu',
-                  style: TextStyle(
-                    color: MissionPalette.slate,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  missionMoney(netAmount),
-                  style: const TextStyle(
-                    color: MissionPalette.navy,
-                    fontSize: 21,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),

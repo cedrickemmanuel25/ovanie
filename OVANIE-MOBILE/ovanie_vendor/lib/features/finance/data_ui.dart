@@ -106,50 +106,48 @@ class DataCard extends StatelessWidget {
     required this.child,
     this.title,
     this.icon,
+    this.iconColor = const Color(0xFF1668E3),
     this.trailing,
     this.color = Colors.white,
   });
   final Widget child;
   final String? title;
   final IconData? icon;
+  final Color iconColor;
   final Widget? trailing;
   final Color color;
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFE1EAF7)),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x05062962),
-          blurRadius: 8,
-          offset: Offset(0, 3),
-        ),
-      ],
-    ),
+    margin: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(14)),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (title != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Color(0xFFEAF0F9))),
-            ),
-            child: Row(
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, color: orderText, size: 23),
-                  const SizedBox(width: 9),
-                ],
-                Expanded(child: screenTitle(title!)),
-                if (trailing != null) trailing!,
+        if (title != null) ...[
+          Row(
+            children: [
+              if (icon != null) ...[
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(color: iconColor.withValues(alpha: .12), shape: BoxShape.circle),
+                  child: Icon(icon, color: iconColor, size: 21),
+                ),
+                const SizedBox(width: 11),
               ],
-            ),
+              Expanded(
+                child: Text(
+                  title!,
+                  style: const TextStyle(color: orderText, fontSize: 16, height: 1.2, fontWeight: FontWeight.w800),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
           ),
-        Padding(padding: const EdgeInsets.all(9), child: child),
+          const SizedBox(height: 10),
+        ],
+        child,
       ],
     ),
   );
@@ -174,32 +172,38 @@ Widget dataPair(Widget left, Widget right, {double breakpoint = 350}) =>
             ),
     );
 
+/// Ligne « libellé · valeur » : deux colonnes alignées à gauche (les montants à droite).
 Widget dataLine(
   String label,
   Object? value, {
   bool money = false,
   Color color = orderText,
   bool strong = false,
+  IconData? icon,
 }) => Padding(
-  padding: const EdgeInsets.symmetric(vertical: 3),
+  padding: const EdgeInsets.symmetric(vertical: 8),
   child: Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      if (icon != null) ...[
+        Icon(icon, size: 19, color: const Color(0xFF24376B)),
+        const SizedBox(width: 10),
+      ],
       Expanded(
-        child: Text(
-          label,
-          style: const TextStyle(color: orderMuted, fontSize: 12),
-        ),
+        flex: 5,
+        child: Text(label, style: const TextStyle(color: orderMuted, fontSize: 13.5, fontWeight: FontWeight.w500)),
       ),
-      const SizedBox(width: 12),
-      Flexible(
+      const SizedBox(width: 10),
+      Expanded(
+        flex: 6,
         child: Text(
           money ? screenMoney(value) : screenText(value),
-          textAlign: TextAlign.right,
+          textAlign: money ? TextAlign.right : TextAlign.left,
           style: TextStyle(
             color: color,
-            fontSize: strong ? 16 : 13,
-            fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
+            fontSize: strong ? 16 : 13.5,
+            height: 1.35,
+            fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
           ),
         ),
       ),
@@ -331,13 +335,18 @@ Widget dataMetric(
   ],
 );
 
-Widget dataMetrics(List<Widget> cells) => Row(
-  children: [
-    for (var i = 0; i < cells.length; i++) ...[
-      if (i != 0) const SizedBox(width: 8),
-      Expanded(child: cells[i]),
-    ],
-  ],
+/// Indicateurs en grille de deux colonnes : aucun montant tronqué sur téléphone.
+Widget dataMetrics(List<Widget> cells) => LayoutBuilder(
+  builder: (context, constraints) {
+    const gap = 10.0;
+    final columns = constraints.maxWidth >= 640 ? cells.length : 2;
+    final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+    return Wrap(
+      spacing: gap,
+      runSpacing: gap,
+      children: [for (final cell in cells) SizedBox(width: width, child: cell)],
+    );
+  },
 );
 
 Future<void> openVendorUrl(BuildContext context, String url) async {

@@ -19,6 +19,7 @@ class Payment extends Model
         'status',
         'reference',
         'user_id',
+        'pro_user_id',
         'client_payment_method_id',
         'operator',
         'mobile_number',
@@ -78,6 +79,11 @@ class Payment extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function proUser()
+    {
+        return $this->belongsTo(ProUser::class, 'pro_user_id');
     }
 
     public function clientPaymentMethod()

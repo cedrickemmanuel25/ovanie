@@ -58,7 +58,7 @@ class CheckoutRepository {
     final body = response.data;
     if (body is! Map || body['data'] is! Map || body['payment'] is! Map) {
       throw const OvanieApiException(
-        'La commande OVANIE retournée par le serveur est invalide.',
+        'Votre commande n’a pas pu être finalisée. Réessayez dans un instant.',
       );
     }
 
@@ -102,7 +102,7 @@ class CheckoutRepository {
     final body = response.data;
     if (body is! Map || body['data'] is! Map || body['payment'] is! Map) {
       throw const OvanieApiException(
-        'Le paiement OVANIE retourné par le serveur est invalide.',
+        'Le paiement n’a pas pu être lancé. Réessayez dans un instant.',
       );
     }
 

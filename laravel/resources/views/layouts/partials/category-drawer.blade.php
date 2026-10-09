@@ -169,9 +169,8 @@
     $drawerBusinessUrl = Route::has('catalog.business') ? route('catalog.business') : '#';
     $drawerSellUrl = Route::has('open-shop') ? route('open-shop') : '#';
     $drawerOrdersUrl = Route::has('orders.index') ? route('orders.index') : '#';
-    $drawerProfileUrl = Route::has('client.dashboard')
-        ? route('client.dashboard')
-        : (Route::has('profile.edit') ? route('profile.edit') : '#');
+    $drawerProfileUrl = \App\Support\AccountSpace::current()['url']
+        ?? (Route::has('client.dashboard') ? route('client.dashboard') : '#');
 @endphp
 
 <div class="ov-mobile-overlay ov-category-drawer-overlay" id="mobileMenuOverlay" aria-hidden="true"></div>
@@ -208,6 +207,12 @@
                     </a>
                 @endif
             @else
+                {{-- Sur mobile, la barre de menu qui porte le bouton « IA » est masquée : l'assistante est proposée ici. --}}
+                <button type="button" class="ov-category-drawer__item ov-category-drawer__item--standalone ov-category-drawer__item--leaf ov-category-drawer__item--ai" data-ai-panel-trigger>
+                    <img src="{{ asset('images/ai-assistant/n-nan.webp') }}" alt="">
+                    <span>Miss N’Nan, votre assistante<small>Chercher un produit, suivre une commande…</small></span>
+                </button>
+
                 <a href="{{ $drawerProfileUrl }}" class="ov-category-drawer__item ov-category-drawer__item--standalone ov-category-drawer__item--leaf">
                     <i data-lucide="circle-user-round"></i>
                     <span>Mon compte</span>
@@ -306,7 +311,7 @@
     <div class="ov-category-drawer__security">
         <i data-lucide="shield-check"></i>
         <div>
-            <strong>Paiement 100% sécurisé</strong>
+            <strong>Paiement sécurisé</strong>
             <span>Vos données sont protégées</span>
         </div>
     </div>

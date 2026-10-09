@@ -111,5 +111,6 @@
     </script>
 
     @stack('scripts')
+@include('layouts.partials.live-sync')
 </body>
 </html>

@@ -34,10 +34,35 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Messages de date lisibles : « postérieure ou égale à aujourd’hui » au lieu de « … au today ».
+        foreach (['after', 'after_or_equal', 'before', 'before_or_equal'] as $dateRule) {
+            \Illuminate\Support\Facades\Validator::replacer($dateRule, function ($message, $attribute, $rule, $parameters, $validator) {
+                $reference = (string) ($parameters[0] ?? '');
+                $readable = ['now' => 'maintenant', 'today' => 'aujourd’hui', 'tomorrow' => 'demain', 'yesterday' => 'hier'][$reference]
+                    ?? (strtotime($reference) === false ? $validator->getDisplayableAttribute($reference) : $reference);
+
+                return str_replace(':date', $readable, $message);
+            });
+        }
+
+        // Pictogrammes des écrans d'accès OVANIE PRO : @proicon('mail') ou @proicon('mail', 'classe').
+        \Illuminate\Support\Facades\Blade::directive('proicon', fn (string $args) => "<?php echo \App\Support\ProForms\ProIcon::svg($args); ?>");
+
         Gate::policy(Devis::class, DevisPolicy::class);
         Gate::policy(AppelOffre::class, AppelOffrePolicy::class);
         Gate::policy(Dispute::class, DisputePolicy::class);
         Gate::policy(ProductImage::class, ProductImagePolicy::class);
+
+        // Les tournées suivent seules l'avancement réel des livraisons.
+        \App\Models\OrderItem::updated(function (\App\Models\OrderItem $item) {
+            if ($item->wasChanged('delivery_status')) {
+                try {
+                    app(\App\Services\DeliveryTourProgressService::class)->syncForItem($item);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        });
 
         // En développement local (php artisan serve sur 127.0.0.1/localhost),
         // ne jamais forcer https : le serveur local ne parle pas TLS, donc
@@ -73,6 +98,13 @@ class AppServiceProvider extends ServiceProvider
         // version "catalogue pro" via l'IA (désactivé par défaut, voir
         // config/product-images.php ai_enhancement_enabled).
         ProductImage::observe(ProductImageObserver::class);
+
+        // Synchronisation web ↔ applications mobiles : chaque écriture
+        // significative fait avancer la version des sujets concernés, que les
+        // clients interrogent via GET /live-sync pour se rafraîchir seuls.
+        foreach (array_keys(\App\Observers\LiveSyncObserver::MODELS) as $liveSyncModel) {
+            $liveSyncModel::observe(\App\Observers\LiveSyncObserver::class);
+        }
 
         // Toute notification Laravel enregistrée en base (ex. logistique) peut
         // aussi devenir un vrai push FCM sans créer un flux mobile parallèle.

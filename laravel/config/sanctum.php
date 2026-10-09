@@ -32,7 +32,15 @@ return [
         env('SANCTUM_STATEFUL_DOMAINS',
             'localhost,127.0.0.1,localhost:8000,127.0.0.1:8000,margurite-hailstoned-nonarticulately.ngrok-free.dev'
         ),
-        ['localhost', 'localhost:8000', '127.0.0.1', '127.0.0.1:8000'],
+        [
+            'localhost',
+            'localhost:8000',
+            '127.0.0.1',
+            '127.0.0.1:8000',
+            env('OVANIE_MAIN_DOMAIN', 'ovanie.com'),
+            'www.' . preg_replace('/^www\./', '', env('OVANIE_MAIN_DOMAIN', 'ovanie.com')),
+            env('OVANIE_PRO_DOMAIN', 'pro.ovanie.com'),
+        ],
     ),
 
     /*

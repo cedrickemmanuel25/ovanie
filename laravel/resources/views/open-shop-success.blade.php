@@ -89,7 +89,7 @@
 
     <header class="wizard-header">
         <a href="{{ route('vendor.dashboard') }}" class="wizard-brand">
-            <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE">
+            <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE">
         </a>
         <a class="help-link" href="{{ url('/contact') }}">
             <span>Besoin d'aide ?<strong>Centre d'assistance</strong></span>

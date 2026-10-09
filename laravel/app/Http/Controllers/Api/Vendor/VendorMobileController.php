@@ -33,6 +33,7 @@ use App\Services\ProductSheetPresenter;
 use App\Services\VendorDashboardService;
 use App\Services\VendorFinanceService;
 use App\Services\VendorOrderTransitionService;
+use App\Services\VendorPayoutSettingsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -296,11 +297,40 @@ class VendorMobileController extends Controller
         $shop = $this->shopFor($request)->loadMissing('sellerDeliveryProfile', 'sellerDeliveryZones');
 
         return response()->json([
-            'logistics_type' => $shop->logistics_type ?: 'ovanie',
+            'logistics_type' => $shop->logistics_type,
+            'logistics_configured' => $shop->hasConfirmedLogistics(),
             'uses_seller_logistics' => $shop->usesSellerLogistics(),
             'logistics_status' => $shop->logistics_status,
             'profile' => $shop->usesSellerLogistics() || $request->boolean('configure') ? $shop->sellerDeliveryProfile : null,
             'zones' => $shop->usesSellerLogistics() || $request->boolean('configure') ? $shop->sellerDeliveryZones->values() : [],
+            'area_map_url' => $this->staticAreaMapUrl(),
+        ]);
+    }
+
+
+    public function paymentSettings(Request $request): JsonResponse
+    {
+        $shop = $this->shopFor($request);
+
+        return response()->json([
+            'configured' => $shop->hasConfiguredPayout(),
+            'payment_mode' => $shop->hasConfiguredPayout() ? $shop->payment_mode : null,
+            'payment_mode_label' => $shop->payment_mode_label,
+            'mm_operator' => $shop->mm_operator,
+            'mm_number' => $shop->mm_number,
+            'mm_holder' => $shop->mm_holder,
+            'whatsapp' => $shop->whatsapp,
+            'business_email' => $shop->business_email,
+        ]);
+    }
+
+    public function savePaymentSettings(Request $request, VendorPayoutSettingsService $settings): JsonResponse
+    {
+        $shop = $settings->save($this->shopFor($request), $request->all());
+
+        return response()->json([
+            'message' => 'Votre calendrier et votre compte de reversement ont été enregistrés.',
+            'shop' => $this->shopPayload($shop),
         ]);
     }
 
@@ -312,7 +342,10 @@ class VendorMobileController extends Controller
 
     public function resolveLogisticsLocation(Request $request, \App\Services\ShopPickupLocationService $locations): JsonResponse
     {
-        return response()->json($locations->resolve($this->shopFor($request), $request->all()))
+        $resolved = $locations->resolve($this->shopFor($request), $request->all());
+        $resolved['map_url'] = $this->staticMapUrl([[$resolved['latitude'] ?? null, $resolved['longitude'] ?? null, 'ff6a00']]);
+
+        return response()->json($resolved)
             ->header('Cache-Control', 'no-store');
     }
 
@@ -446,7 +479,7 @@ class VendorMobileController extends Controller
         $shop = $this->shopFor($request);
         abort_unless((int) $product->shop_id === (int) $shop->id, 403);
 
-        $product->loadMissing(['category.parent', 'images', 'reviews.user']);
+        $product->loadMissing(['category.parent', 'images', 'variants', 'reviews.user']);
         $product->loadCount('reviews')->loadAvg('reviews', 'rating');
 
         return response()->json(['product' => $this->productPayload($product, true)]);
@@ -481,7 +514,7 @@ class VendorMobileController extends Controller
 
         return response()->json([
             'message' => 'Produit mis à jour.',
-            'product' => $this->productPayload($product->fresh(['category', 'images']), true),
+            'product' => $this->productPayload($product->fresh(['category', 'images', 'variants']), true),
         ]);
     }
 
@@ -589,7 +622,7 @@ class VendorMobileController extends Controller
             });
         }
 
-        $product->load(['category', 'images']);
+        $product->load(['category', 'images', 'variants']);
 
         return response()->json([
             'message' => 'Ordre des images mis à jour.',
@@ -707,7 +740,9 @@ class VendorMobileController extends Controller
                 'id' => $item->id,
                 'product_id' => $item->product_id,
                 'name' => $product?->name ?: $item->product_name ?: 'Produit',
-                'image_url' => $product?->card_image_url,
+                'variant_id' => $item->product_variant_id,
+                'variant_label' => $item->variant_label_snapshot,
+                'image_url' => $item->variant_image_snapshot ?: $product?->card_image_url,
                 'category_name' => $product?->category?->name,
                 'brand' => $product?->brand,
                 'unit_label' => $unit,
@@ -740,7 +775,9 @@ class VendorMobileController extends Controller
         $providers = $order->items->pluck('delivery_provider')->filter()->unique()->values();
         $deliveryProvider = $providers->count() === 1 ? (string) $providers->first() : ($providers->isEmpty() ? '' : 'mixed');
         $deliveryProviderLabel = $providers->count() === 1
-            ? app(OrderWorkflowService::class)->providerLabel($providers->first())
+            ? ($providers->first() === OrderWorkflowService::PROVIDER_SELLER
+                ? 'Livraison par votre boutique'
+                : app(OrderWorkflowService::class)->providerLabel($providers->first()))
             : ($providers->isEmpty() ? 'Mode de livraison à définir' : 'Livraison mixte');
         $deliveryStatus = $this->vendorOrderDeliveryStatus($order->items);
         $tracking = $this->orderTrackingPayload($order, $shop, $order->items, $deliveryProvider);
@@ -793,25 +830,28 @@ class VendorMobileController extends Controller
                 'payment_status_label' => $this->paymentStatusLabel($order->payment_status),
                 'payment_method' => $order->payment_method,
                 'payment_method_label' => $this->paymentMethodLabel($order->payment_method),
+                // OVANIE Logistics : le vendeur ne contacte pas le client ; ses coordonnées ne sont pas transmises.
                 'client' => $order->client ? [
                     'name' => $order->client->name,
-                    'phone' => $order->client->phone,
-                    'email' => $order->client->email,
+                    'phone' => $deliveryProvider === OrderWorkflowService::PROVIDER_OVANIE ? null : $order->client->phone,
+                    'email' => $deliveryProvider === OrderWorkflowService::PROVIDER_OVANIE ? null : $order->client->email,
                 ] : [
                     'name' => $order->customer_name,
-                    'phone' => $order->delivery_recipient_phone ?: $order->phone,
+                    'phone' => $deliveryProvider === OrderWorkflowService::PROVIDER_OVANIE ? null : ($order->delivery_recipient_phone ?: $order->phone),
                 ],
                 'delivery_address' => [
-                    'address' => $order->delivery_address ?: $order->address,
+                    'address' => $deliveryProvider === OrderWorkflowService::PROVIDER_OVANIE ? null : ($order->delivery_address ?: $order->address),
                     'site_name' => $order->delivery_site_name,
-                    'recipient_name' => $order->delivery_recipient_name,
-                    'recipient_phone' => $order->delivery_recipient_phone,
+                    'recipient_name' => $deliveryProvider === OrderWorkflowService::PROVIDER_OVANIE ? null : $order->delivery_recipient_name,
+                    'recipient_phone' => $deliveryProvider === OrderWorkflowService::PROVIDER_OVANIE ? null : $order->delivery_recipient_phone,
                     'quartier' => $order->delivery_quartier,
                     'commune' => $order->delivery_commune,
                     'city' => $order->delivery_city,
                     'latitude' => $order->delivery_latitude ?? $order->delivery_lat,
                     'longitude' => $order->delivery_longitude ?? $order->delivery_lng,
-                    'formatted' => $deliveryAddressParts->join(', '),
+                    'formatted' => $deliveryProvider === OrderWorkflowService::PROVIDER_OVANIE
+                        ? collect([$order->delivery_quartier, $order->delivery_commune])->filter()->join(', ')
+                        : $deliveryAddressParts->join(', '),
                 ],
                 'vendor_status' => $this->vendorOrderStatus($order->items),
                 'delivery_provider' => $deliveryProvider,
@@ -836,6 +876,8 @@ class VendorMobileController extends Controller
                 ],
                 'tracking' => $tracking,
                 'status_history' => $statusHistory,
+                'seller_mission' => $this->sellerMissionPayload($order, $shop),
+                'cash_report' => $this->cashReportPayload($order, $shop),
             ],
         ]);
     }
@@ -918,10 +960,18 @@ class VendorMobileController extends Controller
             $lockedOrder->refreshGlobalStatusFromItems();
         });
 
+        $usesOvanie = $this->visibleVendorItems($order->items(), $shop)
+            ->where('delivery_provider', OrderWorkflowService::PROVIDER_OVANIE)
+            ->exists();
+
         return response()->json([
-            'message' => $target === 'ready'
-                ? 'Préparation validée. OVANIE Logistics est informé automatiquement lorsque la commande est prise en charge par OVANIE.'
-                : 'État de préparation mis à jour.',
+            'message' => match ($target) {
+                'ready' => $usesOvanie
+                    ? 'Préparation terminée. OVANIE Logistics a été prévenu et recherche un livreur pour l’enlèvement.'
+                    : 'Préparation terminée. Planifiez maintenant votre chauffeur pour lancer la livraison.',
+                'accepted' => 'Commande acceptée. Le client a été informé.',
+                default => 'Préparation en cours. Le client suit l’avancement en temps réel.',
+            },
             'vendor_status' => $target,
         ]);
     }
@@ -930,48 +980,48 @@ class VendorMobileController extends Controller
     {
         $this->shopFor($request);
         $this->bindUserToAuth($request);
-        $this->callController(VendorOrderController::class, 'markShipped', [
+        $response = $this->callController(VendorOrderController::class, 'markShipped', [
             'request' => $request,
             'order' => $order,
         ]);
 
-        return response()->json(['message' => 'Prise en charge de la livraison enregistrée.']);
+        return $this->flashJson($response, 'Prise en charge de la livraison enregistrée.');
     }
 
     public function updateDeliveryStatus(Request $request, Order $order): JsonResponse
     {
         $this->shopFor($request);
         $this->bindUserToAuth($request);
-        $this->callController(VendorOrderController::class, 'updateDeliveryStatus', [
+        $response = $this->callController(VendorOrderController::class, 'updateDeliveryStatus', [
             'request' => $request,
             'order' => $order,
         ]);
 
-        return response()->json(['message' => 'État de livraison mis à jour.']);
+        return $this->flashJson($response, 'État de livraison mis à jour.');
     }
 
     public function verifyDeliveryOtp(Request $request, Order $order): JsonResponse
     {
         $this->shopFor($request);
         $this->bindUserToAuth($request);
-        $this->callController(VendorOrderController::class, 'verifyDeliveryOtp', [
+        $response = $this->callController(VendorOrderController::class, 'verifyDeliveryOtp', [
             'request' => $request,
             'order' => $order,
         ]);
 
-        return response()->json(['message' => 'Code de réception validé. Livraison confirmée.']);
+        return $this->flashJson($response, 'Code de réception validé. Livraison confirmée.');
     }
 
     public function reportCodPayment(Request $request, Order $order): JsonResponse
     {
         $this->shopFor($request);
         $this->bindUserToAuth($request);
-        $this->callController(VendorOrderController::class, 'confirmPayment', [
+        $response = $this->callController(VendorOrderController::class, 'confirmPayment', [
             'request' => $request,
             'order' => $order,
         ]);
 
-        return response()->json(['message' => 'Encaissement signalé à OVANIE pour vérification.']);
+        return $this->flashJson($response, 'Encaissement signalé à OVANIE pour vérification.');
     }
 
     public function finance(Request $request, VendorFinanceService $finance): JsonResponse
@@ -981,6 +1031,8 @@ class VendorMobileController extends Controller
 
         return response()->json([
             'summary' => $finance->summary($shop, (int) $request->user()->id),
+            'payout_configured' => $shop->hasConfiguredPayout(),
+            'payment_mode_label' => $shop->payment_mode_label,
             'recent_payouts' => VendorPayout::query()
                 ->where('shop_id', $shop->id)
                 ->latest('id')
@@ -1000,10 +1052,58 @@ class VendorMobileController extends Controller
         $paginator = VendorPayout::query()
             ->where('shop_id', $shop->id)
             ->when($status !== '' && $status !== 'all', fn (Builder $q) => $q->where('status', $status))
+            // Un reversement à 0 F (vente remboursée) n'a rien à montrer au vendeur.
+            ->where('payout_amount', '>', 0)
             ->latest('id')
             ->paginate($perPage);
 
         return response()->json($this->paginate($paginator, fn ($payout) => $this->payoutPayload($payout)));
+    }
+
+    /**
+     * Retrait du solde disponible (reversements approuvés) vers le Mobile Money du vendeur.
+     * En production PayDunya, le virement part aussitôt ; sinon la demande est enregistrée
+     * et traitée par OVANIE.
+     */
+    public function withdrawPayouts(Request $request, \App\Services\PayDunyaPayoutService $paydunya): JsonResponse
+    {
+        $shop = $this->shopFor($request);
+        if (blank($shop->mm_operator) || blank($shop->mm_number) || blank($shop->mm_holder)) {
+            return response()->json(['message' => 'Renseignez d’abord votre compte Mobile Money.'], 422);
+        }
+
+        $payouts = VendorPayout::query()
+            ->where('shop_id', $shop->id)
+            ->where('status', VendorPayout::STATUS_APPROVED)
+            ->where('payout_amount', '>', 0)
+            ->get();
+        if ($payouts->isEmpty()) {
+            return response()->json(['message' => 'Aucun montant disponible au retrait pour le moment.'], 422);
+        }
+
+        $sent = 0;
+        foreach ($payouts as $payout) {
+            $payout->forceFill([
+                'vendor_followup_requested_at' => now(),
+                'meta' => array_merge((array) $payout->meta, ['withdrawal_requested_at' => now()->toIso8601String()]),
+            ])->save();
+            try {
+                $paydunya->execute($payout);
+                $sent++;
+            } catch (\Throwable) {
+                // Virement effectué par OVANIE à partir de la demande enregistrée.
+            }
+        }
+
+        $amount = (float) $payouts->sum('payout_amount');
+
+        return response()->json([
+            'message' => $sent > 0
+                ? 'Retrait lancé vers votre compte Mobile Money.'
+                : 'Demande de retrait envoyée. OVANIE effectue le virement sous 24 h.',
+            'amount' => $amount,
+            'count' => $payouts->count(),
+        ]);
     }
 
     public function payout(Request $request, VendorPayout $payout): JsonResponse
@@ -1152,6 +1252,23 @@ class VendorMobileController extends Controller
      * On résout donc d'abord l'instance via le container Laravel, puis on
      * laisse app()->call() injecter les dépendances de la méthode.
      */
+    /**
+     * Renvoie au mobile le message exact du flux web (succès ou avertissement),
+     * au lieu d'un texte générique qui peut contredire ce qui s'est passé.
+     */
+    private function flashJson(mixed $response, string $default): JsonResponse
+    {
+        $session = $response instanceof \Illuminate\Http\RedirectResponse ? $response->getSession() : null;
+        $warning = $session?->get('warning');
+        $message = $warning ?: ($session?->get('success') ?: ($session?->get('info') ?: $default));
+        $session?->forget(['success', 'warning', 'info']);
+
+        return response()->json(array_filter([
+            'message' => $message,
+            'level' => $warning ? 'warning' : 'success',
+        ]));
+    }
+
     private function callController(string $controllerClass, string $method, array $parameters = []): mixed
     {
         $controller = app($controllerClass);
@@ -1255,6 +1372,43 @@ class VendorMobileController extends Controller
      * VendorOrderController::resolveVendorOrderStatus()) pour que web et
      * mobile affichent toujours le même statut pour une même commande.
      */
+    /** Lien de mission du chauffeur vendeur, à renvoyer si WhatsApp n'a pas abouti. */
+    private function sellerMissionPayload(Order $order, Shop $shop): ?array
+    {
+        $session = \App\Models\SellerDeliveryTrackingSession::query()
+            ->where('order_id', $order->id)
+            ->where('shop_id', $shop->id)
+            ->whereIn('status', [\App\Models\SellerDeliveryTrackingSession::STATUS_ACTIVE, \App\Models\SellerDeliveryTrackingSession::STATUS_INCIDENT])
+            ->latest('id')
+            ->first();
+        if (! $session) {
+            return null;
+        }
+
+        return [
+            'url' => app(\App\Services\SellerDeliverySupervisionService::class)->publicMissionUrl($session),
+            'driver_name' => $session->driver_name,
+            'driver_phone' => $session->driver_phone,
+            'status' => $session->mission_status,
+        ];
+    }
+
+    /** Paiement à la livraison : le vendeur peut signaler l'encaissement depuis l'app. */
+    private function cashReportPayload(Order $order, Shop $shop): array
+    {
+        $isCash = \App\Services\PaymentService::normalizeMethod($order->payment_method) === \App\Services\PaymentService::METHOD_CASH_ON_DELIVERY;
+        $paid = in_array($order->payment_status, ['paid', 'escrow_held', 'released_to_vendor'], true);
+        $pending = \App\Models\VendorPaymentVerificationRequest::query()
+            ->where('order_id', $order->id)->where('shop_id', $shop->id)->where('status', 'pending')->exists();
+        $delivered = $this->visibleVendorItems($order->items(), $shop)->get()
+            ->every(fn ($item) => $item->isVendorDelivered());
+
+        return [
+            'can_report' => $isCash && ! $paid && ! $pending && $delivered,
+            'pending' => $isCash && $pending,
+        ];
+    }
+
     private function vendorOrderStatus($items): string
     {
         return app(OrderWorkflowService::class)->resolveVendorDisplayStatus($items);
@@ -1287,8 +1441,11 @@ class VendorMobileController extends Controller
             'status' => $shop->status,
             'kyc_status' => $shop->kyc_status,
             'logistics_status' => $shop->logistics_status,
-            'logistics_type' => $shop->logistics_type ?: 'ovanie',
+            'logistics_type' => $shop->logistics_type,
             'logistics_mode_label' => $shop->logistics_mode_label,
+            'logistics_configured' => $shop->hasConfirmedLogistics(),
+            'payout_configured' => $shop->hasConfiguredPayout(),
+            'configuration_complete' => $shop->hasCompleteConfiguration(),
             'can_publish_products' => $shop->canPublishProducts(),
             'is_active' => (bool) $shop->is_active,
             'main_category' => $shop->main_category,
@@ -1305,6 +1462,8 @@ class VendorMobileController extends Controller
             'geo_status' => $shop->geo_status,
             'logistics_location_ready' => \App\Services\ShopLogisticsSettingsService::hasReliableStoredLocation($shop),
             'geo_status_label' => $shop->geo_status_label,
+            // Aperçu de carte du point d'enlèvement pour l'app vendeur.
+            'pickup_map_url' => $this->staticMapUrl([[$shop->latitude, $shop->longitude, 'ff6a00']]),
             'whatsapp' => $shop->whatsapp,
             'business_email' => $shop->business_email,
             'payment_mode' => $shop->payment_mode,
@@ -1382,6 +1541,10 @@ class VendorMobileController extends Controller
             'seller_effective_price' => $sellerEffectivePrice,
 
             'sale_type' => $product->sale_type,
+            // Valeurs telles que saisies par le vendeur, pour préremplir son formulaire :
+            // le contrat commun n'expose que l'unité normalisée et pas le type.
+            'type' => $product->type,
+            'seller_unit_label' => $product->unit_label,
             'created_at' => optional($product->created_at)->toIso8601String(),
             'updated_at' => optional($product->updated_at)->toIso8601String(),
 
@@ -1418,6 +1581,16 @@ class VendorMobileController extends Controller
             return $subtotal > 0 ? $subtotal : ((float) ($item->price ?? 0) * max(1, (int) ($item->quantity ?? 1)));
         });
 
+        // Montant affiché au vendeur : son prix vendeur, comme dans le détail de la commande.
+        $commissions = app(CommissionService::class);
+        $sellerTotal = (float) $vendorItems->sum(function ($item) use ($commissions, $shop) {
+            $subtotal = (float) ($item->subtotal ?? 0);
+            if ($subtotal <= 0) {
+                $subtotal = (float) ($item->price ?? 0) * max(1, (int) ($item->quantity ?? 1));
+            }
+            return (float) ($commissions->breakdown($subtotal, $shop)['vendor_amount'] ?? 0);
+        });
+
         $clientName = $order->relationLoaded('client') ? $order->client?->name : null;
         $displayName = trim((string) ($order->delivery_site_name ?: $clientName ?: $order->customer_name ?: 'Client OVANIE'));
         $vendorStatus = $this->vendorOrderStatus($vendorItems);
@@ -1433,6 +1606,7 @@ class VendorMobileController extends Controller
             'vendor_status' => $vendorStatus,
             'items_count' => $vendorItems->count(),
             'public_products_total' => round($publicTotal, 2),
+            'seller_products_total' => round($sellerTotal, 2),
             'client_name' => $clientName,
             'client_display_name' => $displayName,
             'delivery_site_name' => $order->delivery_site_name,
@@ -1586,6 +1760,8 @@ class VendorMobileController extends Controller
                 (string) ($assignment?->status ?? '') === 'offered' => 'La mission est proposée aux livreurs partenaires. En attente de réservation.',
                 default => 'OVANIE Logistics recherche un livreur partenaire compatible.',
             };
+        } elseif ($provider === OrderWorkflowService::PROVIDER_SELLER && ! $sellerSession) {
+            $assignmentMessage = 'Votre boutique livre cette commande. Indiquez ci-dessous le chauffeur et son véhicule, puis confirmez l’expédition : il recevra le lien de sa mission.';
         }
 
         return [
@@ -1605,14 +1781,71 @@ class VendorMobileController extends Controller
             'pickup_address' => $shipment?->pickup_address ?: $shop->address,
             'pickup_latitude' => $pickupLat,
             'pickup_longitude' => $pickupLng,
-            'delivery_address' => $shipment?->delivery_address ?: ($order->delivery_address ?: $order->address),
+            // OVANIE Logistics : l'adresse exacte du client n'est pas transmise au vendeur.
+            'delivery_address' => $provider === OrderWorkflowService::PROVIDER_OVANIE
+                ? null
+                : ($shipment?->delivery_address ?: ($order->delivery_address ?: $order->address)),
             'delivery_latitude' => $deliveryLat,
             'delivery_longitude' => $deliveryLng,
+            'delivery_map_url' => $this->staticMapUrl([[$deliveryLat, $deliveryLng, 'ff6a00']]),
+            'route_map_url' => $this->staticMapUrl([
+                [$pickupLat, $pickupLng, '0a1b4f'],
+                [data_get($driverPayload, 'latitude'), data_get($driverPayload, 'longitude'), '005beb'],
+                [$deliveryLat, $deliveryLng, 'ff6a00'],
+            ], $deliveryLat, $deliveryLng),
             'route_geometry' => $shipment?->route_geometry ?: $sellerSession?->route_geometry,
             'picked_up_at' => $this->isoDate($assignment?->picked_up_at ?: $sellerSession?->departed_at),
             'delivered_at' => $this->isoDate($assignment?->delivered_at ?: $shipment?->delivered_at ?: $sellerSession?->ended_at),
             'driver' => $driverPayload,
         ];
+    }
+
+    /**
+     * Image de carte (Mapbox Static Images) affichée dans l'app vendeur.
+     * Chaque point : [latitude, longitude, couleur hexadécimale]. Les points
+     * sans coordonnées sont ignorés ; sans point de livraison ou sans jeton
+     * Mapbox, aucune image n'est proposée.
+     */
+    private function staticMapUrl(array $points, $requiredLat = null, $requiredLng = null): ?string
+    {
+        $token = (string) config('geo.mapbox.public_token');
+        if ($token === '' || (func_num_args() > 1 && (! is_numeric($requiredLat) || ! is_numeric($requiredLng)))) {
+            return null;
+        }
+
+        $pins = collect($points)
+            ->filter(fn ($point) => is_numeric($point[0] ?? null) && is_numeric($point[1] ?? null))
+            ->map(fn ($point) => sprintf('pin-s+%s(%s,%s)', $point[2], round((float) $point[1], 6), round((float) $point[0], 6)))
+            ->unique()
+            ->values();
+        if ($pins->isEmpty()) {
+            return null;
+        }
+
+        $view = 'auto';
+        if ($pins->count() === 1) {
+            $only = collect($points)->first(fn ($point) => is_numeric($point[0] ?? null) && is_numeric($point[1] ?? null));
+            $view = round((float) $only[1], 6) . ',' . round((float) $only[0], 6) . ',14.5';
+        }
+
+        return 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/' . $pins->join(',') . '/' . $view
+            . '/640x360@2x?' . http_build_query(array_filter([
+                'padding' => $view === 'auto' ? 60 : null,
+                'language' => config('geo.mapbox.language', 'fr'),
+                'access_token' => $token,
+            ]));
+    }
+
+    /** Carte d'ensemble d'Abidjan (sans repère) : fond des écrans de zones de livraison. */
+    private function staticAreaMapUrl(): ?string
+    {
+        $token = (string) config('geo.mapbox.public_token');
+        if ($token === '') {
+            return null;
+        }
+
+        return 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/-4.0083,5.3364,10.1/640x360@2x?'
+            . http_build_query(['language' => config('geo.mapbox.language', 'fr'), 'access_token' => $token]);
     }
 
     private function paymentMethodLabel(?string $method): string
@@ -1623,6 +1856,7 @@ class VendorMobileController extends Controller
             'orange_money', 'orange' => 'Orange Money',
             'mtn_money', 'mtn' => 'MTN Money',
             'moov_money', 'moov' => 'Moov Money',
+            'mobile_money' => 'Mobile Money',
             'card', 'bank_card', 'paydunya', 'flutterwave' => 'Paiement en ligne',
             default => filled($method) ? (string) $method : 'Paiement',
         };
@@ -1654,15 +1888,19 @@ class VendorMobileController extends Controller
     {
         $payload = [
             'id' => $payout->id,
-            'reference' => $payout->payout_reference ?? ('PAYOUT-'.$payout->id),
+            'reference' => preg_replace('/^PAYOUT-/', 'REV-', (string) ($payout->payout_reference ?? ('REV-'.$payout->id))),
             'status' => $payout->status,
             'status_label' => $payout->status_label,
             'status_tone' => $payout->status_tone,
             'amount' => (float) ($payout->payout_amount ?? 0),
             'payment_method' => $payout->payment_method ?? $payout->payment_channel,
             'payment_method_label' => $payout->payment_method_label,
-            'phone' => $payout->phone,
-            'beneficiary_name' => $payout->vendor?->name,
+            // Opérateur Mobile Money réel (logo dans l'app) lorsque la méthode est générique.
+            'operator' => in_array((string) ($payout->payment_method ?? $payout->payment_channel), ['', 'paydunya_payout', 'vendor_payout', 'mobile_money'], true)
+                ? $payout->shop?->mm_operator
+                : ($payout->payment_method ?? $payout->payment_channel),
+            'phone' => $payout->phone ?: $payout->shop?->mm_number,
+            'beneficiary_name' => $payout->shop?->mm_holder ?: $payout->vendor?->name,
             'period_label' => $payout->payout_period_key,
             'has_receipt' => filled($payout->transfer_receipt_path),
             'created_at' => optional($payout->created_at)->toIso8601String(),
@@ -1680,8 +1918,10 @@ class VendorMobileController extends Controller
             $payload['total_amount'] = (float) ($payout->total_amount ?? 0);
             $payload['commission_amount'] = (float) ($payout->commission_amount ?? 0);
             $payload['processing_fee_amount'] = (float) ($payout->processing_fee_amount ?? 0);
-            $payload['payout_reference'] = $payout->payout_reference;
+            $payload['payout_reference'] = preg_replace('/^PAYOUT-/', 'REV-', (string) $payout->payout_reference);
             $payload['batch_reference'] = $payout->batch_reference;
+            // Référence propre à l'opérateur de paiement, lorsqu'il en a renvoyé une.
+            $payload['operator_reference'] = data_get($payout->meta, 'paydunya_disbursement.transaction_id');
             $payload['updated_at'] = optional($payout->updated_at)->toIso8601String();
             $payload['vendor_note'] = $payout->vendor_note;
             $payload['admin_note'] = $payout->admin_note;
@@ -1691,6 +1931,7 @@ class VendorMobileController extends Controller
                 'id' => $order->id,
                 'order_number' => $order->order_number,
                 'created_at' => optional($order->created_at)->toIso8601String(),
+                'amount' => (float) ($payout->payout_amount ?? 0),
             ] : null;
         }
         return $payload;

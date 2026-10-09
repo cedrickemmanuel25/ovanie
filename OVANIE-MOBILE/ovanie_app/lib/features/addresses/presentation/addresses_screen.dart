@@ -624,7 +624,7 @@ class _Pill extends StatelessWidget {
       decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(8)),
       child: Text(
         label,
-        style: TextStyle(color: foreground, fontSize: 10.5, fontWeight: FontWeight.w800),
+        style: TextStyle(color: foreground, fontSize: 12, fontWeight: FontWeight.w800),
       ),
     );
   }
@@ -685,7 +685,7 @@ class _CardAction extends StatelessWidget {
                 label,
                 maxLines: 2,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: color, fontSize: 10.8, fontWeight: FontWeight.w800),
+                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800),
               ),
             ),
           ],
@@ -813,58 +813,7 @@ class _SupportCard extends StatelessWidget {
   const _SupportCard({required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFF),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFD8E3FB)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: const Icon(Icons.help_outline_rounded, color: Color(0xFF1557E8), size: 24),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Besoin d’aide pour vos adresses ?',
-                  style: TextStyle(
-                    color: Color(0xFF061A56),
-                    fontSize: 12.8,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                SizedBox(height: 5),
-                Text(
-                  'Notre équipe est là pour vous accompagner.',
-                  style: TextStyle(color: Color(0xFF53658F), fontSize: 12.2),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton(
-            onPressed: onTap,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFFF4C0A),
-              side: const BorderSide(color: Color(0xFFFF4C0A)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            ),
-            child: const Text('Nous contacter', style: TextStyle(fontWeight: FontWeight.w900)),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _ErrorBox extends StatelessWidget {

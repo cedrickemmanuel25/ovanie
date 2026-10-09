@@ -106,19 +106,23 @@ class MissionRepository {
     String missionNumber,
     String otpCode, {
     required bool handoverConfirmed,
+    bool cashCollected = false,
   }) async {
     final response = await ApiClient.dio.post<dynamic>(
       '/driver/missions/${Uri.encodeComponent(missionNumber)}/verify-otp',
       data: {
         'delivery_otp_code': otpCode,
         'handover_confirmed': handoverConfirmed,
+        'cash_collected': cashCollected,
       },
     );
     ApiClient.ensureSuccess(response);
     return _missionFromResponse(response.data);
   }
 
-  Future<void> recordLocation(
+  /// Envoie la position GPS de mission. Renvoie `pickup_arrived` ou
+  /// `customer_arrived` quand le serveur vient de détecter l'arrivée.
+  Future<String?> recordLocation(
     String missionNumber, {
     required double latitude,
     required double longitude,
@@ -137,6 +141,9 @@ class MissionRepository {
       },
     );
     ApiClient.ensureSuccess(response);
+    final data = response.data;
+    final arrival = data is Map ? '${data['auto_arrival'] ?? ''}'.trim() : '';
+    return arrival.isEmpty ? null : arrival;
   }
 
   Future<void> markGpsUnavailable(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_runtime_state.dart';
 import '../../features/auth/data/auth_repository.dart';
@@ -82,6 +83,17 @@ class _OfflineNetworkScreenState extends State<OfflineNetworkScreen> {
                       height: 1.5,
                     ),
                   ),
+                  if (AppConfig.isLocalDevelopment) ...[
+                    const SizedBox(height: 10),
+                    SelectableText(
+                      'Serveur configuré : ${AppConfig.apiBaseUrl}\n'
+                      'Sur un téléphone physique, utilisez l’adresse IP locale du PC, '
+                      'le même réseau Wi-Fi et Laravel lancé avec --host=0.0.0. '
+                      '10.0.2.2 fonctionne uniquement dans l’émulateur Android.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: OvanieColors.muted, fontSize: 12),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   const Text(
                     'Votre panier local et votre contexte de navigation sont conservés sur ce téléphone.',
@@ -130,4 +142,3 @@ class _OfflineNetworkScreenState extends State<OfflineNetworkScreen> {
     );
   }
 }
-

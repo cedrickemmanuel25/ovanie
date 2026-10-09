@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 240" preserveAspectRatio="xMidYMid meet">
+  <defs><linearGradient id="af" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#E5EEF7"/><stop offset="1" stop-color="#CDDCEB"/></linearGradient></defs>
+  <!-- Stylised Africa silhouette, intentionally schematic for UI use -->
+  <path d="M120 14 88 22 72 39 51 45 37 63 34 86 48 103 54 126 68 139 75 165 94 184 108 217 127 226 142 199 155 183 170 165 181 140 205 120 220 95 218 70 203 55 184 48 166 29 145 22Z" fill="url(#af)" stroke="#C5D5E5" stroke-width="2"/>
+  <path d="M48 103 70 94 88 103 93 124 80 142 62 133 54 119Z" fill="#74869B"/>
+  <path d="M71 95 86 82 106 89 107 106 91 116 88 103Z" fill="#8999AA"/>
+  <path d="M86 82 98 66 119 73 126 92 106 89Z" fill="#A0ADBA"/>
+  <path d="M107 106 128 98 141 111 138 130 119 137 93 124Z" fill="#9EACBA"/>
+  <path d="M62 133 80 142 86 158 69 157 57 146Z" fill="#A9B6C2"/>
+  <path d="M80 142 95 135 108 149 105 166 86 158Z" fill="#7C8D9F"/>
+  <path d="M95 135 119 137 122 155 108 149Z" fill="#B0BAC5"/>
+  <path d="M119 137 138 130 145 145 136 160 122 155Z" fill="#C0CAD4"/>
+  <g fill="#F58220" stroke="#fff" stroke-width="2">
+    <circle cx="82" cy="146" r="5"/><circle cx="72" cy="121" r="5"/><circle cx="92" cy="106" r="5"/><circle cx="107" cy="119" r="5"/><circle cx="97" cy="148" r="5"/><circle cx="120" cy="145" r="5"/><circle cx="132" cy="137" r="5"/><circle cx="113" cy="94" r="5"/>
+  </g>
+  <g stroke="#F3A35B" stroke-width="1.8" opacity=".8"><path d="M82 146 92 106 113 94M82 146 107 119 132 137M72 121 97 148 120 145" fill="none"/></g>
+</svg>

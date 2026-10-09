@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SupportCallbackRequest;
 use App\Models\SupportConversation;
 use App\Services\Support\SupportCaseService;
+use App\Services\SupportAi\AssistantShoppingService;
 use App\Services\SupportAi\SupportAiOrchestrator;
 use App\Services\SupportAi\SupportIdentityResolver;
 use App\Services\SupportAi\SupportServiceStatusService;
@@ -20,7 +21,7 @@ class PublicSupportChatController extends Controller
      * doivent jamais transparaître ici : le client parle toujours à N'Nan.
      */
     private const PUBLIC_AGENT_IDENTITY = [
-        'name' => 'N’Nan',
+        'name' => 'Miss N’Nan',
         'slug' => 'miss-nnan',
         'role_key' => 'general',
     ];
@@ -30,6 +31,7 @@ class PublicSupportChatController extends Controller
         SupportAiOrchestrator $orchestrator,
         SupportServiceStatusService $services,
         SupportCaseService $cases,
+        AssistantShoppingService $shopping,
     ) {
         $data = $request->validate([
             'name' => ['nullable', 'string', 'max:255'],
@@ -42,7 +44,10 @@ class PublicSupportChatController extends Controller
             'order_reference' => ['nullable', 'string', 'max:100'],
             'payment_reference' => ['nullable', 'string', 'max:100'],
             'tracking_reference' => ['nullable', 'string', 'max:100'],
+            'source_app' => ['nullable', Rule::in(['client_mobile', 'vendor_mobile'])],
         ]);
+        $sourceApp = $data['source_app'] ?? 'client_mobile';
+        $requesterType = $sourceApp === 'vendor_mobile' ? 'vendor' : 'client';
 
         $channel = $data['channel'] ?? 'chat';
         $channelStatus = $services->channel($channel);
@@ -54,7 +59,7 @@ class PublicSupportChatController extends Controller
         }
 
         $user = $request->user('sanctum');
-        $requester = $cases->requesterFor($user, 'client');
+        $requester = $cases->requesterFor($user, $requesterType);
         $conversation = SupportConversation::create([
             'support_requester_id' => $requester->id,
             'requester_user_id' => $user->id,
@@ -62,15 +67,20 @@ class PublicSupportChatController extends Controller
             'requester_email' => $user->email,
             'requester_phone' => $data['phone'] ?? $user->phone,
             'channel' => $channel,
-            'source_app' => 'client_mobile',
+            'source_app' => $sourceApp,
             'status' => 'active',
-            'subject' => $data['subject'] ?? 'Assistance '.($data['service'] ?? 'client').' OVANIE',
+            'subject' => $data['subject'] ?? ($requesterType === 'vendor' ? 'Assistance vendeur OVANIE' : 'Assistance '.($data['service'] ?? 'client').' OVANIE'),
             'metadata' => [
                 'service' => $data['service'] ?? 'client',
+                'requester_type' => $requesterType,
                 'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
             ],
         ]);
+
+        if ($shop = $this->shoppingReply($shopping, $conversation, $data['message'])) {
+            return response()->json(['conversation_token' => $conversation->public_token] + $shop, 201);
+        }
 
         $reply = $orchestrator->receiveCustomerMessage($conversation, $data['message'], $user, [
             'order_reference' => $data['order_reference'] ?? null,
@@ -80,6 +90,7 @@ class PublicSupportChatController extends Controller
         $conversation->refresh()->load(['ticket', 'commercialLead', 'deliveryIncident']);
 
         return response()->json([
+            'products' => [],
             'conversation_token' => $conversation->public_token,
             'status' => $conversation->status,
             'agent' => self::PUBLIC_AGENT_IDENTITY,
@@ -102,6 +113,7 @@ class PublicSupportChatController extends Controller
     {
         $conversation = SupportConversation::query()
             ->where('requester_user_id', $request->user('sanctum')->id)
+            ->when($request->query('source_app'), fn ($query, $app) => $query->where('source_app', $app))
             ->whereNotIn('status', ['resolved', 'closed'])
             ->latest('updated_at')
             ->first();
@@ -140,12 +152,14 @@ class PublicSupportChatController extends Controller
             'messages' => $conversation->messages->sortBy('created_at')->values()->map(fn ($message) => [
                 'sender' => $message->sender_type,
                 'body' => $message->body,
+                // Fiches produits montrées avec ce message : elles restent visibles quand la conversation est rouverte.
+                'products' => array_values((array) data_get($message->metadata, 'products', [])),
                 'created_at' => $message->created_at,
             ]),
         ]);
     }
 
-    public function message(Request $request, string $token, SupportAiOrchestrator $orchestrator)
+    public function message(Request $request, string $token, SupportAiOrchestrator $orchestrator, AssistantShoppingService $shopping)
     {
         $data = $request->validate([
             'message' => ['required', 'string', 'max:5000'],
@@ -159,6 +173,10 @@ class PublicSupportChatController extends Controller
             return response()->json(['message' => 'Cette conversation est clôturée.'], 409);
         }
 
+        if ($shop = $this->shoppingReply($shopping, $conversation, $data['message'])) {
+            return response()->json($shop);
+        }
+
         $reply = $orchestrator->receiveCustomerMessage($conversation, $data['message'], $request->user('sanctum'), [
             'order_reference' => $data['order_reference'] ?? null,
             'payment_reference' => $data['payment_reference'] ?? null,
@@ -167,6 +185,7 @@ class PublicSupportChatController extends Controller
         $conversation->refresh()->load(['ticket', 'commercialLead', 'deliveryIncident']);
 
         return response()->json([
+            'products' => [],
             'status' => $conversation->status,
             'agent' => self::PUBLIC_AGENT_IDENTITY,
             'reply' => $reply->body,
@@ -207,6 +226,59 @@ class PublicSupportChatController extends Controller
             'status' => $callback->status,
             'message' => 'Votre demande de rappel a été enregistrée.',
         ], 201);
+    }
+
+    /**
+     * Achats dans la conversation : ajout au panier ou recherche d'un produit.
+     * La demande et la réponse sont gardées dans la conversation, avec les
+     * fiches produits affichées. L'ajout au panier lui-même est exécuté par le
+     * site (panier habituel), d'après `cart_action`.
+     *
+     * @return array<string, mixed>|null null si le message ne concerne pas un achat
+     */
+    private function shoppingReply(AssistantShoppingService $shopping, SupportConversation $conversation, string $message): ?array
+    {
+        if (in_array($conversation->status, ['human'], true) || $conversation->requires_human) {
+            return null;
+        }
+
+        $cart = $shopping->cartRequest($message, $conversation);
+        $catalog = $cart ? null : $shopping->catalogRequest($message, $conversation);
+        if (! $cart && ! $catalog) {
+            return null;
+        }
+
+        $reply = $cart['reply'] ?? $catalog['reply'];
+        $products = $cart
+            ? ($cart['products'] ?? (($cart['status'] ?? null) === 'add' ? [] : (isset($cart['product']) ? [$cart['product']] : [])))
+            : $catalog['products'];
+        $cartAction = $cart && $cart['status'] === 'add'
+            ? ['type' => 'add_to_cart', 'product_id' => $cart['product']['id'], 'quantity' => $cart['quantity'], 'name' => $cart['product']['name']]
+            : null;
+
+        $conversation->messages()->create([
+            'sender_type' => 'customer',
+            'sender_user_id' => $conversation->requester_user_id,
+            'body' => $message,
+            'provider' => $conversation->channel,
+        ]);
+        $conversation->messages()->create([
+            'sender_type' => 'ai',
+            'body' => $reply,
+            'provider' => 'assistant-shopping',
+            'metadata' => ['products' => $products, 'cart_action' => $cartAction],
+        ]);
+        $conversation->forceFill(['last_message_at' => now()])->save();
+
+        return [
+            'status' => $conversation->status,
+            'agent' => self::PUBLIC_AGENT_IDENTITY,
+            'reply' => $reply,
+            'products' => $products,
+            'cart_action' => $cartAction,
+            'requires_human' => (bool) $conversation->requires_human,
+            'account_linked' => (bool) $conversation->requester_user_id,
+        ];
     }
 
     private function conversation(string $token, Request $request): SupportConversation

@@ -159,8 +159,6 @@ class _DriverHomeTabState extends State<DriverHomeTab> {
                       const SizedBox(height: 14),
                     ],
                     if (dashboard != null) ...[
-                      _RegisteredVehicleCard(driver: dashboard.driver),
-                      const SizedBox(height: 14),
                       _AvailabilityPanel(
                         state: dashboard.availability,
                         loading: _updatingAvailability,
@@ -209,7 +207,7 @@ class _DriverHomeTabState extends State<DriverHomeTab> {
                     ] else if (!_loading)
                       const OvanieInfoBox(
                         child: Text(
-                          'Les données opérationnelles seront affichées dès que la connexion au serveur OVANIE sera rétablie.',
+                          'Vos informations s’afficheront dès que la connexion internet sera rétablie.',
                           style: TextStyle(color: OvanieColors.text, height: 1.4),
                         ),
                       ),
@@ -247,564 +245,64 @@ class _DriverTopHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final avatar = ApiConfig.resolveMediaUrl(avatarUrl);
 
-    Widget logo() => const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'OVANIE',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 25,
-                fontWeight: FontWeight.w900,
-                letterSpacing: .7,
-              ),
-            ),
-            Text(
-              'Logistics',
-              style: TextStyle(
-                color: Color(0xFF8DF0B7),
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                letterSpacing: .6,
-              ),
-            ),
-          ],
-        );
-
-    Widget notificationButton() => Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.notifications_none_rounded,
-                color: Colors.white,
-                size: 23,
-              ),
-            ),
-            if (unreadNotifications > 0)
-              Positioned(
-                right: -2,
-                top: -3,
-                child: Container(
-                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFE63B43),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    unreadNotifications > 9 ? '9+' : '$unreadNotifications',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        );
-
-    Widget avatarWidget() => Container(
-          width: 48,
-          height: 48,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .18),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: .75),
-              width: 2,
-            ),
-          ),
-          child: avatar.isNotEmpty
-              ? Image.network(
-                  avatar,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.person_rounded,
-                    color: Colors.white,
-                  ),
-                )
-              : const Icon(Icons.person_rounded, color: Colors.white),
-        );
-
-    Widget identity() => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              fullName.isEmpty ? 'Livreur OVANIE' : fullName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13.5,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Row(
-              children: [
-                Icon(
-                  accountActive
-                      ? Icons.verified_rounded
-                      : Icons.pending_outlined,
-                  color: accountActive
-                      ? const Color(0xFF8DF0B7)
-                      : Colors.white70,
-                  size: 14,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    accountActive
-                        ? 'Compte actif'
-                        : 'Compte en vérification',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: .88),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF006B3D), Color(0xFF009B57)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
-      child: Column(
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // Sur les téléphones étroits, l'identité passe sur une deuxième
-              // ligne : aucun RenderFlex ne peut alors dépasser horizontalement
-              // (suppression des bandes jaune/noire et du texte rouge OVERFLOW).
-              if (constraints.maxWidth < 390) {
-                return Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(child: logo()),
-                        notificationButton(),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        avatarWidget(),
-                        const SizedBox(width: 10),
-                        Expanded(child: identity()),
-                      ],
-                    ),
-                  ],
-                );
-              }
-
-              return Row(
-                children: [
-                  Expanded(child: logo()),
-                  notificationButton(),
-                  const SizedBox(width: 12),
-                  avatarWidget(),
-                  const SizedBox(width: 9),
-                  SizedBox(width: 148, child: identity()),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      firstName.isEmpty ? 'Bonjour !' : 'Bonjour $firstName !',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 29,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -.7,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      'Prêt pour vos missions OVANIE Logistics ?',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: .82),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isOnline
-                                  ? Icons.gps_fixed_rounded
-                                  : Icons.gps_off_rounded,
-                              color: Colors.white,
-                              size: 15,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              isOnline ? 'GPS en ligne' : 'GPS hors ligne',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Actualiser',
-                onPressed: onRefresh == null ? null : () => onRefresh!(),
-                icon: const Icon(Icons.refresh_rounded),
-                color: Colors.white,
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.white.withValues(alpha: .12),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-String _vehicleAssetPath(String type) {
-  final value = type.toLowerCase().replaceAll('-', ' ').replaceAll('_', ' ').trim();
-  if (value.contains('tricycle') || value.contains('triporteur')) return 'assets/vehicles/tricycle.png';
-  if (value.contains('moto') || value.contains('scooter')) return 'assets/vehicles/moto.png';
-  if (value.contains('pickup') || value.contains('pick up')) return 'assets/vehicles/pickup.png';
-  if (value.contains('10t') || value.contains('10 t') || value.contains('10 tonne')) return 'assets/vehicles/camion-10t.png';
-  if (value.contains('3t') || value.contains('3 t') || value.contains('3 tonne')) return 'assets/vehicles/camion-3t.png';
-  if (value.contains('camion')) return 'assets/vehicles/camion-3t.png';
-  return 'assets/vehicles/pickup.png';
-}
-
-class _RegisteredVehicleCard extends StatelessWidget {
-  const _RegisteredVehicleCard({required this.driver});
-
-  final DriverDashboardDriver driver;
-
-  @override
-  Widget build(BuildContext context) {
-    final plate = (driver.vehiclePlate ?? '').trim();
-    final color = (driver.vehicleColor ?? '').trim();
-    final type = (driver.vehicle ?? '').trim().isEmpty
-        ? 'Véhicule'
-        : driver.vehicle!.trim();
-    final makeModel = [driver.vehicleBrand, driver.vehicleModel]
-        .where((e) => (e ?? '').trim().isNotEmpty)
-        .join(' ');
-    final zoneLabel = driver.interventionZonesLabel;
-    final colorValue = _parseHexColor(driver.vehicleColorHex) ??
-        _vehicleColorFromLabel(color) ??
-        OvanieColors.green;
-    final assetPath = _vehicleAssetPath(type);
-    final realPhotoUrl = driver.vehiclePhotoIsReal
-        ? ApiConfig.resolveMediaUrl(driver.vehiclePhotoUrl)
-        : '';
-
-    Widget categoryFallback() => Container(
-          color: const Color(0xFFF7FAF8),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.all(18),
-          // BlendMode.color (via ColorFiltered) peint tout le rectangle en
-          // opaque sur certains moteurs de rendu au lieu de ne teinter que la
-          // silhouette du véhicule : srcATop reste calé sur l'alpha du PNG.
-          child: Image.asset(
-            assetPath,
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
-            color: colorValue,
-            colorBlendMode: BlendMode.srcATop,
-            errorBuilder: (_, __, ___) => Icon(
-              _vehicleIcon(type),
-              color: colorValue,
-              size: 62,
-            ),
-          ),
-        );
-
-    Widget vehicleVisual() {
-      if (realPhotoUrl.isEmpty) return categoryFallback();
-
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.network(
-            realPhotoUrl,
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.high,
-            errorBuilder: (_, __, ___) => categoryFallback(),
-          ),
-          Positioned(
-            left: 10,
-            bottom: 10,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: .62),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.photo_camera_rounded, color: Colors.white, size: 13),
-                  SizedBox(width: 5),
-                  Text(
-                    'Photo enregistrée',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    final info = Padding(
-      padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      color: const Color(0xFF00854A),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 16),
+      child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            width: 44,
+            height: 44,
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: OvanieColors.greenLight,
-              borderRadius: BorderRadius.circular(999),
+              color: Colors.white.withValues(alpha: .18),
+              shape: BoxShape.circle,
             ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.verified_rounded,
-                  size: 14,
-                  color: OvanieColors.greenDark,
-                ),
-                SizedBox(width: 4),
-                Text(
-                  'Votre véhicule',
-                  style: TextStyle(
-                    color: OvanieColors.greenDark,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
+            child: avatar.isNotEmpty
+                ? Image.network(
+                    avatar,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.person_rounded, color: Colors.white),
+                  )
+                : const Icon(Icons.person_rounded, color: Colors.white),
           ),
-          const SizedBox(height: 11),
-          Text(
-            type,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: OvanieColors.text,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -.4,
-            ),
-          ),
-          if (makeModel.isNotEmpty) ...[
-            const SizedBox(height: 3),
-            Text(
-              makeModel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: OvanieColors.muted,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          if (plate.isNotEmpty)
-            _VehicleFact(
-              icon: Icons.confirmation_number_outlined,
-              value: plate,
-            ),
-          if (color.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _VehicleFact(
-              icon: Icons.circle,
-              value: color,
-              iconColor: colorValue,
-            ),
-          ],
-          if (zoneLabel.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _VehicleFact(
-              icon: Icons.location_on_rounded,
-              value: zoneLabel,
-            ),
-          ],
-          if (driver.zoneCount > 2) ...[
-            const SizedBox(height: 4),
-            Text(
-              '${driver.zoneCount} communes d’intervention enregistrées',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: OvanieColors.muted,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE1EAE5)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x100A3525),
-            blurRadius: 20,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 390;
-          if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(height: 190, child: vehicleVisual()),
-                info,
-              ],
-            );
-          }
-
-          return SizedBox(
-            height: 238,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(flex: 46, child: vehicleVisual()),
-                Expanded(
-                  flex: 54,
-                  child: SingleChildScrollView(
-                    physics: const NeverScrollableScrollPhysics(),
-                    child: info,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-IconData _vehicleIcon(String type) {
-  final value = type.toLowerCase();
-  if (value.contains('moto') || value.contains('scooter')) {
-    return Icons.two_wheeler_rounded;
-  }
-  if (value.contains('tricycle') || value.contains('triporteur')) {
-    return Icons.electric_rickshaw_rounded;
-  }
-  return Icons.local_shipping_rounded;
-}
-
-class _VehicleFact extends StatelessWidget {
-  const _VehicleFact({required this.icon, required this.value, this.iconColor});
-  final IconData icon;
-  final String value;
-  final Color? iconColor;
-
-  @override
-  Widget build(BuildContext context) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: Icon(icon, color: iconColor ?? OvanieColors.greenDark, size: 17),
-          ),
-          const SizedBox(width: 7),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              value,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: OvanieColors.text,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-                height: 1.25,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  firstName.isEmpty ? 'Bonjour' : 'Bonjour $firstName',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(
+                      isOnline ? Icons.gps_fixed_rounded : Icons.gps_off_rounded,
+                      color: const Color(0xFFD5F2E3),
+                      size: 14,
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        '${isOnline ? 'GPS actif' : 'GPS inactif'} · ${accountActive ? 'Compte actif' : 'Compte en vérification'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xFFD5F2E3), fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
-      );
+      ),
+    );
+  }
 }
 
 class _AvailabilityPanel extends StatelessWidget {
@@ -1046,7 +544,7 @@ class _PriorityMissionCard extends StatelessWidget {
               _MissionInfoLine(icon: Icons.inventory_2_outlined, text: '${data.itemCount} article(s) • ${_weight(data.totalWeightKg)}', light: true),
               if (data.netAmount > 0) ...[
                 const SizedBox(height: 8),
-                _MissionInfoLine(icon: Icons.payments_rounded, text: 'Gain prévu : ${_money(data.netAmount)}', light: true),
+                _MissionInfoLine(icon: Icons.payments_rounded, text: 'Votre gain : ${_money(data.netAmount)}', light: true),
               ],
               if (data.status == 'accepted') ...[
                 const SizedBox(height: 8),
@@ -1205,32 +703,6 @@ class _NotificationsCard extends StatelessWidget {
       );
 }
 
-
-Color? _vehicleColorFromLabel(String? label) {
-  final value = (label ?? '').toLowerCase().trim();
-  if (value.isEmpty) return null;
-  if (value.contains('argent') || value.contains('gris clair')) return const Color(0xFFA7ADB3);
-  if (value.contains('gris foncé') || value.contains('gris fonce')) return const Color(0xFF5E646B);
-  if (value == 'gris') return const Color(0xFF80868D);
-  if (value.contains('noir')) return const Color(0xFF202428);
-  if (value.contains('blanc')) return const Color(0xFFE9EDF0);
-  if (value.contains('rouge')) return const Color(0xFFD9342B);
-  if (value.contains('orange')) return const Color(0xFFF28B24);
-  if (value.contains('jaune')) return const Color(0xFFE3B316);
-  if (value.contains('vert')) return const Color(0xFF159447);
-  if (value.contains('turquoise')) return const Color(0xFF1B9C9A);
-  if (value.contains('bleu')) return const Color(0xFF2D63B7);
-  if (value.contains('violet')) return const Color(0xFF7250A8);
-  if (value.contains('rose') || value.contains('bordeaux')) return const Color(0xFFA53757);
-  return null;
-}
-
-Color? _parseHexColor(String? value) {
-  final input = (value ?? '').replaceAll('#', '').trim();
-  if (input.length != 6) return null;
-  final parsed = int.tryParse(input, radix: 16);
-  return parsed == null ? null : Color(0xFF000000 | parsed);
-}
 
 String _formatDateTime(DateTime value) {
   final local = value.toLocal();

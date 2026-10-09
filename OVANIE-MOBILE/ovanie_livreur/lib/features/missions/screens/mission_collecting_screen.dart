@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/location/driver_presence_service.dart';
 import '../../../core/network/api_client.dart';
 import '../data/mission_repository.dart';
 import '../models/driver_mission.dart';
@@ -35,6 +39,78 @@ class _MissionCollectingScreenState extends State<MissionCollectingScreen> {
     super.initState();
     _mission = widget.initialMission;
     _load(showSpinner: _mission == null);
+    _startArrivalDetection();
+  }
+
+  // --- Arrivée automatique chez le vendeur (GPS) -------------------------
+  Timer? _gpsTimer;
+  bool _gpsSending = false;
+  double? _distanceToStop;
+  bool _gpsMissing = false;
+
+  Future<void> _startArrivalDetection() async {
+    try {
+      await DriverPresenceService.instance.start();
+    } catch (_) {}
+    await _gpsTick();
+    _gpsTimer?.cancel();
+    _gpsTimer = Timer.periodic(const Duration(seconds: 8), (_) => _gpsTick());
+  }
+
+  Future<void> _gpsTick() async {
+    final mission = _mission;
+    final stop = mission?.currentPickupStop;
+    if (!mounted || mission == null || stop == null || stop.arrived || _gpsSending || _actionBusy) return;
+
+    _gpsSending = true;
+    try {
+      Position? position = DriverPresenceService.instance.stablePosition;
+      position ??= await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+
+      if (stop.latitude != null && stop.longitude != null) {
+        _distanceToStop = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          stop.latitude!,
+          stop.longitude!,
+        );
+      }
+      if (mounted) setState(() => _gpsMissing = false);
+
+      final arrival = await MissionRepository.instance.recordLocation(
+        mission.missionNumber,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        accuracy: position.accuracy.isFinite ? position.accuracy : null,
+        speed: position.speed.isFinite ? position.speed : null,
+        heading: position.heading.isFinite ? position.heading : null,
+      );
+
+      if (arrival == 'pickup_arrived' && mounted) {
+        await _load(showSpinner: false);
+        if (!mounted) return;
+        HapticFeedback.mediumImpact();
+        showMissionSnack(
+          context,
+          'Arrivée détectée par GPS. Le vendeur est prévenu : vérifiez maintenant les articles.',
+        );
+      }
+    } catch (_) {
+      if (mounted) setState(() => _gpsMissing = true);
+    } finally {
+      _gpsSending = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _gpsTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load({bool showSpinner = true}) async {
@@ -64,7 +140,8 @@ class _MissionCollectingScreenState extends State<MissionCollectingScreen> {
     _PickupHandoverDraft? handover;
 
     if (!stop.arrived) {
-      action = 'arrived';
+      // L'arrivée n'est jamais déclarée à la main : elle est détectée par GPS.
+      return;
     } else if (!stop.verified) {
       verification = await _showVerificationDialog(stop);
       if (!mounted || verification == null) return;
@@ -150,7 +227,7 @@ class _MissionCollectingScreenState extends State<MissionCollectingScreen> {
     if (coordinatesAvailable) {
       await Clipboard.setData(ClipboardData(text: '${stop.latitude},${stop.longitude}'));
       if (mounted) {
-        showMissionSnack(context, 'Coordonnées du point copiées pour votre application GPS.');
+        showMissionSnack(context, 'Adresse copiée pour votre application de navigation.');
       }
       return;
     }
@@ -358,7 +435,7 @@ class _MissionCollectingScreenState extends State<MissionCollectingScreen> {
     final actionLabel = current == null
         ? 'Collectes terminées'
         : !current.arrived
-            ? 'Je suis arrivé chez le vendeur'
+            ? 'En attente d’arrivée (GPS)'
             : !current.verified
                 ? 'Vérifier les articles'
                 : 'Confirmer chargement et remise';
@@ -411,7 +488,6 @@ class _MissionCollectingScreenState extends State<MissionCollectingScreen> {
                       progressTitle: 'Progression des collectes',
                       progressValue: progress,
                       progressTrailingLabel: '$completed collecte${completed > 1 ? 's' : ''} sur $total terminée${completed > 1 ? 's' : ''}',
-                      message: 'À chaque vendeur : confirmez votre arrivée, vérifiez les articles, chargez puis validez la remise avec le code du vendeur.',
                     ),
                     if (current != null) ...[
                       if (mission.incidentType != null) ...[
@@ -420,6 +496,14 @@ class _MissionCollectingScreenState extends State<MissionCollectingScreen> {
                         text: 'Incident en cours : ${incidentTypeLabel(mission.incidentType)}${(mission.incidentDescription ?? '').trim().isNotEmpty ? ' — ${mission.incidentDescription}' : ''}. OVANIE Logistics suit le dossier.',
                         warning: true,
                         icon: Icons.warning_amber_rounded,
+                      ),
+                    ],
+                    if (!current.arrived) ...[
+                      const SizedBox(height: 12),
+                      MissionArrivalRadar(
+                        placeLabel: 'chez le vendeur',
+                        distanceMeters: _distanceToStop,
+                        gpsMissing: _gpsMissing,
                       ),
                     ],
                     const SizedBox(height: 12),
@@ -466,7 +550,7 @@ class _MissionCollectingScreenState extends State<MissionCollectingScreen> {
                       child: MissionPrimaryButton(
                         label: actionLabel,
                         loading: _actionBusy,
-                        enabled: current != null,
+                        enabled: current != null && current.arrived,
                         onPressed: _advanceCurrentPickup,
                       ),
                     ),

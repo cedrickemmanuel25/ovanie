@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/platform/app_deep_link.dart';
 import '../features/auth/reset_password_screen.dart';
@@ -38,7 +39,10 @@ class _OvanieVendorAppState extends State<OvanieVendorApp> {
       if (_navigatorKey.currentState != null) break;
       await Future<void>.delayed(const Duration(milliseconds: 120));
     }
-    await Future<void>.delayed(const Duration(milliseconds: 700));
+    // L'écran de lancement animé remplace toute la pile en se terminant :
+    // on attend sa sortie pour que l'écran de récupération ne soit pas effacé.
+    await SplashScreen.finished.timeout(const Duration(seconds: 12), onTimeout: () {});
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     await _handleDeepLink(initial);
   }
 
@@ -74,6 +78,10 @@ class _OvanieVendorAppState extends State<OvanieVendorApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      // Textes système (compteurs, calendrier, boutons) en français.
+      locale: const Locale('fr', 'FR'),
+      supportedLocales: const [Locale('fr', 'FR')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'OVANIE Vendeur',

@@ -65,6 +65,7 @@ class VendorFinanceService
             'month_commission' => (float) (clone $monthQuery)->sum('commission_amount'),
             'month_orders_count' => (clone $monthQuery)->whereNotIn('status', [VendorPayout::STATUS_WAITING_PAYMENT])->distinct()->count('order_id'),
             'month_paid_count' => (clone $query)->where('status', VendorPayout::STATUS_PAID)->whereBetween('paid_at', [$monthStart, now()->endOfMonth()])->count(),
+            'month_paid_amount' => (float) (clone $query)->where('status', VendorPayout::STATUS_PAID)->whereBetween('paid_at', [$monthStart, now()->endOfMonth()])->sum('payout_amount'),
             'next_payout_amount' => $next ? (float) $next->payout_amount : null,
             'next_payout_method' => $next?->payment_method_label,
             'next_payment_at' => $next?->scheduled_for?->toIso8601String(),

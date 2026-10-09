@@ -4,9 +4,8 @@ import '../../app/theme.dart';
 import '../../core/network/api_client.dart';
 import '../missions/data/mission_repository.dart';
 import '../missions/models/driver_mission.dart';
-import '../missions/widgets/mission_dialogs.dart';
 import '../missions/widgets/mission_ui.dart';
-import 'mission_history_detail_screen.dart';
+import '../missions/screens/mission_detail_screen.dart';
 
 /// Onglet "Historique" : missions terminées (livrées, incidents, refusées).
 class HistoryScreen extends StatefulWidget {
@@ -73,16 +72,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }).toList(growable: false);
   }
 
-  DateTime? _terminalDate(DriverMissionSummaryModel mission) {
-    return mission.deliveredAt ?? mission.rejectedAt ?? mission.pickupScheduledAt;
-  }
-
   Future<void> _openMission(DriverMissionSummaryModel mission) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => MissionHistoryDetailScreen(missionNumber: mission.missionNumber),
+        builder: (_) => MissionDetailScreen(missionNumber: mission.missionNumber),
       ),
     );
+  }
+
+  List<MapEntry<String, List<DriverMissionSummaryModel>>> _groups(List<DriverMissionSummaryModel> missions) {
+    final groups = <String, List<DriverMissionSummaryModel>>{};
+    for (final mission in missions) {
+      groups.putIfAbsent(_dayLabel(_terminalDate(mission)), () => []).add(mission);
+    }
+    return groups.entries.toList();
   }
 
   @override
@@ -110,17 +113,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         children: [
           MissionPageHeader(
             title: 'Historique',
-            subtitle: 'Vos missions précédentes',
+            subtitle: '',
             mainPage: true,
-            trailing: MissionNotificationButton(
-              count: _data?.unreadNotifications ?? 0,
-              onTap: () => showMissionSnack(
-                context,
-                (_data?.unreadNotifications ?? 0) == 0
-                    ? 'Aucune nouvelle notification.'
-                    : '${_data?.unreadNotifications ?? 0} notification(s) non lue(s).',
-              ),
-            ),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -165,14 +159,33 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       message: 'Vos missions terminées apparaîtront ici.',
                     )
                   else
-                    ...[
-                      for (var i = 0; i < visible.length; i++) ...[
-                        _HistoryCard(
-                          mission: visible[i],
-                          onOpen: () => _openMission(visible[i]),
+                    for (final group in _groups(visible)) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(2, 6, 2, 8),
+                        child: Text(
+                          group.key,
+                          style: const TextStyle(color: MissionPalette.slate, fontSize: 13, fontWeight: FontWeight.w600),
                         ),
-                        if (i != visible.length - 1) const SizedBox(height: 12),
-                      ],
+                      ),
+                      Container(
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: MissionPalette.cardBorder),
+                        ),
+                        child: Column(
+                          children: [
+                            for (var i = 0; i < group.value.length; i++)
+                              _HistoryCard(
+                                mission: group.value[i],
+                                onOpen: () => _openMission(group.value[i]),
+                                last: i == group.value.length - 1,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                     ],
                 ],
               ),
@@ -409,188 +422,99 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({required this.mission, required this.onOpen});
+  const _HistoryCard({required this.mission, required this.onOpen, required this.last});
 
   final DriverMissionSummaryModel mission;
   final VoidCallback onOpen;
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: MissionPalette.cardBorder),
-        boxShadow: const [
-          BoxShadow(color: Color(0x0A0B3A25), blurRadius: 14, offset: Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Mission ${mission.missionNumber}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: MissionPalette.navy,
-                        fontSize: 17.2,
-                        height: 1.1,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -.25,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Commande ${mission.orderNumber ?? '—'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: MissionPalette.slate,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 9),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 140),
-                child: MissionStatusPill.forMission(mission),
-              ),
-            ],
-          ),
-          const SizedBox(height: 13),
-          MissionInfoRow(
-            icon: Icons.schedule_rounded,
-            label: '',
-            labelWidth: 0,
-            value:
-                '${missionDate(mission.pickupScheduledAt)} • ${missionTime(mission.pickupScheduledAt)}',
-          ),
-          MissionInfoRow(
-            icon: Icons.location_on_rounded,
-            label: 'Destination',
-            labelWidth: 78,
-            value: mission.displayDestination,
-          ),
-          MissionInfoRow(
-            icon: Icons.inventory_2_outlined,
-            label: '',
-            labelWidth: 0,
-            value: '${mission.pickupCount} point${mission.pickupCount > 1 ? 's' : ''} de collecte',
-          ),
-          const SizedBox(height: 3),
-          Row(
-            children: [
-              Expanded(
-                child: MissionInfoRow(
-                  icon: Icons.local_shipping_rounded,
-                  label: 'Véhicule :',
-                  labelWidth: 62,
-                  value: mission.vehicleLabel ?? '—',
-                ),
-              ),
-              Expanded(
-                child: MissionInfoRow(
-                  icon: Icons.scale_outlined,
-                  label: 'Poids :',
-                  labelWidth: 44,
-                  value: missionWeight(mission.totalWeightKg),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          _HistoryStatusBanner(mission: mission),
-          const SizedBox(height: 11),
-          MissionOutlineButton(label: 'Voir le détail', onPressed: onOpen),
-        ],
-      ),
-    );
-  }
-}
-
-class _HistoryStatusBanner extends StatelessWidget {
-  const _HistoryStatusBanner({required this.mission});
-
-  final DriverMissionSummaryModel mission;
-
-  @override
-  Widget build(BuildContext context) {
-    if (mission.isDelivered) {
-      return MissionTintMessage(
-        text: 'Terminée à ${missionTime(mission.deliveredAt)}',
-        icon: Icons.check_rounded,
-      );
-    }
-    if (mission.hasIncident) {
-      return MissionTintMessage(
-        text: 'Incident signalé\n${mission.statusLabel.trim().isEmpty ? 'Un incident a été signalé sur cette mission.' : mission.statusLabel}',
-        icon: Icons.warning_amber_rounded,
-        warning: true,
-      );
-    }
-    if (mission.isRejected) {
-      return _DangerTintMessage(
-        text: 'Mission refusée\n'
-            'Motif : ${(mission.rejectionReason ?? '').trim().isEmpty ? 'Non renseigné' : mission.rejectionReason}',
-        icon: Icons.cancel_rounded,
-      );
-    }
-    return const SizedBox.shrink();
-  }
-}
-
-class _DangerTintMessage extends StatelessWidget {
-  const _DangerTintMessage({required this.text, required this.icon});
-
-  final String text;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-      decoration: BoxDecoration(
-        color: MissionPalette.dangerSoft,
-        borderRadius: BorderRadius.circular(13),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: const BoxDecoration(color: MissionPalette.danger, shape: BoxShape.circle),
-            child: Icon(icon, color: Colors.white, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: MissionPalette.danger,
-                fontSize: 13.2,
-                height: 1.45,
-                fontWeight: FontWeight.w600,
+    final (IconData icon, Color color, String label) = mission.isDelivered
+        ? (Icons.check_rounded, OvanieColors.green, 'Livrée')
+        : mission.hasIncident
+            ? (Icons.warning_amber_rounded, MissionPalette.amber, 'Incident')
+            : mission.isRejected
+                ? (Icons.close_rounded, MissionPalette.danger, 'Refusée')
+                : (Icons.history_rounded, MissionPalette.slate, 'Expirée');
+    final end = _terminalDate(mission);
+    return InkWell(
+      onTap: onOpen,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          border: last ? null : const Border(bottom: BorderSide(color: MissionPalette.cardBorder)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(color: color.withValues(alpha: .12), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    mission.missionNumber,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: MissionPalette.navy, fontSize: 14.5, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    mission.isRejected && (mission.rejectionReason ?? '').trim().isNotEmpty
+                        ? 'Motif : ${mission.rejectionReason}'
+                        : mission.displayDestination,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: MissionPalette.slate, fontSize: 13),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  mission.isDelivered && mission.netAmount > 0 ? missionMoney(mission.netAmount) : label,
+                  style: TextStyle(
+                    color: mission.isDelivered ? MissionPalette.navy : color,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  end == null ? '' : missionTime(end),
+                  style: const TextStyle(color: MissionPalette.slate, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+DateTime? _terminalDate(DriverMissionSummaryModel mission) =>
+    (mission.deliveredAt ?? mission.rejectedAt ?? mission.pickupScheduledAt)?.toLocal();
+
+String _dayLabel(DateTime? date) {
+  if (date == null) return 'Sans date';
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(date.year, date.month, date.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) return 'Aujourd’hui';
+  if (diff == 1) return 'Hier';
+  const months = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  return '${date.day} ${months[date.month - 1]}${date.year == now.year ? '' : ' ${date.year}'}';
 }
 
 class _HistoryStateBox extends StatelessWidget {

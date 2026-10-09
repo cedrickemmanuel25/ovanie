@@ -56,7 +56,7 @@ class RegisteredUserController extends Controller
         ]);
 
         // Log the user in
-        Auth::login($user);
+        Auth::login($user, true);
         $request->session()->regenerate();
 
         // If request expects JSON (API call from register.js), return JSON

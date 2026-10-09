@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Cart;
 use App\Models\CartItem;
+use App\Models\ProductVariant;
 use App\Services\CartPriceSyncService;
 use App\Services\PublicProductVisibilityService;
 use Illuminate\Http\Request;
@@ -14,9 +15,9 @@ class CartController extends Controller
     public function index(Request $request, CartPriceSyncService $priceSync)
     {
         $cart = $this->cartFor($request);
-        $cart->load(['items.product']);
+        $cart->load(['items.product', 'items.variant']);
         $priceSync->sync($cart);
-        $cart->load(['items.product']);
+        $cart->load(['items.product', 'items.variant']);
 
         $items = $cart->items->map(fn (CartItem $item) => $this->publicItem($item))->values();
 
@@ -35,6 +36,7 @@ class CartController extends Controller
         $validated = $request->validate([
             'product_id' => ['required', 'integer', 'exists:products,id'],
             'quantity' => ['nullable', 'integer', 'min:1'],
+            'product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
         ]);
 
         $product = $visibility->query([], false)
@@ -48,8 +50,16 @@ class CartController extends Controller
         $cart = $this->cartFor($request);
         $minimum = max(1, (int) ($product->min_order_quantity ?? 1));
         $quantity = (int) ($validated['quantity'] ?? $minimum);
+        $variantId = isset($validated['product_variant_id']) ? (int) $validated['product_variant_id'] : null;
+        $variant = null;
+        if ($product->variants()->where('is_active', true)->exists()) {
+            if (! $variantId) return response()->json(['message' => 'Choisissez un modèle ou une couleur.'], 422);
+            $variant = $product->variants()->whereKey($variantId)->where('is_active', true)->first();
+            if (! $variant) return response()->json(['message' => 'Le modèle sélectionné n’est plus disponible.'], 422);
+        }
+        $availableStock = (int) ($variant?->stock ?? $product->stock);
 
-        if ((int) $product->stock < $minimum) {
+        if ($availableStock < $minimum) {
             return response()->json([
                 'message' => "Stock insuffisant pour respecter le minimum de commande de {$minimum} unité(s).",
             ], 422);
@@ -63,14 +73,15 @@ class CartController extends Controller
         $item = CartItem::query()
             ->where('cart_id', $cart->id)
             ->where('product_id', $product->id)
+            ->where('product_variant_id', $variantId)
             ->first();
 
         $targetQuantity = $quantity + (int) ($item?->quantity ?? 0);
-        if ($targetQuantity > (int) $product->stock) {
+        if ($targetQuantity > $availableStock) {
             return response()->json(['message' => 'Stock insuffisant.'], 422);
         }
 
-        $price = (float) ($product->final_price ?? $product->promo_price ?? $product->price);
+        $price = (float) ($variant?->price_override ?? $product->final_price ?? $product->promo_price ?? $product->price);
 
         if ($item) {
             $attributes = ['quantity' => $targetQuantity];
@@ -82,6 +93,9 @@ class CartController extends Controller
             $item = CartItem::create([
                 'cart_id' => $cart->id,
                 'product_id' => $product->id,
+                'product_variant_id' => $variant?->id,
+                'variant_label_snapshot' => $variant?->label,
+                'variant_image_snapshot' => $variant?->card_url,
                 'price' => $price,
                 'quantity' => $quantity,
             ]);
@@ -110,7 +124,8 @@ class CartController extends Controller
         }
 
         $minimum = max(1, (int) ($product->min_order_quantity ?? 1));
-        $stock = max(0, (int) ($product->stock ?? 0));
+        $cartItem->loadMissing('variant');
+        $stock = max(0, (int) ($cartItem->variant?->stock ?? $product->stock ?? 0));
         $quantity = (int) $validated['quantity'];
 
         if ($stock < $minimum) {
@@ -149,6 +164,7 @@ class CartController extends Controller
     {
         $cart = $this->cartFor($request);
         $cart->items()->delete();
+        \App\Support\LiveSync::touchUser((int) $cart->user_id, 'cart');
 
         return response()->json(['message' => 'Panier vidé.']);
     }
@@ -164,6 +180,13 @@ class CartController extends Controller
                 'name' => $product->name,
                 'slug' => $product->slug,
                 'main_image_url' => $product->main_image_url,
+            ] : null,
+            'variant' => $item->variant ? [
+                'id' => $item->variant->id,
+                'label' => $item->variant_label_snapshot ?: $item->variant->label,
+                'value' => $item->variant->value,
+                'image_url' => $item->variant_image_snapshot ?: $item->variant->card_url,
+                'stock' => (int) $item->variant->stock,
             ] : null,
             'quantity' => (int) $item->quantity,
             'unit_price' => (float) $item->price,

@@ -42,6 +42,7 @@
     ];
     $kycLabels = [
         'pending' => 'À contrôler',
+        'automated_checked' => 'Fichiers contrôlés automatiquement',
         'verified' => 'Vérifié',
         'rejected' => 'Rejeté',
     ];
@@ -54,6 +55,8 @@
         'browser_gps' => 'GPS du téléphone',
         'map' => 'Position placée sur la carte',
         'manual' => 'Saisie manuelle',
+        'admin_google_maps' => 'Référence Google Maps (administration)',
+        'admin_geocoding' => 'Géocodage administratif',
     ];
     $operatorLabels = [
         'orange' => 'Orange Money',
@@ -80,7 +83,7 @@
         ['label' => 'Documents d’identité', 'valid' => $documentCount > 0],
         ['label' => 'Position du point de collecte', 'valid' => $shop->usesSellerLogistics() || $hasGps],
         ['label' => 'Configuration logistique', 'valid' => $logisticsStatus === 'ready'],
-        ['label' => 'Autorisation de publication', 'valid' => $canPublish],
+        ['label' => 'Commande autorisée au checkout', 'valid' => $canPublish],
     ];
 @endphp
 
@@ -149,7 +152,7 @@
         </div>
         <div class="shop-validation-stat">
             <span class="shops-stat-icon {{ $hasGps ? 'is-green' : 'is-red' }}"><svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2"/></svg></span>
-            <div><small>Position de collecte</small><strong>{{ $hasGps ? 'Enregistrée' : 'Manquante' }}</strong><em>{{ $hasGps ? $shop->geo_status_label : 'Latitude et longitude absentes' }}</em></div>
+            <div><small>Position de collecte</small><strong>{{ $hasGps ? 'Enregistrée' : 'Manquante' }}</strong><em>{{ $hasGps ? $shop->geo_status_label : 'Position technique absente' }}</em></div>
         </div>
         <div class="shop-validation-stat">
             <span class="shops-stat-icon {{ $logisticsStatus === 'ready' ? 'is-green' : 'is-orange' }}"><svg viewBox="0 0 24 24"><path d="M3 6h13v10H3z"/><path d="M16 10h3l2 3v3h-5z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>
@@ -163,91 +166,15 @@
 
     <div class="shop-validation-layout">
         <main class="shop-validation-main">
-            <section class="shop-section-card decision-card">
-                <header class="decision-header">
-                    <span class="decision-header-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6z"/><path d="m8 12 3 3 5-6"/></svg>
-                    </span>
-                    <div class="decision-header-copy">
-                        <span class="decision-kicker">Contrôle administratif</span>
-                        <h3>Décision sur le dossier vendeur</h3>
-                        <p>Choisissez une action après vérification de l’identité, de la position de collecte et de la préparation logistique.</p>
+            <section class="shop-section-card" aria-label="Contrôles automatiques de la boutique">
+                <div class="shop-section-heading">
+                    <div>
+                        <h3>Ouverture automatique</h3>
+                        <p>La boutique est ouverte après les contrôles du formulaire. L’administration suit les anomalies et peut restreindre une boutique en cas d’incident ; elle n’approuve pas l’ouverture.</p>
                     </div>
-                    <div class="decision-current-status">
-                        <small>Statut actuel</small>
-                        <span class="shops-status is-{{ $status }}">{{ $statusLabels[$status] ?? 'En attente' }}</span>
-                    </div>
-                </header>
-
-                @if($shop->rejection_reason)
-                    <div class="rejection-reason">
-                        <strong>Dernier motif communiqué</strong>
-                        <p>{{ $shop->rejection_reason }}</p>
-                    </div>
-                @endif
-
-                <div class="decision-guidance">
-                    <span aria-hidden="true">
-                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
-                    </span>
-                    <p>La validation commerciale active le compte vendeur. La publication des produits reste conditionnée par les contrôles logistiques.</p>
                 </div>
-
-                <div class="decision-option-grid">
-                    <form action="{{ route('admin.shops.updateStatus', $shop) }}" method="POST" class="decision-option decision-option-approve" onsubmit="return confirm('Approuver et activer cette boutique ?')">
-                        @csrf
-                        <input type="hidden" name="status" value="approved">
-                        <div class="decision-option-top">
-                            <span class="decision-option-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
-                            </span>
-                            <span class="decision-option-label">Validation</span>
-                        </div>
-                        <div class="decision-option-copy">
-                            <h4>Approuver la boutique</h4>
-                            <p>Active le compte vendeur et confirme la conformité administrative du dossier.</p>
-                        </div>
-                        <button type="submit" class="decision-button decision-button-approve">Approuver et activer</button>
-                    </form>
-
-                    <form action="{{ route('admin.shops.updateStatus', $shop) }}" method="POST" class="decision-option decision-option-pending" onsubmit="return confirm('Remettre cette boutique en attente ?')">
-                        @csrf
-                        <input type="hidden" name="status" value="pending">
-                        <div class="decision-option-top">
-                            <span class="decision-option-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/></svg>
-                            </span>
-                            <span class="decision-option-label">Complément requis</span>
-                        </div>
-                        <div class="decision-option-copy">
-                            <h4>Demander des corrections</h4>
-                            <p>Conserve le dossier et permet au vendeur de compléter les éléments manquants.</p>
-                        </div>
-                        <button type="submit" class="decision-button decision-button-pending">Remettre en attente</button>
-                    </form>
-
-                    <form action="{{ route('admin.shops.updateStatus', $shop) }}" method="POST" class="decision-option decision-option-reject" onsubmit="return confirm('Rejeter cette boutique et transmettre ce motif ?')">
-                        @csrf
-                        <input type="hidden" name="status" value="rejected">
-                        <div class="decision-reject-intro">
-                            <div class="decision-option-top">
-                                <span class="decision-option-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24"><path d="m8 8 8 8M16 8l-8 8"/><circle cx="12" cy="12" r="9"/></svg>
-                                </span>
-                                <span class="decision-option-label">Refus motivé</span>
-                            </div>
-                            <div class="decision-option-copy">
-                                <h4>Rejeter le dossier</h4>
-                                <p>Indiquez précisément au vendeur la correction attendue avant une nouvelle soumission.</p>
-                            </div>
-                        </div>
-                        <div class="decision-reject-field">
-                            <label for="rejection_reason">Motif du rejet <span>*</span></label>
-                            <textarea id="rejection_reason" name="rejection_reason" maxlength="2000" required placeholder="Exemple : la pièce d’identité est illisible et la position du point de collecte doit être confirmée.">{{ old('rejection_reason', $status === 'rejected' ? $shop->rejection_reason : '') }}</textarea>
-                            <small>Ce message sera communiqué au vendeur.</small>
-                        </div>
-                        <button type="submit" class="decision-button decision-button-reject">Rejeter et notifier</button>
-                    </form>
+                <div class="decision-guidance">
+                    <p>Contrôle documentaire : {{ $kycLabels[$kycStatus] ?? 'Dossier à compléter' }}. Le contrôle automatique des fichiers ne certifie pas l’authenticité d’une identité.</p>
                 </div>
             </section>
 
@@ -319,7 +246,7 @@
             <section class="shop-section-card">
                 <div class="shop-section-heading">
                     <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2"/></svg></span>
-                    <div><h3>Boutique, localisation et logistique</h3><p>Informations utilisées pour la collecte, le calcul des distances et la publication des produits.</p></div>
+                    <div><h3>Boutique, localisation et logistique</h3><p>Informations utilisées pour la collecte, le calcul des distances et l’éligibilité des commandes au checkout.</p></div>
                 </div>
                 <div class="details-grid">
                     <article class="details-card">
@@ -344,24 +271,21 @@
                         </dl>
                     </article>
                     <article class="details-card">
-                        <h4>Position GPS</h4>
+                        <h4>Localisation logistique</h4>
                         <dl>
-                            <div><dt>État</dt><dd>{{ $hasGps ? $shop->geo_status_label : 'Position manquante' }}</dd></div>
-                            <div><dt>Latitude</dt><dd>{{ $hasGps ? number_format((float) $shop->latitude, 7, ',', '') : 'Non enregistrée' }}</dd></div>
-                            <div><dt>Longitude</dt><dd>{{ $hasGps ? number_format((float) $shop->longitude, 7, ',', '') : 'Non enregistrée' }}</dd></div>
-                            <div><dt>Précision</dt><dd>{{ $shop->geo_accuracy !== null ? number_format((float) $shop->geo_accuracy, 0, ',', ' ') . ' m' : 'Non renseignée' }}</dd></div>
+                            <div><dt>État</dt><dd>{{ $hasGps ? $shop->geo_status_label : 'Position technique manquante' }}</dd></div>
+                            <div><dt>Données techniques</dt><dd>{{ $hasGps ? 'Enregistrées en arrière-plan' : 'Non disponibles' }}</dd></div>
+                            <div><dt>Précision</dt><dd>{{ $shop->geo_precision ? ucfirst($shop->geo_precision) : 'Non renseignée' }}</dd></div>
                             <div><dt>Source</dt><dd>{{ $geoSourceLabels[$shop->geo_source] ?? ($shop->geo_source ?: 'Non renseignée') }}</dd></div>
                         </dl>
-                        @if($hasGps)
-                            <a class="map-link" href="https://www.google.com/maps?q={{ $shop->latitude }},{{ $shop->longitude }}" target="_blank" rel="noopener">Ouvrir la position sur la carte</a>
-                        @endif
+                        <p style="margin:12px 0 0;color:#64748b;font-size:12px;line-height:1.5;">Latitude et longitude restent masquées. Elles sont réservées au calcul logistique et à l’application livreur.</p>
                     </article>
                     <article class="details-card">
                         <h4>Configuration logistique</h4>
                         <dl>
                             <div><dt>Mode</dt><dd>{{ $shop->logistics_mode_label }}</dd></div>
                             <div><dt>État</dt><dd>{{ $logisticsLabels[$logisticsStatus] ?? 'Incomplète' }}</dd></div>
-                            <div><dt>Publication des produits</dt><dd>{{ $canPublish ? 'Autorisée' : 'Bloquée' }}</dd></div>
+                            <div><dt>Commande au checkout</dt><dd>{{ $canPublish ? 'Autorisée' : 'Bloquée' }}</dd></div>
                             <div><dt>Reversement vendeur</dt><dd>{{ $shop->payment_mode_label }}</dd></div>
                         </dl>
                     </article>
@@ -422,13 +346,24 @@
             </section>
 
             <section class="shop-side-card {{ $canPublish ? 'is-ready-card' : 'is-warning-card' }}">
-                <h3>{{ $canPublish ? 'Boutique prête' : 'Publication bloquée' }}</h3>
+                <h3>{{ $canPublish ? 'Boutique prête à commander' : 'Checkout bloqué' }}</h3>
                 <p>
                     {{ $canPublish
-                        ? 'La boutique satisfait les conditions commerciales et logistiques nécessaires à la publication.'
-                        : 'L’approbation du dossier ne suffit pas encore : complétez la localisation ou la logistique avant de publier les produits.' }}
+                        ? 'La boutique satisfait les conditions commerciales, logistiques et de reversement nécessaires à la commande.'
+                        : 'Les produits peuvent rester visibles en ligne, mais aucune commande ne doit être validée tant que la logistique et le reversement ne sont pas complétés.' }}
                 </p>
-                <a href="{{ route('admin.products.index', ['shop_id' => $shop->id]) }}">Voir les produits de la boutique</a>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
+                    <a href="{{ route('admin.products.index', ['shop_id' => $shop->id]) }}">Voir les produits de la boutique</a>
+                    <a href="{{ route('admin.products.create', ['shop_id' => $shop->id]) }}">Ajouter un produit pour ce vendeur</a>
+                    <a href="{{ route('admin.shops.operational-configuration', $shop) }}" style="font-weight:800;color:#0b63ce;">Configurer logistique & reversement</a>
+                </div>
+                <form method="POST" action="{{ route('admin.shops.requireConfiguration',$shop) }}" style="margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;">
+                    @csrf
+                    <strong style="display:block;margin-bottom:8px;">Demander une régularisation au prochain accès</strong>
+                    <label style="display:flex;gap:8px;align-items:center;margin:7px 0;"><input type="checkbox" name="configure_logistics" value="1"> Mode logistique</label>
+                    <label style="display:flex;gap:8px;align-items:center;margin:7px 0;"><input type="checkbox" name="configure_payout" value="1"> Mode de reversement</label>
+                    <button type="submit" style="margin-top:8px;border:0;border-radius:10px;padding:10px 14px;background:#0b2d61;color:white;font-weight:800;cursor:pointer;">Marquer à régulariser</button>
+                </form>
             </section>
         </aside>
     </div>

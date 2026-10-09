@@ -45,7 +45,7 @@
             <dl class="ops-facts">
                 <dt>Commande</dt><dd>{{ $m['order'] }}</dd>
                 <dt>Client</dt><dd>{{ $m['client'] }}</dd>
-                <dt>Paiement</dt><dd><span class="ops-badge {{ $order?->payment_status==='paid' ? 'is-green' : 'is-orange' }}">{{ $order?->payment_method ?: 'Paiement' }} · {{ $order?->payment_status==='paid' ? 'Payé' : 'À la livraison / à confirmer' }}</span></dd>
+                <dt>Paiement</dt><dd><span class="ops-badge {{ $order?->payment_status==='paid' ? 'is-green' : 'is-orange' }}">{{ app(\App\Services\ClientPaymentPresentationService::class)->methodLabel($order?->payment_method) }} · {{ in_array($order?->payment_status, ['paid', 'escrow_held', 'released_to_vendor'], true) ? 'Payé' : 'À encaisser / à confirmer' }}</span></dd>
                 <dt>Destination</dt><dd>{{ $deliveryAddress ?: $m['destination'] }}</dd>
             </dl>
             <dl class="ops-facts">

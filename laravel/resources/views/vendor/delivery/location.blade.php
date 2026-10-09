@@ -4,7 +4,7 @@
 @include('vendor.delivery.settings-style')
 <div class="ls-page">
     <a href="{{ route('vendor.delivery.index') }}">Livraison & logistique</a>
-    <h1>{{ $changing ? 'Passer à OVANIE Logistics' : 'Modifier mes informations logistiques' }}</h1>
+    <h1>{{ !$shop->hasConfirmedLogistics() ? 'Configurer OVANIE Logistics' : ($changing ? 'Passer à OVANIE Logistics' : 'Modifier mes informations logistiques') }}</h1>
     <p class="ls-muted">Vérifiez le point d’enlèvement de {{ $shop->name }} avant d’enregistrer.</p>
     @if($errors->any())<div class="ls-notice ls-errors" role="alert"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
     <form method="POST" action="{{ route('vendor.delivery.mode.update') }}" class="ls-card" id="logistics-location-form"
@@ -13,7 +13,7 @@
         data-changing="{{ $changing ? '1' : '0' }}">
         @csrf
         <input type="hidden" name="logistics_type" value="ovanie">
-        <input type="hidden" name="expected_logistics_type" value="{{ $shop->usesSellerLogistics() ? 'seller' : 'ovanie' }}">
+        <input type="hidden" name="expected_logistics_type" value="{{ $shop->hasConfirmedLogistics() ? $shop->logistics_type : '' }}">
         <p id="location-address-status" class="ls-notice">Adresse actuellement enregistrée. Ces informations ne constituent pas une nouvelle localisation. Lancez la capture depuis la boutique pour vérifier le point d’enlèvement.</p>
         <div class="ls-grid">
             @foreach(['address' => 'Adresse de la boutique', 'commune' => 'Commune', 'district' => 'Quartier', 'landmark' => 'Point de repère'] as $field => $label)
@@ -41,7 +41,7 @@
             <p class="ls-notice">Vos anciennes zones, tarifs et délais seront conservés mais désactivés. Les commandes existantes gardent leur mode logistique.</p>
             <input type="hidden" name="confirmed" value="1">
         @endif
-        <div class="ls-actions"><button class="ls-button" type="submit">{{ $changing ? 'Activer OVANIE Logistics' : 'Enregistrer mes informations' }}</button><a class="ls-button secondary" href="{{ route('vendor.delivery.index') }}">Annuler</a></div>
+        <div class="ls-actions"><button class="ls-button" type="submit">{{ !$shop->hasConfirmedLogistics() ? 'Confirmer OVANIE Logistics' : ($changing ? 'Activer OVANIE Logistics' : 'Enregistrer mes informations') }}</button><a class="ls-button secondary" href="{{ route('vendor.delivery.index') }}">Annuler</a></div>
     </form>
 </div>
 <script src="{{ asset('js/shop-logistics-location.js') }}?v={{ filemtime(public_path('js/shop-logistics-location.js')) }}" defer></script>

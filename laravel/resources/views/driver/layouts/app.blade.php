@@ -24,7 +24,7 @@
     <aside class="driver-sidebar" id="driver-sidebar">
         <div class="driver-sidebar__header">
             <a href="{{ route('driver.dashboard') }}" class="driver-sidebar__logo" aria-label="Tableau de bord livreur">
-                <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE">
+                <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE">
             </a>
             <button class="driver-sidebar__close" type="button" id="driver-sidebar-close" aria-label="Fermer le menu">
                 <i data-lucide="x"></i>
@@ -50,7 +50,7 @@
                     <i data-lucide="user-round"></i>
                     <span>Mon profil</span>
                 </a>
-                <a href="tel:0161781818">
+                <a href="tel:{{ config('public_contact.phone_e164') }}">
                     <i data-lucide="circle-help"></i>
                     <span>Besoin d’aide</span>
                 </a>
@@ -88,7 +88,7 @@
             </div>
 
             <div class="driver-topbar__actions">
-                <a href="tel:0161781818" class="driver-topbar-help">
+                <a href="tel:{{ config('public_contact.phone_e164') }}" class="driver-topbar-help">
                     <i data-lucide="circle-help"></i>
                     <span>Aide</span>
                 </a>
@@ -216,5 +216,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 @stack('scripts')
+@include('layouts.partials.live-sync')
 </body>
 </html>

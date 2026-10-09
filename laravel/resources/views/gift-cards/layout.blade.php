@@ -61,7 +61,7 @@
     <div class="ov-top">
         <div class="ov-container ov-top-inner">
             <a href="{{ route('home') }}" class="ov-logo" aria-label="Accueil OVANIE">
-                <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE">
+                <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE">
             </a>
 
             <form class="ov-search" action="{{ route('catalog.index') }}" method="GET" role="search">
@@ -124,5 +124,6 @@
     <div class="ov-footer-bottom"><div class="ov-container">© {{ date('Y') }} OVANIE — Tous droits réservés.</div></div>
 </footer>
 @stack('scripts')
+@include('layouts.partials.live-sync')
 </body>
 </html>

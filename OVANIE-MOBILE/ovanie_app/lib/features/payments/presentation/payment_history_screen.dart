@@ -6,11 +6,11 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/ovanie_bottom_navigation.dart';
 import '../../shell/domain/main_navigation_store.dart';
 import '../../cart/domain/cart_store.dart';
-import '../../orders/presentation/order_detail_screen.dart';
 import '../../orders/presentation/orders_screen.dart';
 import '../../support/presentation/support_center_screen.dart';
 import '../data/payments_repository.dart';
 import '../domain/payment_models.dart';
+import 'payment_receipt_screen.dart';
 
 enum _PaymentFilter { all, success, pending, failed, refunded }
 
@@ -197,11 +197,16 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
   }
 
   void _openPayment(ClientPaymentHistoryItem item) {
-    if (item.orderId > 0) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => OrderDetailScreen(orderId: item.orderId)),
-      );
-    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PaymentReceiptScreen(
+          payment: item,
+          statusLabel: _statusLabel(item),
+          statusColor: _statusColor(item),
+          success: _isSuccess(item),
+        ),
+      ),
+    );
   }
 
   @override
@@ -226,8 +231,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                 padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
                 children: [
                   _buildHeader(),
-                  const SizedBox(height: 18),
-                  _buildInfoBanner(),
                   const SizedBox(height: 16),
                   _buildFilters(),
                   if (_loading && _page == null) ...[
@@ -241,13 +244,9 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                   ] else if (!hasAny || items.isEmpty) ...[
                     _buildEmptyState(filteredEmpty: hasAny),
                   ] else ...[
-                    const SizedBox(height: 16),
-                    _buildStats(),
                     const SizedBox(height: 14),
                     ...items.map(_buildPaymentCard),
                   ],
-                  const SizedBox(height: 8),
-                  _buildHelpBanner(),
                 ],
               ),
             ),
@@ -274,10 +273,8 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
             children: [
               Text(
                 'Historique des paiements',
-                style: TextStyle(color: _navy, fontSize: 25.5, height: 1.06, fontWeight: FontWeight.w900, letterSpacing: -0.45),
+                style: TextStyle(color: _navy, fontSize: 22, fontWeight: FontWeight.w800),
               ),
-              SizedBox(height: 7),
-              Text('Consultez tous vos paiements et reçus.', style: TextStyle(color: _muted, fontSize: 13.1, height: 1.35)),
             ],
           ),
         ),
@@ -405,7 +402,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                   style: const TextStyle(color: _muted, fontSize: 11.1, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 5),
-                Text(_date(item.paidAt ?? item.createdAt), style: const TextStyle(color: _muted, fontSize: 10.9)),
+                Text(_date(item.paidAt ?? item.createdAt), style: const TextStyle(color: _muted, fontSize: 12)),
               ],
             ),
           ),
@@ -420,20 +417,20 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(color: _statusBackground(item), borderRadius: BorderRadius.circular(20)),
-                  child: Text(_statusLabel(item), style: TextStyle(color: statusColor, fontSize: 9.5, fontWeight: FontWeight.w900)),
+                  child: Text(_statusLabel(item), style: TextStyle(color: statusColor, fontSize: 11.5, fontWeight: FontWeight.w900)),
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 31,
                   child: OutlinedButton(
-                    onPressed: item.orderId > 0 ? () => _openPayment(item) : null,
+                    onPressed: () => _openPayment(item),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _navy,
                       padding: const EdgeInsets.symmetric(horizontal: 13),
                       side: const BorderSide(color: _navy, width: 1),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                     ),
-                    child: Text(_actionLabel(item), maxLines: 1, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)),
+                    child: Text(_actionLabel(item), maxLines: 1, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                   ),
                 ),
               ],
@@ -654,7 +651,7 @@ class _PaymentStatCard extends StatelessWidget {
               children: [
                 Text(value, style: const TextStyle(color: Color(0xFF071B53), fontSize: 18, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 2),
-                Text(label, maxLines: 1, style: const TextStyle(color: Color(0xFF52658F), fontSize: 10.8, fontWeight: FontWeight.w600)),
+                Text(label, maxLines: 1, style: const TextStyle(color: Color(0xFF52658F), fontSize: 12, fontWeight: FontWeight.w600)),
               ],
             ),
           ),

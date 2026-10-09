@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
-import '../../core/ui/vendor_design.dart';
+import '../../core/ui/vendor_mockup_ui.dart';
 import '../../data/vendor_repository.dart';
 import '../shell/vendor_tabs.dart';
 import 'product_ui.dart';
@@ -22,6 +22,7 @@ class ProductRestoreScreen extends StatelessWidget {
   Widget build(BuildContext context) => _ProductActionScreen(productId: productId, restore: true);
 }
 
+/// Confirmation d'archivage (orange) ou de restauration (bleu) d'un produit.
 class _ProductActionScreen extends StatefulWidget {
   const _ProductActionScreen({required this.productId, required this.restore});
   final int productId;
@@ -44,10 +45,14 @@ class _ProductActionScreenState extends State<_ProductActionScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final data = await VendorRepository.instance.product(widget.productId);
       if (!mounted) return;
-      setState(() => _product = data['product'] is Map ? Map<String, dynamic>.from(data['product'] as Map) : <String, dynamic>{});
+      setState(() => _product = data['product'] is Map ? Map<String, dynamic>.from(data['product'] as Map) : null);
     } catch (e) {
       if (mounted) setState(() => _error = ApiClient.friendlyError(e));
     } finally {
@@ -79,154 +84,146 @@ class _ProductActionScreenState extends State<_ProductActionScreen> {
   @override
   Widget build(BuildContext context) {
     final restore = widget.restore;
-    final headerBottom = _loading
-        ? Container(
-            height: 124,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
-            child: const CircularProgressIndicator(),
-          )
-        : _product == null
-            ? const SizedBox.shrink()
-            : _ProductSummary(product: _product!, restore: restore);
+    final accent = restore ? const Color(0xFF1456D9) : Mk.orange;
+    final product = _product;
+    final name = '${product?['name'] ?? ''}'.trim();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
-      body: Column(
-        children: [
-          ProductHeader(
-            title: restore ? 'Restaurer un produit' : 'Archiver un produit',
-            subtitle: restore ? 'Remettez ce produit dans la liste des produits actifs' : 'Retirez ce produit de la liste des produits actifs',
-            showBack: true,
-            bottom: headerBottom,
-          ),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(22, 20, 22, 30),
-                children: [
-                  Center(
-                    child: Container(
-                      width: 50,
-                      height: 5,
-                      decoration: BoxDecoration(color: const Color(0xFFB9C4D8), borderRadius: BorderRadius.circular(99)),
-                    ),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 14),
-                    VendorErrorBox(_error),
-                  ],
-                  const SizedBox(height: 20),
-                  VendorCircleIcon(
-                    icon: restore ? Icons.restore_rounded : Icons.archive_rounded,
-                    size: 96,
-                    iconSize: 48,
-                    color: restore ? vendorBlue : productOrange,
-                    background: (restore ? vendorBlue : productOrange).withValues(alpha: .10),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    restore ? 'Confirmer la restauration' : 'Confirmer l’archivage',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: vendorText, fontSize: 25, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 13),
-                  Text(
-                    restore
-                        ? 'Le produit « ${_product?['name'] ?? ''} » sera de nouveau publié et visible par vos clients dans la boutique.'
-                        : 'Le produit « ${_product?['name'] ?? ''} » sera retiré de la liste des produits actifs et ne sera plus visible par vos clients dans la boutique.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: vendorMuted, fontSize: 15, height: 1.5),
-                  ),
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-                    decoration: BoxDecoration(
-                      color: (restore ? vendorBlue : productOrange).withValues(alpha: .055),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      children: (restore
-                              ? const [
-                                  'Le produit sera remis dans la liste des produits actifs',
-                                  'Toutes les informations (prix, stock, images, historique) seront conservées',
-                                  'Il sera à nouveau visible par vos clients',
-                                ]
-                              : const [
-                                  'Le produit sera déplacé dans la liste des produits archivés',
-                                  'Toutes les informations (prix, stock, images, historique) seront conservées',
-                                  'Vous pourrez le restaurer à tout moment',
-                                ])
-                          .map(
-                            (text) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+    return MkTheme(
+      lightStatusBar: false,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F7FB),
+        body: Column(
+          children: [
+            MkPageHeader(
+              title: restore ? 'Restaurer un produit' : 'Archiver un produit',
+              subtitle: restore
+                  ? 'Remettez ce produit dans la liste des produits actifs'
+                  : 'Retirez ce produit de la liste des produits actifs',
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: Mk.orange))
+                  : product == null
+                      ? Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              MkNotice(_error ?? 'Produit introuvable.'),
+                              const SizedBox(height: 14),
+                              MkBarButton(label: 'Réessayer', filled: true, onTap: _load),
+                            ],
+                          ),
+                        )
+                      : ListView(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                          children: [
+                            _ProductSummary(product: product, restore: restore),
+                            const SizedBox(height: 6),
+                            Image.asset(
+                              'assets/images/mockups/${restore ? 'restore_box' : 'archive_box'}.jpg',
+                              height: 190,
+                              fit: BoxFit.contain,
+                              excludeFromSemantics: true,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              restore ? 'Confirmer la restauration' : 'Confirmer l’archivage',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Mk.navy, fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.4),
+                            ),
+                            const SizedBox(height: 8),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Text.rich(
+                                TextSpan(
+                                  text: 'Le produit « ',
+                                  children: [
+                                    TextSpan(text: name, style: const TextStyle(color: Mk.navy, fontWeight: FontWeight.w700)),
+                                    TextSpan(
+                                      text: restore
+                                          ? ' » sera de nouveau publié et visible par vos clients dans la boutique.'
+                                          : ' » sera retiré de la liste des produits actifs et ne sera plus visible par vos clients dans la boutique.',
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Mk.muted, fontSize: 14, height: 1.45, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Icon(Icons.check_circle_rounded, color: restore ? vendorBlue : productOrange, size: 23),
-                                  const SizedBox(width: 12),
-                                  Expanded(child: Text(text, style: const TextStyle(color: vendorText, fontSize: 14.2, height: 1.35))),
+                                  const Text(
+                                    'Ce qui va se passer',
+                                    style: TextStyle(color: Mk.navy, fontSize: 16, fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  for (final text in restore
+                                      ? const [
+                                          'Le produit sera remis dans la liste des produits actifs',
+                                          'Toutes les informations (prix, stock, images, historique) seront conservées',
+                                          'Il sera à nouveau visible par vos clients',
+                                        ]
+                                      : const [
+                                          'Le produit sera déplacé dans la liste des produits archivés',
+                                          'Toutes les informations (prix, stock, images, historique) seront conservées',
+                                          'Vous pourrez le restaurer à tout moment',
+                                        ]) ...[
+                                    const Divider(height: 1, color: Color(0xFFE4E9F1)),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 11),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.check_circle_rounded, color: accent, size: 24),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                                              text,
+                                              style: const TextStyle(color: Mk.muted, fontSize: 13.5, height: 1.35, fontWeight: FontWeight.w500),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 26),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 58,
-                          child: OutlinedButton(
-                            onPressed: _saving ? null : () => Navigator.pop(context),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFF9CB7E4)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: const Text('Annuler', style: TextStyle(color: vendorText, fontSize: 16, fontWeight: FontWeight.w800)),
-                          ),
+                            if (_error != null) ...[
+                              const SizedBox(height: 12),
+                              MkNotice(_error!),
+                            ],
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        flex: 2,
-                        child: SizedBox(
-                          height: 58,
-                          child: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: restore ? vendorBlue : productOrange,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            onPressed: _saving ? null : _confirm,
-                            icon: _saving
-                                ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : Icon(restore ? Icons.restore_rounded : Icons.archive_outlined),
-                            label: Text(
-                              restore ? 'Oui, restaurer le produit' : 'Oui, archiver le produit',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+            ),
+          ],
+        ),
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (product != null)
+              MkActionBar(
+                children: [
+                  MkBarButton(label: 'Annuler', color: accent, onTap: _saving ? null : () => Navigator.pop(context)),
+                  MkBarButton(
+                    label: restore ? 'Oui, restaurer le produit' : 'Oui, archiver le produit',
+                    icon: restore ? Icons.restore_rounded : Icons.inventory_2_outlined,
+                    filled: true,
+                    color: accent,
+                    loading: _saving,
+                    onTap: _confirm,
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
+            const VendorBottomBar(selected: VendorTab.products),
+          ],
+        ),
       ),
-      bottomNavigationBar: const VendorBottomBar(selected: VendorTab.products),
     );
   }
 }
@@ -238,27 +235,62 @@ class _ProductSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final category = product['category'] is Map ? '${(product['category'] as Map)['name'] ?? ''}' : '';
+    final status = restore ? 'Archivé' : productStatus(product);
+    final color = productStatusColor(status);
+    final category = productCategoryLabel(product);
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: productBorder), borderRadius: BorderRadius.circular(18)),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: 116, height: 100, child: ProductNetworkImage(url: product['image_url'], fit: BoxFit.cover)),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${product['name'] ?? 'Produit'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: vendorText, fontWeight: FontWeight.w900, fontSize: 17)),
-            const SizedBox(height: 4),
-            Text(category, style: const TextStyle(color: vendorMuted, fontSize: 12.5)),
-            const SizedBox(height: 8),
-            Text(productMoney(product['promo_price'] ?? product['price']), style: const TextStyle(color: productOrange, fontWeight: FontWeight.w900, fontSize: 16)),
-            const SizedBox(height: 4),
-            Text('Stock : ${product['stock'] ?? 0}', style: const TextStyle(color: vendorMuted, fontSize: 12.5)),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        ProductStatusBadge(restore ? 'Archivé' : productStatus(product)),
-      ]),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 96, height: 96, child: ProductNetworkImage(url: productImageUrl(product), fit: BoxFit.cover, borderRadius: 10)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${product['name'] ?? 'Produit'}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Mk.navy, fontWeight: FontWeight.w800, fontSize: 16, height: 1.2),
+                ),
+                if (category.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(
+                      category,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Mk.muted, fontSize: 12.5, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                Text(
+                  productMoney(product['promo_price'] ?? product['price']),
+                  style: const TextStyle(color: Mk.orange, fontWeight: FontWeight.w800, fontSize: 18),
+                ),
+                const SizedBox(height: 2),
+                Text('Stock : ${product['stock'] ?? 0}', style: const TextStyle(color: Mk.muted, fontSize: 13, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                  decoration: BoxDecoration(color: color.withValues(alpha: .13), borderRadius: BorderRadius.circular(99)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                      const SizedBox(width: 7),
+                      Text(status, style: TextStyle(color: color, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

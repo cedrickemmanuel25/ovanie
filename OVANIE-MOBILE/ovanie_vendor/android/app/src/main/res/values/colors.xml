@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ovanie_navy">#041A3A</color>
+    <!-- Bleu du haut de la photo de lancement : le démarrage enchaîne sans saut de couleur. -->
+    <color name="ovanie_launch_blue">#005BEB</color>
+</resources>

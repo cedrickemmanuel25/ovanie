@@ -29,7 +29,7 @@ class CategorySeeder extends Seeder
             ['id' => 5, 'name' => 'Énergie solaire',         'slug' => 'energie-solaire',         'sort' => 50],
             ['id' => 6, 'name' => 'Électricité & Plomberie','slug' => 'electricite-plomberie',   'sort' => 60],
             ['id' => 7, 'name' => 'Nos reconditionnés',     'slug' => 'nos-reconditionnes',      'sort' => 70],
-            ['id' => 8, 'name' => 'Carte cadeau Ovanie',    'slug' => 'carte-cadeau-ovanie',     'sort' => 80],
+            ['id' => 8, 'name' => 'Carte cadeau OVANIE',    'slug' => 'carte-cadeau-ovanie',     'sort' => 80],
         ];
 
         // Subcategories keyed by parent ID (1–8).
@@ -74,7 +74,7 @@ class CategorySeeder extends Seeder
                 'Pompes reconditionnées', 'Machines de chantier reconditionnées',
                 'Accessoires reconditionnés',
             ],
-            // ID 8 = Carte cadeau Ovanie → no subcategories
+            // ID 8 = Carte cadeau OVANIE → no subcategories
         ];
 
         DB::statement('SET FOREIGN_KEY_CHECKS=0;');

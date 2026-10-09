@@ -113,7 +113,12 @@ class ShopLogisticsSettingsService
             // including the seller's previous per-zone active/suspended choices.
             $shop->sellerDeliveryProfile()->update(['is_enabled' => $shop->usesSellerLogistics()]);
             $shop->load('sellerDeliveryProfile', 'sellerDeliveryZones');
-            $validation = $this->validator->validate($shop);
+
+            // Lors de la toute première activation, logistics_confirmed_at est encore null.
+            // On valide donc le contenu du mode choisi AVANT d'exiger sa confirmation.
+            // Sans cela, une boutique ayant correctement rempli sa propre logistique
+            // restait bloquée sur « choix du mode logistique » et ne pouvait jamais finir.
+            $validation = $this->validator->validate($shop, false);
             if (! $validation['complete']) {
                 throw ValidationException::withMessages([
                     'logistics_type' => 'Complétez vos informations logistiques : '.implode(', ', $validation['missing']).'.',
@@ -124,6 +129,7 @@ class ShopLogisticsSettingsService
                 $this->preserveLegacyOrderModes($shop, $previous);
             }
             $shop->logistics_status = $validation['status'];
+            $shop->logistics_confirmed_at = now();
             $shop->save();
 
             return $shop->refresh();

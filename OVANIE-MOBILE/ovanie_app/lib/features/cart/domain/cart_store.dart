@@ -12,12 +12,19 @@ class CartLine {
   final ProductModel product;
   final int quantity;
   final double unitPrice;
+  final ProductVariantModel? variant;
 
   CartLine({
     required this.product,
     required this.quantity,
     double? unitPrice,
-  }) : unitPrice = unitPrice ?? product.finalPrice;
+    this.variant,
+  }) : unitPrice = unitPrice ?? variant?.priceOverride ?? product.finalPrice;
+
+  int get availableStock => variant?.stock ?? product.stock;
+  String get imageUrl => variant?.imageUrl.trim().isNotEmpty == true ? variant!.imageUrl : product.imageUrl;
+
+  String get key => '${product.id}:${variant?.id ?? 0}';
 
   double get subtotal => unitPrice * quantity;
 
@@ -26,6 +33,7 @@ class CartLine {
       product: product,
       quantity: quantity ?? this.quantity,
       unitPrice: unitPrice,
+      variant: variant,
     );
   }
 }
@@ -54,10 +62,10 @@ class CartStore extends ChangeNotifier {
   static const String _storageKey = 'ovanie_guest_cart_v1';
   static const String _syncStorageKey = 'ovanie_cart_pending_sync_v1';
 
-  final Map<int, CartLine> _lines = <int, CartLine>{};
+  final Map<String, CartLine> _lines = <String, CartLine>{};
 
   /// userId -> (productId -> quantité cible). Une quantité 0 = suppression.
-  final Map<int, Map<int, int>> _pendingByUser = <int, Map<int, int>>{};
+  final Map<int, Map<String, int>> _pendingByUser = <int, Map<String, int>>{};
   final Set<int> _clearPendingUsers = <int>{};
 
   bool _restored = false;
@@ -74,9 +82,11 @@ class CartStore extends ChangeNotifier {
   double get subtotal =>
       _lines.values.fold<double>(0, (sum, line) => sum + line.subtotal);
 
-  bool contains(int productId) => _lines.containsKey(productId);
+  bool contains(int productId) => _lines.values.any((line) => line.product.id == productId);
 
-  int quantityFor(int productId) => _lines[productId]?.quantity ?? 0;
+  int quantityFor(int productId) => _lines.values
+      .where((line) => line.product.id == productId)
+      .fold<int>(0, (sum, line) => sum + line.quantity);
 
   Future<void> restore() async {
     if (_restored) return;
@@ -94,7 +104,7 @@ class CartStore extends ChangeNotifier {
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
 
-      final restored = <int, CartLine>{};
+      final restored = <String, CartLine>{};
       for (final item in decoded) {
         if (item is! Map) continue;
 
@@ -111,11 +121,18 @@ class CartStore extends ChangeNotifier {
         );
         if (product.id <= 0) continue;
 
-        restored[product.id] = CartLine(
+        final variantRaw = map['variant'];
+        ProductVariantModel? variant;
+        if (variantRaw is Map) {
+          variant = ProductVariantModel.fromJson(Map<String, dynamic>.from(variantRaw));
+        }
+        final line = CartLine(
           product: product,
           quantity: quantity,
           unitPrice: unitPrice,
+          variant: variant,
         );
+        restored[line.key] = line;
       }
 
       if (restored.isNotEmpty) {
@@ -152,13 +169,11 @@ class CartStore extends ChangeNotifier {
           final userId = int.tryParse('${userEntry.key}') ?? 0;
           if (userId <= 0 || userEntry.value is! Map) continue;
 
-          final targets = <int, int>{};
+          final targets = <String, int>{};
           for (final productEntry in (userEntry.value as Map).entries) {
-            final productId = int.tryParse('${productEntry.key}') ?? 0;
+            final lineKey = '${productEntry.key}';
             final quantity = int.tryParse('${productEntry.value}') ?? -1;
-            if (productId > 0 && quantity >= 0) {
-              targets[productId] = quantity;
-            }
+            if (lineKey.trim().isNotEmpty && quantity >= 0) targets[lineKey] = quantity;
           }
           if (targets.isNotEmpty) _pendingByUser[userId] = targets;
         }
@@ -168,35 +183,9 @@ class CartStore extends ChangeNotifier {
     }
   }
 
-  CartAddResult add(ProductModel product) {
-    if (!product.canAddToCart || product.stock <= 0) {
-      return CartAddResult(
-        success: false,
-        message: product.isOrderable
-            ? 'Ce produit est disponible sur commande.'
-            : 'Ce produit n’est pas disponible à l’achat pour le moment.',
-      );
-    }
-
+  CartAddResult add(ProductModel product, {ProductVariantModel? variant}) {
     final minimum = product.minOrderQuantity <= 0 ? 1 : product.minOrderQuantity;
-    final current = _lines[product.id]?.quantity ?? 0;
-    final target = current == 0 ? minimum : current + minimum;
-
-    if (target > product.stock) {
-      return const CartAddResult(
-        success: false,
-        message: 'Stock insuffisant pour ajouter davantage de ce produit.',
-      );
-    }
-
-    _lines[product.id] = CartLine(product: product, quantity: target);
-    notifyListeners();
-    _afterLocalQuantityChanged(product.id, target);
-
-    return const CartAddResult(
-      success: true,
-      message: 'Produit ajouté au panier.',
-    );
+    return addQuantity(product, minimum, variant: variant);
   }
 
   /// Reflète localement une ligne déjà créée côté serveur au prix négocié
@@ -206,8 +195,9 @@ class CartStore extends ChangeNotifier {
   /// recalculerait le prix normal du produit et écraserait le prix
   /// négocié déjà appliqué côté serveur.
   void applyNegotiatedLine(ProductModel product, int quantity, double negotiatedPrice) {
-    final current = _lines[product.id]?.quantity ?? 0;
-    _lines[product.id] = CartLine(
+    final key = '${product.id}:0';
+    final current = _lines[key]?.quantity ?? 0;
+    _lines[key] = CartLine(
       product: product,
       quantity: current + quantity,
       unitPrice: negotiatedPrice,
@@ -217,83 +207,91 @@ class CartStore extends ChangeNotifier {
     _persistSoon();
   }
 
-  CartAddResult addQuantity(ProductModel product, int quantity) {
-    if (!product.canAddToCart || product.stock <= 0) {
+  CartAddResult addQuantity(ProductModel product, int quantity, {ProductVariantModel? variant}) {
+    final stock = variant?.stock ?? product.stock;
+    if (!product.canAddToCart || stock <= 0) {
       return CartAddResult(
         success: false,
         message: product.isOrderable
             ? 'Ce produit est disponible sur commande.'
-            : 'Ce produit n’est pas disponible à l’achat pour le moment.',
+            : 'Ce modèle n’est pas disponible à l’achat pour le moment.',
       );
+    }
+    if (product.variants.isNotEmpty && variant == null) {
+      return const CartAddResult(success: false, message: 'Choisissez une couleur ou un modèle.');
     }
 
     final minimum = product.minOrderQuantity <= 0 ? 1 : product.minOrderQuantity;
     final requested = quantity < minimum ? minimum : quantity;
-    final current = _lines[product.id]?.quantity ?? 0;
+    final key = '${product.id}:${variant?.id ?? 0}';
+    final current = _lines[key]?.quantity ?? 0;
     final target = current + requested;
 
-    if (target > product.stock) {
-      return const CartAddResult(
-        success: false,
-        message: 'Stock insuffisant pour cette quantité.',
-      );
+    if (target > stock) {
+      return const CartAddResult(success: false, message: 'Stock insuffisant pour cette quantité.');
     }
 
-    _lines[product.id] = CartLine(product: product, quantity: target);
+    _lines[key] = CartLine(product: product, quantity: target, variant: variant);
     notifyListeners();
-    _afterLocalQuantityChanged(product.id, target);
+    _afterLocalQuantityChanged(product.id, target, variantId: variant?.id);
 
-    return const CartAddResult(
+    return CartAddResult(
       success: true,
-      message: 'Produit ajouté au panier.',
+      message: variant == null ? 'Produit ajouté au panier.' : '${variant.value} ajouté au panier.',
     );
   }
 
-  void increment(int productId) {
-    final line = _lines[productId];
+  void increment(String lineKey) {
+    final line = _lines[lineKey];
     if (line == null) return;
-
-    final step = line.product.minOrderQuantity <= 0
-        ? 1
-        : line.product.minOrderQuantity;
+    final step = line.product.minOrderQuantity <= 0 ? 1 : line.product.minOrderQuantity;
     final target = line.quantity + step;
-    if (target > line.product.stock) return;
-
-    _lines[productId] = line.copyWith(quantity: target);
+    if (target > line.availableStock) return;
+    _lines[lineKey] = line.copyWith(quantity: target);
     notifyListeners();
-    _afterLocalQuantityChanged(productId, target);
+    _afterLocalQuantityChanged(line.product.id, target, variantId: line.variant?.id);
   }
 
-  void decrement(int productId) {
-    final line = _lines[productId];
+  void decrement(String lineKey) {
+    final line = _lines[lineKey];
     if (line == null) return;
-
-    final step = line.product.minOrderQuantity <= 0
-        ? 1
-        : line.product.minOrderQuantity;
+    final step = line.product.minOrderQuantity <= 0 ? 1 : line.product.minOrderQuantity;
     final target = line.quantity - step;
-
     if (target < step) {
-      remove(productId);
+      removeLine(lineKey);
       return;
     }
-
-    _lines[productId] = line.copyWith(quantity: target);
+    _lines[lineKey] = line.copyWith(quantity: target);
     notifyListeners();
-    _afterLocalQuantityChanged(productId, target);
+    _afterLocalQuantityChanged(line.product.id, target, variantId: line.variant?.id);
+  }
+
+  void removeLine(String lineKey) {
+    final removed = _lines.remove(lineKey);
+    if (removed == null) return;
+    notifyListeners();
+    _afterLocalQuantityChanged(removed.product.id, 0, variantId: removed.variant?.id);
   }
 
   void remove(int productId) {
-    if (_lines.remove(productId) == null) return;
-    notifyListeners();
-    _afterLocalQuantityChanged(productId, 0);
+    final keys = _lines.entries.where((entry) => entry.value.product.id == productId).map((entry) => entry.key).toList(growable: false);
+    for (final key in keys) {
+      removeLine(key);
+    }
   }
 
+  Future<bool> removeLineAndSync(String lineKey) async {
+    removeLine(lineKey);
+    await flush();
+    if (_authenticatedUserId == null) return true;
+    try {
+      await flushPendingServerMutations();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
-  /// Suppression explicite depuis l'écran panier : l'état local est écrit sur
-  /// disque puis Laravel est synchronisé avant de rendre la main lorsque le
-  /// réseau est disponible. En cas de panne, la suppression reste mémorisée
-  /// et sera réessayée plus tard.
   Future<bool> removeAndSync(int productId) async {
     remove(productId);
     await flush();
@@ -324,7 +322,7 @@ class CartStore extends ChangeNotifier {
   void replaceAll(Iterable<CartLine> lines) {
     _lines
       ..clear()
-      ..addEntries(lines.map((line) => MapEntry(line.product.id, line)));
+      ..addEntries(lines.map((line) => MapEntry(line.key, line)));
     notifyListeners();
     _persistSoon();
   }
@@ -360,7 +358,7 @@ class CartStore extends ChangeNotifier {
       _clearPendingUsers.add(userId);
       // Toutes les anciennes quantités deviennent obsolètes. Les nouveaux
       // ajouts effectués après ce clear seront enregistrés ensuite.
-      _pendingByUser[userId] = <int, int>{};
+      _pendingByUser[userId] = <String, int>{};
       _scheduleServerSync();
     }
     _persistSoon();
@@ -373,11 +371,12 @@ class CartStore extends ChangeNotifier {
     return id != null && id > 0 ? id : null;
   }
 
-  void _afterLocalQuantityChanged(int productId, int target) {
+  void _afterLocalQuantityChanged(int productId, int target, {int? variantId}) {
     _localMutationRevision++;
     final userId = _authenticatedUserId;
     if (userId != null) {
-      (_pendingByUser[userId] ??= <int, int>{})[productId] = target;
+      final key = '$productId:${variantId ?? 0}';
+      (_pendingByUser[userId] ??= <String, int>{})[key] = target;
       _scheduleServerSync();
     }
     _persistSoon();
@@ -424,9 +423,13 @@ class CartStore extends ChangeNotifier {
     final targets = _pendingByUser[userId];
     if (targets == null || targets.isEmpty) return;
 
-    final snapshot = Map<int, int>.from(targets);
+    final snapshot = Map<String, int>.from(targets);
     for (final entry in snapshot.entries) {
-      await remote.setProductQuantity(entry.key, entry.value);
+      final parts = entry.key.split(':');
+      final productId = int.tryParse(parts.first) ?? 0;
+      final variantId = parts.length > 1 ? int.tryParse(parts[1]) : null;
+      if (productId <= 0) continue;
+      await remote.setProductQuantity(productId, entry.value, productVariantId: (variantId ?? 0) > 0 ? variantId : null);
 
       // Ne retirer que si l'utilisateur n'a pas modifié à nouveau la quantité
       // pendant la requête réseau.
@@ -465,6 +468,7 @@ class CartStore extends ChangeNotifier {
             (line) => <String, dynamic>{
               'quantity': line.quantity,
               'unit_price': line.unitPrice,
+              'variant': line.variant?.toJson(),
               'product': _productToJson(line.product),
             },
           )

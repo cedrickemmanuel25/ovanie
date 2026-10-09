@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Geo\AbidjanLocalityRegistry;
 use App\Services\Geo\ShopLocationResolver;
 use App\Services\GuestCartService;
+use App\Services\AutomatedKycDocumentInspector;
 use App\Services\SellerLogisticsValidator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -79,6 +80,7 @@ class ShopController extends Controller
         $this->enrichLocationFromGps($request, $locationResolver);
 
         $validated = $this->validateShopRequest($request);
+        app(AutomatedKycDocumentInspector::class)->inspect($request);
         $geo = $this->resolveShopGeo($request, $locationResolver);
 
         $identityType = Str::lower((string) $validated['identityType']);
@@ -98,13 +100,15 @@ class ShopController extends Controller
             $shop->approved_at = now();
             $shop->rejection_reason = null;
             $shop->reviewed_by = null;
-            $shop->kyc_status = Shop::KYC_PENDING;
+            $shop->kyc_status = Shop::KYC_AUTOMATED_CHECKED;
             $shop->logistics_status = $validated['logistics_type'] === 'seller'
                 ? Shop::LOGISTICS_INCOMPLETE
                 : ($this->hasUsableOvanieLocation($geo)
                     ? Shop::LOGISTICS_READY
                     : Shop::LOGISTICS_INCOMPLETE);
             $shop->payout_onboarding_started_at = now();
+            $shop->logistics_confirmed_at = now();
+            $shop->payout_configured_at = now();
 
             $this->storeUploadedDocuments($request, $shop);
             $shop->save();
@@ -114,7 +118,7 @@ class ShopController extends Controller
         });
 
         if (! auth()->check() && $user && ! $request->attributes->get('ovanie_mobile_skip_web_login', false)) {
-            auth()->guard('web')->login($user);
+            auth()->guard('web')->login($user, true);
             if ($request->hasSession()) {
                 $request->session()->regenerate();
                 app(GuestCartService::class)->mergeIntoUserCart($request, $user);
@@ -202,6 +206,7 @@ class ShopController extends Controller
         $this->enrichLocationFromGps($request, $locationResolver);
 
         $validated = $this->validateShopRequest($request, $shop);
+        app(AutomatedKycDocumentInspector::class)->inspect($request);
         $geo = $this->resolveShopGeo($request, $locationResolver);
 
         $identityType = Str::lower((string) $validated['identityType']);
@@ -216,7 +221,7 @@ class ShopController extends Controller
             $this->replaceUploadedDocuments($request, $shop);
 
             if ($hadKycChange) {
-                $shop->kyc_status = Shop::KYC_PENDING;
+                $shop->kyc_status = Shop::KYC_AUTOMATED_CHECKED;
             }
 
             if ($oldLogisticsType !== $shop->logistics_type) {
@@ -538,7 +543,7 @@ class ShopController extends Controller
 
             'shopName' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'min:30', 'max:700'],
-            'selfie' => [$isUpdate && $shop->selfie ? 'nullable' : 'required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'selfie' => [$isUpdate && $shop->selfie ? 'nullable' : 'required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:min_width=480,min_height=480'],
             // Photo/logo public utilisé dans l'application vendeur. Le selfie reste
             // conservé séparément sur le disque privé pour le KYC.
             'shopLogo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
@@ -596,8 +601,8 @@ class ShopController extends Controller
             ],
             'identityUploadMode' => ['required', Rule::in(['pdf', 'scan'])],
             'identityFile' => [$this->identityFileRule($request, $shop, 'pdf'), 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
-            'identityFileFront' => [$this->identityFileRule($request, $shop, 'scan_front'), 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
-            'identityFileBack' => [$this->identityFileRule($request, $shop, 'scan_back'), 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'identityFileFront' => [$this->identityFileRule($request, $shop, 'scan_front'), 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:min_width=640,min_height=400'],
+            'identityFileBack' => [$this->identityFileRule($request, $shop, 'scan_back'), 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:min_width=640,min_height=400'],
 
             'direct_payment' => ['nullable', 'boolean'],
             'payment_mode' => ['required', Rule::in(['post_delivery', 'weekly'])],
@@ -627,6 +632,9 @@ class ShopController extends Controller
             'shopName.required' => 'Le nom de la boutique est obligatoire.',
             'description.min' => 'Présentez votre activité en au moins 30 caractères.',
             'selfie.required' => 'Une photo récente du responsable est obligatoire.',
+            'selfie.dimensions' => 'La photo du responsable doit mesurer au moins 480 × 480 pixels. Reprenez la photo avec un meilleur cadrage.',
+            'identityFileFront.dimensions' => 'Le recto de la pièce doit mesurer au moins 640 × 400 pixels pour rester lisible.',
+            'identityFileBack.dimensions' => 'Le verso de la pièce doit mesurer au moins 640 × 400 pixels pour rester lisible.',
             'region.required' => 'La région est obligatoire.',
             'city.required' => 'La ville est obligatoire.',
             'commune.required' => 'La commune est obligatoire.',

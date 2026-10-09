@@ -361,6 +361,18 @@ class VendorRepository {
     return _map(response.data);
   }
 
+  Future<Map<String, dynamic>> paymentSettings() async {
+    final response = await _dio.get('/mobile/v1/vendor/shop/payment-settings');
+    ApiClient.ensureSuccess(response);
+    return _map(response.data);
+  }
+
+  Future<Map<String, dynamic>> savePaymentSettings(Map<String, dynamic> values) async {
+    final response = await _dio.post('/mobile/v1/vendor/shop/payment-settings', data: values);
+    ApiClient.ensureSuccess(response);
+    return _map(response.data);
+  }
+
   Future<void> updateDeliverySettings(Map<String, dynamic> values) async {
     final response = await _dio.post('/mobile/v1/vendor/shop/delivery', data: values);
     ApiClient.ensureSuccess(response);
@@ -398,6 +410,7 @@ class VendorRepository {
     List<File> images = const [],
     File? technicalSheet,
     File? video,
+    Map<int, File> variantImages = const <int, File>{},
   }) async {
     final data = Map<String, dynamic>.from(values);
     for (var i = 0; i < images.length; i++) {
@@ -408,6 +421,12 @@ class VendorRepository {
     }
     if (video != null) {
       data['product_video'] = await MultipartFile.fromFile(video.path, filename: video.uri.pathSegments.last);
+    }
+    for (final entry in variantImages.entries) {
+      data['variant_images[${entry.key}]'] = await MultipartFile.fromFile(
+        entry.value.path,
+        filename: entry.value.uri.pathSegments.last,
+      );
     }
     final endpoint = productId == null ? '/mobile/v1/vendor/products' : '/mobile/v1/vendor/products/$productId';
     if (productId != null) data['_method'] = 'PATCH';
@@ -559,6 +578,18 @@ class VendorRepository {
     invalidateOrderCache(orderId);
   }
 
+  /// Paiement à la livraison : signale à OVANIE que l'encaissement a été reçu.
+  Future<String?> reportCashPayment(int orderId) async {
+    final response = await _dio.post(
+      '/mobile/v1/vendor/orders/$orderId/confirm-payment',
+      data: {'payment_method': 'cash'},
+    );
+    ApiClient.ensureSuccess(response);
+    invalidateOrderCache(orderId);
+    final data = response.data;
+    return data is Map ? data['message']?.toString() : null;
+  }
+
   Future<void> verifyOtp(int orderId, String code) async {
     final response = await _dio.post('/mobile/v1/vendor/orders/$orderId/verify-otp', data: {'delivery_otp_code': code});
     ApiClient.ensureSuccess(response);
@@ -579,6 +610,13 @@ class VendorRepository {
 
   Future<Map<String, dynamic>> payout(int id, {bool fresh = false}) async {
     final response = await _dio.get('/mobile/v1/vendor/payouts/$id');
+    ApiClient.ensureSuccess(response);
+    return _map(response.data);
+  }
+
+  /// Retire le solde disponible vers le compte Mobile Money du vendeur.
+  Future<Map<String, dynamic>> withdrawBalance() async {
+    final response = await _dio.post('/mobile/v1/vendor/payouts/withdraw');
     ApiClient.ensureSuccess(response);
     return _map(response.data);
   }

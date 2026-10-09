@@ -89,12 +89,12 @@
                 <article class="company-feature-card">
                     <div class="company-round-icon"><i data-lucide="shield-check"></i></div>
                     <h3>Achat sécurisé</h3>
-                    <p>Paiement en ligne 100% sécurisé, protection des données et transparence à chaque étape de votre commande.</p>
+                    <p>Paiement en ligne sécurisé, protection des données et transparence à chaque étape de votre commande.</p>
                 </article>
                 <article class="company-feature-card">
                     <div class="company-round-icon"><i data-lucide="truck"></i></div>
                     <h3>Livraison adaptée</h3>
-                    <p>Livraison rapide et flexible partout en Côte d’Ivoire, avec suivi en temps réel jusqu’à destination.</p>
+                    <p>Livraison rapide et flexible partout en Côte d’Ivoire, avec suivi de commande jusqu’à destination.</p>
                 </article>
                 <article class="company-feature-card">
                     <div class="company-round-icon company-round-icon--business">B</div>
@@ -109,10 +109,10 @@
                 <span class="company-kicker">Pour les clients</span>
                 <h2>Acheter avec plus de clarté</h2>
                 <ul class="company-check-list">
-                    <li>Choisissez en toute confiance parmi des milliers de produits.</li>
-                    <li>Comparez facilement les prix et les vendeurs.</li>
+                    <li>Choisissez en toute confiance parmi des centaines de références BTP.</li>
+                    <li>Comparez les produits, les prix, les caractéristiques et les disponibilités.</li>
                     <li>Profitez de conseils et d’informations fiables.</li>
-                    <li>Suivez vos commandes en temps réel.</li>
+                    <li>Suivez l’avancement de vos commandes.</li>
                     <li>Bénéficiez d’un service client réactif et humain.</li>
                     <li>Payez en ligne en toute sécurité.</li>
                 </ul>

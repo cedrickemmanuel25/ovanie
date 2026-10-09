@@ -245,9 +245,9 @@ class _ReturnTimeline extends StatelessWidget {
                           child: step.done ? const Icon(Icons.check_rounded, color: Colors.white, size: 19) : null,
                         ),
                         const SizedBox(height: 8),
-                        Text(step.label, textAlign: TextAlign.center, style: TextStyle(color: step.done ? OvanieColors.navy : OvanieColors.orange, fontSize: 10.8, height: 1.3, fontWeight: FontWeight.w700)),
+                        Text(step.label, textAlign: TextAlign.center, style: TextStyle(color: step.done ? OvanieColors.navy : OvanieColors.orange, fontSize: 12, height: 1.3, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 6),
-                        Text(step.date == null ? (step.done ? 'Validé' : 'En cours') : _dateTime(step.date!), textAlign: TextAlign.center, style: TextStyle(color: step.done ? const Color(0xFF40547A) : OvanieColors.orange, fontSize: 9.7, height: 1.25)),
+                        Text(step.date == null ? (step.done ? 'Validé' : 'En cours') : _dateTime(step.date!), textAlign: TextAlign.center, style: TextStyle(color: step.done ? const Color(0xFF40547A) : OvanieColors.orange, fontSize: 11.5, height: 1.25)),
                       ],
                     ),
                   );
@@ -439,7 +439,7 @@ class _HelpCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
         decoration: BoxDecoration(color: const Color(0xFFFFF6EF), borderRadius: BorderRadius.circular(10)),
-        child: Row(children: [const Icon(Icons.headset_mic_outlined, color: OvanieColors.orange, size: 31), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Besoin d’aide ?', style: TextStyle(color: OvanieColors.navy, fontSize: 12.5, fontWeight: FontWeight.w900)), SizedBox(height: 3), Text('Notre équipe est disponible pour vous accompagner.', style: TextStyle(color: OvanieColors.navy, fontSize: 10.8))])), OutlinedButton(onPressed: onTap, style: OutlinedButton.styleFrom(foregroundColor: OvanieColors.orange, side: const BorderSide(color: OvanieColors.orange), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))), child: const Text('Nous contacter', style: TextStyle(fontWeight: FontWeight.w800)))]),
+        child: Row(children: [const Icon(Icons.headset_mic_outlined, color: OvanieColors.orange, size: 31), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Besoin d’aide ?', style: TextStyle(color: OvanieColors.navy, fontSize: 12.5, fontWeight: FontWeight.w900)), SizedBox(height: 3), Text('Notre équipe est disponible pour vous accompagner.', style: TextStyle(color: OvanieColors.navy, fontSize: 12))])), OutlinedButton(onPressed: onTap, style: OutlinedButton.styleFrom(foregroundColor: OvanieColors.orange, side: const BorderSide(color: OvanieColors.orange), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))), child: const Text('Nous contacter', style: TextStyle(fontWeight: FontWeight.w800)))]),
       );
 }
 

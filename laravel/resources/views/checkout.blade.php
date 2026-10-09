@@ -38,7 +38,7 @@
 
 <header class="checkout-header">
     <a href="{{ route('home') }}" class="brand" aria-label="Accueil OVANIE">
-        <img src="{{ asset('storage/logos/officiel site.png') }}" alt="OVANIE">
+        <img src="{{ asset('images/home/logo-ovanie.png') }}" alt="OVANIE">
     </a>
 
     <div class="checkout-title-card" aria-label="Paiement sécurisé">
@@ -53,7 +53,6 @@
 <main class="checkout-page">
     <form action="{{ route('checkout.store') }}" method="POST" enctype="multipart/form-data" id="checkoutForm">
         @csrf
-        <input type="hidden" name="commission_amount" value="{{ $commission ?? 0 }}">
         <input type="hidden" name="phone" id="checkoutPhoneInput" value="{{ old('phone', $defaultPhone) }}">
         <input type="hidden" name="delivery_latitude" id="deliveryLatitude" value="{{ $defaultLatitude }}">
         <input type="hidden" name="delivery_longitude" id="deliveryLongitude" value="{{ $defaultLongitude }}">
@@ -91,7 +90,29 @@
                         </div>
                     </div>
 
-                    <div class="address-display-card">
+                    @if($addressBookDefaultSnapshot)
+                        {{-- Le client choisit : son adresse par défaut ou une nouvelle adresse.
+                             Aucun frais n'est calculé avant ce choix. --}}
+                        <div class="address-choice" id="addressChoice">
+                            <label class="address-choice-option">
+                                <input type="radio" name="address_choice" value="default">
+                                <span>
+                                    <strong>Livrer à mon adresse par défaut</strong>
+                                    <small>{{ trim(($addressBookDefaultSnapshot['delivery_commune'] ?? '') . ' — ' . trim((($addressBookDefaultSnapshot['delivery_quartier'] ?? '') ? $addressBookDefaultSnapshot['delivery_quartier'] . ', ' : '') . ($addressBookDefaultSnapshot['address'] ?? '')), ' —') }}</small>
+                                </span>
+                            </label>
+                            <label class="address-choice-option">
+                                <input type="radio" name="address_choice" value="new">
+                                <span>
+                                    <strong>Ajouter une nouvelle adresse</strong>
+                                    <small>Recherchez une adresse ou utilisez votre position.</small>
+                                </span>
+                            </label>
+                            <p class="address-choice-hint" id="addressChoiceHint">Choisissez où livrer : les frais de livraison sont calculés ensuite, depuis la boutique jusqu’à ce point.</p>
+                        </div>
+                    @endif
+
+                    <div class="address-display-card" id="addressDisplayCard" @if($addressBookDefaultSnapshot) hidden @endif>
                         <div>
                             <strong id="addressPreviewTitle">{{ $defaultCommune ?: 'Adresse non renseignée' }}</strong>
                             <span id="addressPreviewText">
@@ -194,7 +215,7 @@
                                         value="{{ old('bank_reference') }}"
                                         placeholder="Référence indiquée sur votre virement"
                                         style="width:100%;margin-top:8px;border:1px solid #cbd5e1;border-radius:10px;padding:12px;"
-                                        required
+                                        data-bank-required
                                     >
                                 </label>
 
@@ -206,7 +227,7 @@
                                         name="bank_receipt"
                                         accept=".jpg,.jpeg,.png,.pdf"
                                         style="width:100%;margin-top:8px;"
-                                        required
+                                        data-bank-required
                                     >
                                 </label>
                                 <small style="display:block;margin-top:6px;color:#64748b;">Formats acceptés : JPG, PNG, PDF — 2 Mo maximum.</small>
@@ -473,7 +494,13 @@
         return segments.length >= 4;
     }
 
+    // Si le client a une adresse par défaut, il doit d'abord choisir entre
+    // celle-ci et une nouvelle adresse : rien n'est calculé avant ce choix.
+    const addressChoiceBox = document.getElementById('addressChoice');
+    let addressChoiceMade = !addressChoiceBox;
+
     function addressIsComplete() {
+        if (!addressChoiceMade) return false;
         const fullName = document.getElementById('fullNameInput')?.value.trim();
         const phone = document.getElementById('whatsappInput')?.value.trim();
         if (!fullName || !phone) return false;
@@ -732,10 +759,6 @@
             summaryBox.dataset.subtotal = String(subtotal);
             summaryBox.dataset.deliveryTotal = String(delivery);
             summaryBox.dataset.deliveryKnown = deliveryCalculated && deliveryAvailable && !deliveryQuoteRequired ? '1' : '0';
-
-            if (Array.isArray(data.delivery_debug) && data.delivery_debug.length > 0) {
-                console.warn('OVANIE delivery diagnostics', data.delivery_debug);
-            }
 
             if (!deliveryCalculated) {
                 resetDeliveryPreview();
@@ -1677,7 +1700,14 @@
         const selectedPaymentMethod = document.querySelector('input[name="payment_method"]:checked')?.value || '';
         const bankFields = document.getElementById('bankTransferFields');
         if (bankFields) {
-            bankFields.hidden = selectedPaymentMethod !== 'bank_transfer';
+            const isBankTransfer = selectedPaymentMethod === 'bank_transfer';
+            bankFields.hidden = !isBankTransfer;
+            // Champs obligatoires uniquement pour le virement : sinon le navigateur
+            // bloquerait silencieusement l'envoi (champs masqués non remplis).
+            bankFields.querySelectorAll('[data-bank-required]').forEach((field) => {
+                field.required = isBankTransfer;
+                field.disabled = !isBankTransfer;
+            });
         }
 
         setSummaryActionState();
@@ -1732,10 +1762,36 @@
     updatePaymentDetailsVisibility();
     resetDeliveryPreview();
 
-    // Si une adresse enregistrée est déjà complète, le serveur valide
-    // automatiquement la livraison puis ouvre l'étape paiement. Le client
-    // n'a plus à cliquer sur « Ajouter une adresse » pour confirmer une
-    // information déjà connue et valide.
+    addressChoiceBox?.querySelectorAll('input[name="address_choice"]').forEach((input) => {
+        input.addEventListener('change', async () => {
+            addressChoiceMade = true;
+            addressChoiceBox.querySelectorAll('.address-choice-option').forEach((option) => {
+                option.classList.toggle('active', option.contains(input) && input.checked);
+            });
+            document.getElementById('addressChoiceHint')?.setAttribute('hidden', '');
+            const displayCard = document.getElementById('addressDisplayCard');
+
+            if (input.value === 'default') {
+                const defaultId = Number(@js($defaultSavedAddressId ?: 0));
+                const savedAddress = savedAddresses.find((item) => Number(item.saved_address_id) === defaultId);
+                if (displayCard) displayCard.hidden = false;
+                await applySavedAddress(savedAddress);
+                updateAddressPreview();
+                if (addressIsComplete() && deliveryCalculated && deliveryAvailable && !deliveryQuoteRequired) revealPaymentStep(false);
+                return;
+            }
+
+            // Nouvelle adresse : on repart d'une adresse vide et on ouvre la saisie.
+            clearSelectedLocation();
+            updateAddressPreview();
+            if (displayCard) displayCard.hidden = false;
+            openAddressModal();
+        });
+    });
+
+    // Sans adresse par défaut, une adresse déjà complète (retour de formulaire)
+    // est validée automatiquement. Avec une adresse par défaut, le client
+    // choisit d'abord (voir address_choice ci-dessus).
     if (addressIsComplete()) {
         refreshDeliveryPreview().then((ready) => {
             if (ready) revealPaymentStep(false);

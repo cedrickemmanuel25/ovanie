@@ -1,6 +1,6 @@
 @extends('layouts.logistics')
-@section('title','Suppléments')
-@section('crumb','Tarification > Suppléments')
+@section('title','Frais éventuels')
+@section('crumb','Tarification > Frais éventuels')
 @push('styles')<link rel="stylesheet" href="{{ asset('css/logistics-pricing.css') }}?v={{ @filemtime(public_path('css/logistics-pricing.css')) ?: '20260914' }}">@endpush
 
 @php
@@ -18,7 +18,7 @@
 <main class="pricing-page">
     <div class="pricing-titlebar">
         <div>
-            <h1>Suppléments</h1>
+            <h1>Frais éventuels</h1>
             <p>Gérez les frais additionnels applicables aux livraisons OVANIE Logistics.</p>
         </div>
         <div class="pricing-title-actions">

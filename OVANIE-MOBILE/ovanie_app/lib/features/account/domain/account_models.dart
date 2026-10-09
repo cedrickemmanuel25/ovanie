@@ -222,7 +222,7 @@ class ClientNotificationItem {
   factory ClientNotificationItem.fromJson(Map<String, dynamic> json) => ClientNotificationItem(
         id: '${json['id'] ?? ''}',
         title: cleanOvanieText('${json['title'] ?? 'Notification OVANIE'}'),
-        message: cleanOvanieText('${json['message'] ?? ''}'),
+        message: cleanMessageText('${json['message'] ?? ''}'),
         category: '${json['category'] ?? 'account'}'.trim(),
         url: json['url']?.toString(),
         orderId: json['order_id'] == null ? null : _toInt(json['order_id']),
@@ -385,7 +385,7 @@ class LegalDocumentItem {
         title: cleanOvanieText('${json['title'] ?? ''}'),
         available: json['available'] == true,
         url: json['url']?.toString(),
-        message: cleanOvanieText('${json['message'] ?? ''}'),
+        message: cleanMessageText('${json['message'] ?? ''}'),
       );
 }
 

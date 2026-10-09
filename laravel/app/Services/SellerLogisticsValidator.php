@@ -6,8 +6,24 @@ use App\Models\Shop;
 
 class SellerLogisticsValidator
 {
-    public function validate(Shop $shop): array
+    public function validate(Shop $shop, bool $requireConfirmation = true): array
     {
+        if ($requireConfirmation && ! $shop->hasConfirmedLogistics()) {
+            return [
+                'complete' => false,
+                'missing' => ['choix du mode logistique'],
+                'status' => Shop::LOGISTICS_INCOMPLETE,
+            ];
+        }
+
+        if (! in_array($shop->logistics_type, ['ovanie', 'seller'], true)) {
+            return [
+                'complete' => false,
+                'missing' => ['choix du mode logistique'],
+                'status' => Shop::LOGISTICS_INCOMPLETE,
+            ];
+        }
+
         $shop->loadMissing('sellerDeliveryProfile', 'sellerDeliveryZones');
 
         if ($shop->usesOvanieLogistics()) {

@@ -274,7 +274,7 @@ class AdminDashboardService
                 $attention->orWhere('is_active', false);
             }
             if ($this->hasColumn(Shop::class, 'kyc_status')) {
-                $attention->orWhereNotIn('kyc_status', ['verified', 'approved']);
+                $attention->orWhereNotIn('kyc_status', ['verified', 'approved', Shop::KYC_AUTOMATED_CHECKED]);
             }
             if ($this->hasColumn(Shop::class, 'logistics_status')) {
                 $attention->orWhere('logistics_status', '!=', Shop::LOGISTICS_READY);
@@ -403,7 +403,7 @@ class AdminDashboardService
         if (($shop->status ?? null) !== Shop::STATUS_APPROVED || ! (bool) ($shop->is_active ?? false)) {
             $issues[] = 'Activation incomplète';
         }
-        if (! in_array((string) ($shop->kyc_status ?? ''), [Shop::KYC_VERIFIED, 'approved'], true)) {
+        if (! in_array((string) ($shop->kyc_status ?? ''), [Shop::KYC_VERIFIED, Shop::KYC_AUTOMATED_CHECKED, 'approved'], true)) {
             $issues[] = 'KYC à contrôler';
         }
         if (($shop->logistics_status ?? null) !== Shop::LOGISTICS_READY) {

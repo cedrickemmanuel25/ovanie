@@ -13,6 +13,7 @@ import '../../clients/presentation/clients_screen.dart';
 import '../../dashboard/models/dashboard_data.dart';
 import '../data/shops_service.dart';
 import '../models/shop_data.dart';
+import 'configuration_missions_screen.dart';
 import 'open_shop_screen.dart';
 import 'shop_chrome.dart';
 import 'shop_detail_screen.dart';
@@ -114,6 +115,17 @@ class _CommercialShopsScreenState extends State<CommercialShopsScreen> {
       ),
     );
     if (created == true && mounted) await _load();
+  }
+
+  Future<void> _openConfigurationMissions() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CommercialConfigurationMissionsScreen(
+          shopsService: widget.shopsService,
+        ),
+      ),
+    );
+    if (mounted) await _load();
   }
 
   Future<void> _openShop(CommercialShop shop) async {
@@ -262,6 +274,24 @@ class _CommercialShopsScreenState extends State<CommercialShopsScreen> {
                       ),
                       SizedBox(height: s(17)),
                       _TitleRow(scale: scale, onCreate: _openCreateShop),
+                      SizedBox(height: s(10)),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _openConfigurationMissions,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Color(0xFF2E5E96)),
+                            padding: EdgeInsets.symmetric(vertical: s(11)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(s(10))),
+                          ),
+                          icon: Icon(Icons.assignment_outlined, size: s(18)),
+                          label: Text(
+                            'Missions boutiques affectées par l’administration',
+                            style: TextStyle(fontSize: s(10.8), fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
                       SizedBox(height: s(15)),
                       _FilterRow(
                         scale: scale,

@@ -45,7 +45,7 @@
         <span>Montant total</span>
         <strong>{{ number_format($deliveryData['order_total'], 0, ',', ' ') }} FCFA</strong>
     </div>
-    <p>{{ $deliveryData['deliveries_count'] }} livraison(s) prévue(s)</p>
+    <p>{{ $deliveryData['deliveries_count'] }} {{ ($deliveryData['deliveries_count']) > 1 ? 'livraisons prévues' : 'livraison prévue' }}</p>
 </section>
 
 @if($isCashOnDelivery)
@@ -73,7 +73,7 @@
                             <div class="cs-delivery-number">{{ $group['number'] }}</div>
                             <div class="cs-delivery-title">
                                 <h3>{{ $group['label'] }}</h3>
-                                <p>{{ $group['item_count'] }} article(s) · {{ $group['line_count'] }} référence(s)</p>
+                                <p>{{ $group['item_count'] }} {{ ($group['item_count']) > 1 ? 'articles' : 'article' }} · {{ $group['line_count'] }} {{ ($group['line_count']) > 1 ? 'références' : 'référence' }}</p>
                                 <div class="cs-delivery-date date-{{ $group['date_state'] }}">
                                     <span>{{ $group['date_label'] }}</span>
                                     <strong>{{ $group['date_value'] }}</strong>
@@ -92,10 +92,11 @@
                                 <div class="cs-delivery-item-row">
                                     <div class="cs-delivery-item-product">
                                         <span class="cs-delivery-item-image">
-                                            <img src="{{ $item->product?->main_image_url }}" alt="Article commandé">
+                                            <img src="{{ $item->variant_image_snapshot ?: ($item->variant?->card_url ?: $item->product?->main_image_url) }}" alt="Article commandé">
                                         </span>
                                         <div>
                                             <strong>{{ $item->product?->name ?: 'Produit indisponible' }}</strong>
+                                            @if($item->variant_label_snapshot)<small>{{ $item->variant_label_snapshot }}</small>@endif
                                             @if($item->product?->sku)
                                                 <small>Réf. {{ $item->product->sku }}</small>
                                             @endif

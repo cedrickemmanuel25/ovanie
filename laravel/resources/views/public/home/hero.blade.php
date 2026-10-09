@@ -29,11 +29,11 @@
             <div class="ov-hero__stats">
                 <div class="ov-stat">
                     <span class="ov-stat__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"></path><path d="m4 7.5 8 4.5 8-4.5M4 12l8 4.5 8-4.5M4 16.5l8 4.5 8-4.5"></path></svg></span>
-                    <div><strong>+{{ number_format((int) ($publicProductCount ?? 0), 0, ',', ' ') }}</strong><small>produits disponibles</small></div>
+                    <div><strong>{{ number_format((int) ($publicProductCount ?? 0), 0, ',', ' ') }}</strong><small>produits disponibles</small></div>
                 </div>
                 <div class="ov-stat">
                     <span class="ov-stat__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path><path d="m18 5 1.5 1.5L22 4"></path></svg></span>
-                    <div><strong>+{{ number_format((int) ($verifiedSellerCount ?? 0), 0, ',', ' ') }}</strong><small>vendeurs vérifiés</small></div>
+                    <div><strong>{{ number_format((int) ($verifiedSellerCount ?? 0), 0, ',', ' ') }}</strong><small>vendeurs vérifiés</small></div>
                 </div>
                 <div class="ov-stat">
                     <span class="ov-stat__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"></path><circle cx="7" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg></span>

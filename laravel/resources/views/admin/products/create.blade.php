@@ -1,24 +1,53 @@
-@extends('admin.layouts.app')
-@section('title', 'Ajouter un produit | Administration OVANIE')
+@extends($catalogueLayout ?? 'admin.layouts.app')
+@includeWhen(! ($isAdminSpace ?? true), 'support.partials.catalogue-scope')
+@section('title', 'Ajouter un produit | ' . ($spaceLabel ?? 'Administration OVANIE'))
 @section('page-title', 'Ajouter un produit')
 @push('styles')<link rel="stylesheet" href="{{ asset('admin/css/admin_catalogue.css') }}">@endpush
 @section('content')
 <div class="admin-catalogue-page catalogue-form-shell">
     <header class="catalogue-heading">
-        <div><span class="catalogue-kicker">Offre de boutique</span><h2>Ajouter un produit à une boutique</h2><p>Créez une offre complète avec son prix, son stock, ses données logistiques et ses images. Les informations obligatoires empêchent la publication d’un produit impossible à livrer.</p></div>
-        <a href="{{ route('admin.products.index') }}" class="catalogue-btn">Retour aux produits</a>
+        <div><span class="catalogue-kicker">Assistance vendeur</span><h2>Ajouter un produit pour une boutique</h2><p>{{ ($isAdminSpace ?? true) ? 'L’administration' : 'Le Support' }} peut publier ou compléter une fiche à la place d’un vendeur qui a besoin d’aide. Le produit reste toujours rattaché à sa boutique et l’intervention OVANIE est tracée.</p></div>
+        <a href="{{ route(($productRoutes ?? 'admin.products') . '.index') }}" class="catalogue-btn">Retour aux produits</a>
     </header>
 
-    <form method="POST" action="{{ route('admin.products.store') }}" enctype="multipart/form-data" class="catalogue-form" id="adminProductForm">
+    @if($selectedShop)
+        <div style="margin:0 0 18px;padding:14px 16px;border:1px solid #cfe0f4;border-radius:14px;background:#f7fbff;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+            <div><strong style="display:block;color:#0b2d55;">Produit créé pour {{ $selectedShop->name }}</strong><span style="color:#64748b;font-size:13px;">Vendeur : {{ $selectedShop->user?->name ?: $selectedShop->user?->email ?: 'Non renseigné' }}</span></div>
+            @if($isAdminSpace ?? true)<a href="{{ route('admin.shops.show',$selectedShop) }}" class="catalogue-btn">Voir la boutique</a>@endif
+        </div>
+    @endif
+
+    <form method="POST" action="{{ route(($productRoutes ?? 'admin.products') . '.store') }}" enctype="multipart/form-data" class="catalogue-form" id="adminProductForm">
         @csrf
         <section class="catalogue-form-section">
             <div class="catalogue-form-title"><span class="catalogue-form-step">1</span><div><h3>Produit et boutique</h3><p>Identifiez clairement l’offre et la boutique qui la commercialise.</p></div></div>
             <div class="catalogue-grid">
-                <div class="catalogue-field"><label for="shop_id">Boutique *</label><select id="shop_id" name="shop_id" required><option value="">Sélectionner une boutique</option>@foreach($shops as $shop)<option value="{{ $shop->id }}" @selected((int)old('shop_id')===(int)$shop->id)>{{ $shop->name }} — {{ $shop->user?->name ?: $shop->user?->email ?: 'vendeur' }}</option>@endforeach</select></div>
-                <div class="catalogue-field"><label for="category_id">Catégorie *</label><select id="category_id" name="category_id" required><option value="">Sélectionner une catégorie</option>@foreach($categories as $category)<option value="{{ $category->id }}" @selected((int)old('category_id')===(int)$category->id)>{{ $category->name }}</option>@endforeach</select></div>
+                <div class="catalogue-field"><label for="shop_id">Boutique *</label><select id="shop_id" name="shop_id" required><option value="">Sélectionner une boutique</option>@foreach($shops as $shop)<option value="{{ $shop->id }}" @selected((int)old('shop_id', $selectedShopId)===(int)$shop->id)>{{ $shop->name }} — {{ $shop->user?->name ?: $shop->user?->email ?: 'vendeur' }}</option>@endforeach</select></div>
+                <div class="catalogue-field">
+                    <label for="main_category_id">Catégorie principale *</label>
+                    <select id="main_category_id" name="main_category_id" required>
+                        <option value="">Sélectionner une catégorie</option>
+                        @foreach($mainCategories as $category)
+                            <option value="{{ $category->id }}" @selected((int) old('main_category_id') === (int) $category->id)>{{ $category->name }}</option>
+                        @endforeach
+                    </select>
+                    @error('main_category_id')<small class="field-error">{{ $message }}</small>@enderror
+                </div>
+                <div class="catalogue-field">
+                    <label for="category_id">Sous-catégorie *</label>
+                    <select id="category_id" name="category_id" required>
+                        <option value="">Sélectionnez d’abord une catégorie</option>
+                        @foreach($subCategories as $subcategory)
+                            <option value="{{ $subcategory->id }}" data-parent="{{ $subcategory->parent_id }}" @selected((int) old('category_id') === (int) $subcategory->id)>
+                                {{ $subcategory->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <small class="catalogue-help">Seules les sous-catégories de la catégorie choisie sont affichées.</small>
+                    @error('category_id')<small class="field-error">{{ $message }}</small>@enderror
+                </div>
                 <div class="catalogue-field"><label for="name">Nom du produit *</label><input id="name" name="name" required value="{{ old('name') }}"></div>
                 <div class="catalogue-field"><label for="brand">Marque</label><input id="brand" name="brand" value="{{ old('brand') }}"></div>
-                <div class="catalogue-field"><label for="sku">SKU ou référence</label><input id="sku" name="sku" value="{{ old('sku') }}"></div>
                 <div class="catalogue-field"><label for="sale_type">Type de vente *</label><select id="sale_type" name="sale_type" required><option value="">Sélectionner</option>@foreach(['Vente normale'=>'Vente normale','Vente flash'=>'Vente flash','Black Friday'=>'Black Friday','Promo spéciale'=>'Promotion spéciale'] as $value=>$label)<option value="{{ $value }}" @selected(old('sale_type')===$value)>{{ $label }}</option>@endforeach</select></div>
                 <div class="catalogue-field full"><label for="description">Description détaillée *</label><textarea id="description" name="description" required>{{ old('description') }}</textarea></div>
             </div>
@@ -53,23 +82,92 @@
             </div>
         </section>
 
+        @include('components.product-variants-editor', ['product' => null])
+
         <section class="catalogue-form-section">
-            <div class="catalogue-form-title"><span class="catalogue-form-step">4</span><div><h3>Promotions et médias</h3><p>Ajoutez des dates promotionnelles uniquement lorsqu’elles sont réellement utilisées.</p></div></div>
+            <div class="catalogue-form-title"><span class="catalogue-form-step">4</span><div><h3>Promotions, images et médias</h3><p>Ajoutez les promotions utiles et plusieurs photos professionnelles du produit.</p></div></div>
             <div class="catalogue-grid">
                 <div class="catalogue-field"><label for="flash_end">Fin de la vente flash</label><input id="flash_end" type="datetime-local" name="flash_end" value="{{ old('flash_end') }}"></div>
                 <div class="catalogue-field"><label for="bf_start">Début du Black Friday</label><input id="bf_start" type="datetime-local" name="bf_start" value="{{ old('bf_start') }}"></div>
                 <div class="catalogue-field"><label for="bf_end">Fin du Black Friday</label><input id="bf_end" type="datetime-local" name="bf_end" value="{{ old('bf_end') }}"></div>
                 <div class="catalogue-field"><span>Livraison rapide</span><label class="catalogue-choice"><input type="checkbox" name="fast_delivery" value="1" @checked(old('fast_delivery'))><span><strong>Activer</strong><small>Afficher la disponibilité d’une livraison accélérée.</small></span></label></div>
-                <div class="catalogue-field full"><span>Images du produit *</span><label class="catalogue-upload"><input type="file" name="images[]" id="productImages" multiple accept="image/jpeg,image/png,image/webp" required><strong>Choisir ou déposer les photos</strong><span>JPG, PNG ou WEBP · 5 Mo maximum par image · la première photo devient principale</span></label><div id="selectedFiles" class="catalogue-help">Aucune photo sélectionnée.</div></div>
+                <div class="catalogue-field full">
+                    <span>Images et médias du produit *</span>
+                    <label class="catalogue-upload">
+                        <input type="file" name="images[]" id="productImages" multiple accept="image/jpeg,image/png,image/webp" required data-max-images="20">
+                        <strong>Ajouter plusieurs photos du produit</strong>
+                        <span>Jusqu’à 20 images · JPG, PNG ou WEBP · 5 Mo maximum par image · OVANIE normalise automatiquement les photos en format carré professionnel.</span>
+                    </label>
+                    <div id="selectedFiles" class="catalogue-help" aria-live="polite">Aucune photo sélectionnée.</div>
+                    @error('images')<small class="field-error">{{ $message }}</small>@enderror
+                    @error('images.*')<small class="field-error">{{ $message }}</small>@enderror
+                </div>
             </div>
         </section>
 
-        <div class="catalogue-form-actions"><a href="{{ route('admin.products.index') }}" class="catalogue-btn">Annuler</a><button class="catalogue-btn primary" type="submit">Ajouter le produit</button></div>
+        <div class="catalogue-form-actions"><a href="{{ $selectedShop && ($isAdminSpace ?? true) ? route('admin.shops.show',$selectedShop) : route(($productRoutes ?? 'admin.products') . '.index') }}" class="catalogue-btn">Annuler</a><button class="catalogue-btn primary" type="submit">Ajouter pour le vendeur</button></div>
     </form>
 </div>
 @endsection
 @push('scripts')
 <script>
-(()=>{const dims=[...document.querySelectorAll('.product-dimension')],out=document.getElementById('productVolume');function calc(){const [l,w,h]=dims.map(i=>parseFloat(i.value)||0);out.textContent=(l*w*h/1000000).toFixed(6)}dims.forEach(i=>i.addEventListener('input',calc));calc();const images=document.getElementById('productImages'),files=document.getElementById('selectedFiles');images?.addEventListener('change',()=>{files.textContent=images.files.length?`${images.files.length} photo${images.files.length>1?'s':''} sélectionnée${images.files.length>1?'s':''}.`:'Aucune photo sélectionnée.'});const box=document.getElementById('unloadingBox'),instruction=document.getElementById('unloading_instructions');function sync(){const required=document.querySelector('input[name="requires_unloading"]:checked')?.value==='1';box.style.display=required?'grid':'none';instruction.required=required;if(!required)instruction.value=''}document.querySelectorAll('input[name="requires_unloading"]').forEach(i=>i.addEventListener('change',sync));sync()})();
+(()=>{
+    const mainCategory = document.getElementById('main_category_id');
+    const subCategory = document.getElementById('category_id');
+
+    function syncSubcategories() {
+        if (!mainCategory || !subCategory) return;
+
+        const mainId = String(mainCategory.value || '');
+        const previousValue = String(subCategory.value || '');
+        let visible = 0;
+
+        [...subCategory.options].forEach((option, index) => {
+            if (index === 0) return;
+            const matches = mainId !== '' && String(option.dataset.parent || '') === mainId;
+            option.hidden = !matches;
+            option.disabled = !matches;
+            if (matches) visible++;
+        });
+
+        const selected = [...subCategory.options].find(option => option.value === previousValue && !option.disabled);
+        if (!selected) subCategory.value = '';
+
+        subCategory.options[0].textContent = !mainId
+            ? 'Sélectionnez d’abord une catégorie'
+            : visible > 0
+                ? 'Sélectionner une sous-catégorie'
+                : 'Aucune sous-catégorie disponible';
+        subCategory.disabled = !mainId || visible === 0;
+    }
+
+    mainCategory?.addEventListener('change', () => {
+        subCategory.value = '';
+        syncSubcategories();
+    });
+    syncSubcategories();
+
+    const dims=[...document.querySelectorAll('.product-dimension')],out=document.getElementById('productVolume');
+    function calc(){const [l,w,h]=dims.map(i=>parseFloat(i.value)||0);out.textContent=(l*w*h/1000000).toFixed(6)}
+    dims.forEach(i=>i.addEventListener('input',calc));calc();
+
+    const images=document.getElementById('productImages'),files=document.getElementById('selectedFiles');
+    images?.addEventListener('change',()=>{
+        const max=parseInt(images.dataset.maxImages || '20',10);
+        const count=images.files.length;
+        if(count>max){
+            images.value='';
+            files.textContent=`Vous pouvez sélectionner jusqu’à ${max} images à la fois.`;
+            files.style.color='#b42318';
+            return;
+        }
+        files.style.color='';
+        files.textContent=count?`${count} image${count>1?'s':''} sélectionnée${count>1?'s':''} sur ${max}.`:'Aucune photo sélectionnée.';
+    });
+
+    const box=document.getElementById('unloadingBox'),instruction=document.getElementById('unloading_instructions');
+    function sync(){const required=document.querySelector('input[name="requires_unloading"]:checked')?.value==='1';box.style.display=required?'grid':'none';instruction.required=required;if(!required)instruction.value=''}
+    document.querySelectorAll('input[name="requires_unloading"]').forEach(i=>i.addEventListener('change',sync));sync();
+})();
 </script>
 @endpush
