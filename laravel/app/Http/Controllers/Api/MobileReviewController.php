@@ -77,6 +77,8 @@ class MobileReviewController extends Controller
                             'id' => (int) $review->id,
                             'rating' => (int) $review->rating,
                             'comment' => (string) ($review->comment ?? ''),
+                            'vendor_reply' => $review->vendor_reply,
+                            'vendor_replied_at' => $review->vendor_replied_at?->toIso8601String(),
                             'updated_at' => $review->updated_at?->toIso8601String(),
                         ] : null,
                     ];

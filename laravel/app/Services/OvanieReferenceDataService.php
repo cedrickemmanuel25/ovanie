@@ -179,14 +179,35 @@ class OvanieReferenceDataService
             ->roots()
             ->active()
             ->ordered()
-            ->get(['id', 'parent_id', 'name', 'slug'])
-            ->map(static fn (Category $category): array => [
+            ->get(['id', 'parent_id', 'name', 'slug', 'image_path'])
+            ->map(fn (Category $category): array => [
                 'id' => (int) $category->id,
                 'name' => (string) $category->name,
                 'slug' => (string) $category->slug,
+                // Même visuel que la page catégorie du site : photo choisie en
+                // administration, sinon visuel historique de la catégorie.
+                'image_url' => $category->image_url ?: $this->defaultCategoryImage((string) $category->slug),
             ])
             ->values()
             ->all();
+    }
+
+    private function defaultCategoryImage(string $slug): ?string
+    {
+        $file = [
+            'materiaux-gros-oeuvre' => 'gros œuvre & maçonnerie.png',
+            'materiaux-gros-oeuvres' => 'gros œuvre & maçonnerie.png',
+            'materiaux-de-finition' => 'finition & déco.png',
+            'outillage-equipement' => 'matériel outillage.png',
+            'electricite-plomberie' => 'Électricité & Plomberie.png',
+            'energie-solaire' => 'énergie & autonomie.png',
+            'materiaux-ecologiques' => 'home-finition.webp',
+            'nos-reconditionnes' => 'Nos reconditionnés.png',
+            'reconditionnes' => 'Nos reconditionnés.png',
+            'carte-cadeau-ovanie' => 'Carte Cadeau OVANIE.png',
+        ][$slug] ?? null;
+
+        return $file ? asset('storage/logos/' . rawurlencode($file)) : null;
     }
 
     /**
@@ -373,6 +394,7 @@ class OvanieReferenceDataService
                     'processing_times',
                     'payout_methods',
                     'checkout_operators',
+                    'support_contact',
                 ]
             ))),
         ];
@@ -404,6 +426,16 @@ class OvanieReferenceDataService
         $data['processing_times'] = $this->processingTimeCodes();
         $data['payout_methods'] = $this->payoutMethods();
         $data['checkout_operators'] = $this->checkoutOperators();
+        // Coordonnées officielles d'OVANIE : une seule source (config/public_contact.php) pour le site et les apps.
+        $data['support_contact'] = [
+            'phone_display' => (string) config('public_contact.phone_display'),
+            'phone' => (string) config('public_contact.phone_e164'),
+            'whatsapp_number' => (string) config('public_contact.whatsapp_number'),
+            'whatsapp_url' => (string) config('public_contact.whatsapp_url'),
+            'email' => (string) config('public_contact.email'),
+            'hours' => (string) config('public_contact.hours'),
+            'address' => (string) config('public_contact.address'),
+        ];
 
         return [
             'ok' => true,

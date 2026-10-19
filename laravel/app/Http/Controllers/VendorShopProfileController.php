@@ -485,7 +485,7 @@ class VendorShopProfileController extends Controller
         return $shop;
     }
 
-    private function documentsStatus(Shop $shop): array
+    public function documentsStatus(Shop $shop): array
     {
         return [
             'selfie' => [

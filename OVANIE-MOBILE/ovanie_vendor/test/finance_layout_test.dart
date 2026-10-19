@@ -98,7 +98,7 @@ void main() {
 
   testWidgets('accueil : indicateurs réels et bascule 3 / 6 mois', (tester) async {
     await open(tester, const FinanceScreen(), const Size(412, 915), 1);
-    expect(find.text('Solde disponible'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('^Solde disponible : ')), findsOneWidget);
     expect(find.text('Actif'), findsOneWidget);
     expect(find.text('Mai', skipOffstage: false), findsOneWidget);
     await tester.ensureVisible(find.text('3 derniers mois'));

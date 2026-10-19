@@ -500,20 +500,24 @@ class OrderProgressStepper extends StatelessWidget {
     this.timestamps = const <String, String>{},
     this.compact = false,
     this.lastLabel = 'Livrée',
+    this.shippedLabel = 'Expédiée',
   });
 
   final int currentStep;
   final Map<String, String> timestamps;
   final bool compact;
 
-  /// Libellé de la dernière étape : « Livrée », ou « Remise à OVANIE » en logistique OVANIE.
   final String lastLabel;
+
+  /// Troisième étape : « Expédiée » quand la boutique livre, « Remise au
+  /// livreur » quand OVANIE Logistics vient collecter la commande.
+  final String shippedLabel;
 
   static const _keys = ['received', 'preparation', 'shipped', 'delivered'];
 
   @override
   Widget build(BuildContext context) {
-    final labels = ['Commande reçue', 'Préparation', 'Expédiée', lastLabel];
+    final labels = ['Commande reçue', 'Préparation', shippedLabel, lastLabel];
     return OrderStepsRow(
       steps: [
         for (var i = 0; i < 4; i++)
@@ -1038,7 +1042,15 @@ class OrderLogisticsBanner extends StatelessWidget {
     final reserved = tracking['driver_reserved'] == true;
     final driver = orderMap(tracking['driver']);
     final driverName = '${driver['name'] ?? ''}'.trim();
-    final title = reserved ? 'Mission réservée par un livreur partenaire' : 'Livraison OVANIE Logistics';
+    final delivery = '${order['delivery_status'] ?? ''}';
+    final pickedUp = '${tracking['pickup_completed_at'] ?? ''}'.isNotEmpty;
+    final title = delivery == 'delivered'
+        ? 'Livrée par OVANIE Logistics'
+        : pickedUp
+        ? 'Commande remise à OVANIE Logistics'
+        : reserved
+        ? 'Mission réservée par un livreur partenaire'
+        : 'Livraison OVANIE Logistics';
 
     return Container(
       width: double.infinity,

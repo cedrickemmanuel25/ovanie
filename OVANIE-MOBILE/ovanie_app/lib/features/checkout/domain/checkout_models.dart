@@ -44,30 +44,30 @@ class CheckoutAddress {
   });
 
   Map<String, dynamic> toJson() => {
-        'full_name': fullName.trim(),
-        'phone': phone.trim(),
-        'delivery_destination_type': 'home',
-        'delivery_zone': zone,
-        'delivery_city': zone == 'interieur' ? city.trim() : null,
-        'delivery_commune': commune.trim().isEmpty ? null : commune.trim(),
-        'delivery_quartier': quartier.trim().isEmpty ? null : quartier.trim(),
-        'address': address.trim(),
-        'delivery_latitude': latitude,
-        'delivery_longitude': longitude,
-        'delivery_geo_accuracy': geoAccuracyMeters,
-        'delivery_geo_source': geoSource.trim().isEmpty
-            ? (latitude != null && longitude != null ? 'mobile_gps' : 'mobile_manual')
-            : geoSource.trim(),
-        'delivery_locality_type': localityType.trim().isEmpty ? null : localityType.trim(),
-        'saved_address_id': savedAddressId,
-        'payment_method': paymentMethod,
-        'online_operator': onlineOperator.trim().isEmpty ? null : onlineOperator.trim(),
-        'payment_phone': paymentPhone.trim().isEmpty ? null : paymentPhone.trim(),
-        'orange_otp': orangeOtp.trim().isEmpty ? null : orangeOtp.trim(),
-        if (checkoutProductIds.isNotEmpty) 'checkout_product_ids': checkoutProductIds,
-        'loyalty_points': 0,
-        'notes': notes.trim().isEmpty ? null : notes.trim(),
-      };
+    'full_name': fullName.trim(),
+    'phone': phone.trim(),
+    'delivery_destination_type': 'home',
+    'delivery_zone': zone,
+    'delivery_city': zone == 'interieur' ? city.trim() : null,
+    'delivery_commune': commune.trim().isEmpty ? null : commune.trim(),
+    'delivery_quartier': quartier.trim().isEmpty ? null : quartier.trim(),
+    'address': address.trim(),
+    'delivery_latitude': latitude,
+    'delivery_longitude': longitude,
+    'delivery_geo_accuracy': geoAccuracyMeters,
+    'delivery_geo_source': geoSource.trim().isEmpty
+        ? (latitude != null && longitude != null ? 'mobile_gps' : 'mobile_manual')
+        : geoSource.trim(),
+    'delivery_locality_type': localityType.trim().isEmpty ? null : localityType.trim(),
+    'saved_address_id': savedAddressId,
+    'payment_method': paymentMethod,
+    'online_operator': onlineOperator.trim().isEmpty ? null : onlineOperator.trim(),
+    'payment_phone': paymentPhone.trim().isEmpty ? null : paymentPhone.trim(),
+    'orange_otp': orangeOtp.trim().isEmpty ? null : orangeOtp.trim(),
+    if (checkoutProductIds.isNotEmpty) 'checkout_product_ids': checkoutProductIds,
+    'loyalty_points': 0,
+    'notes': notes.trim().isEmpty ? null : notes.trim(),
+  };
 }
 
 class CheckoutSavedAddress {
@@ -144,8 +144,13 @@ class CheckoutPreview {
   final double totalWeightKg;
   final double totalVolumeM3;
   final String recommendedVehicle;
+
   /// Distance boutique -> point de livraison (km), si connue.
   final double? deliveryDistanceKm;
+
+  /// Zone logistique de destination (ex. « Abidjan Est ») et son délai moyen.
+  final String territoryZoneName;
+  final int averageDelayHours;
   final String deliveryZone;
   final String deliveryCommune;
   final String deliveryQuartier;
@@ -168,6 +173,8 @@ class CheckoutPreview {
     required this.totalVolumeM3,
     required this.recommendedVehicle,
     this.deliveryDistanceKm,
+    this.territoryZoneName = '',
+    this.averageDelayHours = 0,
     required this.deliveryZone,
     required this.deliveryCommune,
     required this.deliveryQuartier,
@@ -184,6 +191,9 @@ class CheckoutPreview {
       return double.tryParse('${value ?? ''}') ?? 0;
     }
 
+    final territory = json['territory_zone'] is Map
+        ? Map<String, dynamic>.from(json['territory_zone'] as Map)
+        : <String, dynamic>{};
     final resolved = json['resolved_delivery_location'] is Map
         ? Map<String, dynamic>.from(json['resolved_delivery_location'] as Map)
         : <String, dynamic>{};
@@ -205,6 +215,8 @@ class CheckoutPreview {
       deliveryDistanceKm: json['delivery_distance_km'] == null
           ? null
           : double.tryParse('${json['delivery_distance_km']}'),
+      territoryZoneName: text(territory['name']),
+      averageDelayHours: asDouble(territory['average_delay_hours']).round(),
       deliveryZone: text(resolved['zone']),
       deliveryCommune: text(resolved['commune']),
       deliveryQuartier: text(resolved['quartier']),
@@ -224,7 +236,6 @@ class CheckoutPreview {
     );
   }
 }
-
 
 class CheckoutValidationState {
   final bool cartValid;
@@ -288,11 +299,9 @@ class CheckoutPaymentMethodOption {
       reason: cleanOvanieText((json['reason'] ?? '').toString()),
       operators: rawOperators is List
           ? rawOperators
-              .whereType<Map>()
-              .map((item) => CheckoutPaymentOperatorOption.fromJson(
-                    Map<String, dynamic>.from(item),
-                  ))
-              .toList(growable: false)
+                .whereType<Map>()
+                .map((item) => CheckoutPaymentOperatorOption.fromJson(Map<String, dynamic>.from(item)))
+                .toList(growable: false)
           : const [],
     );
   }
@@ -328,16 +337,12 @@ class CheckoutPaymentOptions {
     final limit = json['online_limit_xof'];
     return CheckoutPaymentOptions(
       cashOnDeliveryRequired: json['cash_on_delivery_required'] == true,
-      onlineLimitXof: limit is num
-          ? limit.toDouble()
-          : double.tryParse('${limit ?? ''}') ?? 3000000,
+      onlineLimitXof: limit is num ? limit.toDouble() : double.tryParse('${limit ?? ''}') ?? 3000000,
       methods: raw is List
           ? raw
-              .whereType<Map>()
-              .map((item) => CheckoutPaymentMethodOption.fromJson(
-                    Map<String, dynamic>.from(item),
-                  ))
-              .toList(growable: false)
+                .whereType<Map>()
+                .map((item) => CheckoutPaymentMethodOption.fromJson(Map<String, dynamic>.from(item)))
+                .toList(growable: false)
           : const [],
     );
   }

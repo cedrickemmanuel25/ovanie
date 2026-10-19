@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme.dart';
 import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_runtime_state.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/auth/presentation/auth_branding.dart';
 
 class OfflineNetworkScreen extends StatefulWidget {
   const OfflineNetworkScreen({super.key});
@@ -37,107 +37,29 @@ class _OfflineNetworkScreenState extends State<OfflineNetworkScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final runtime = ApiRuntimeState.instance;
-    return Material(
-      color: OvanieColors.background,
-      child: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 36, 28, 36),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 86,
-                    height: 86,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF4EC),
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: const Icon(
-                      Icons.wifi_off_rounded,
-                      size: 42,
-                      color: OvanieColors.orange,
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  const Text(
-                    'Connexion indisponible',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: OvanieColors.text,
-                      fontSize: 23,
-                      height: 1.15,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    _retryError ?? runtime.networkMessage,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: OvanieColors.muted,
-                      fontSize: 13.5,
-                      height: 1.5,
-                    ),
-                  ),
-                  if (AppConfig.isLocalDevelopment) ...[
-                    const SizedBox(height: 10),
-                    SelectableText(
-                      'Serveur configuré : ${AppConfig.apiBaseUrl}\n'
-                      'Sur un téléphone physique, utilisez l’adresse IP locale du PC, '
-                      'le même réseau Wi-Fi et Laravel lancé avec --host=0.0.0. '
-                      '10.0.2.2 fonctionne uniquement dans l’émulateur Android.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: OvanieColors.muted, fontSize: 12),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Votre panier local et votre contexte de navigation sont conservés sur ce téléphone.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: OvanieColors.muted,
-                      fontSize: 12,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: FilledButton.icon(
-                      onPressed: _retrying ? null : _retry,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: OvanieColors.orange,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      icon: _retrying
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.refresh_rounded),
-                      label: Text(
-                        _retrying ? 'Vérification…' : 'Réessayer',
-                        style: const TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    return OvanieStatusPage(
+      art: 'offline',
+      artAspect: 941 / 815,
+      title: 'Connexion indisponible',
+      message: 'Impossible de joindre OVANIE. Vérifiez votre connexion internet puis réessayez.',
+      extras: [
+        const OvanieInfoStrip(
+          icon: Icons.shopping_cart_outlined,
+          text: 'Votre panier local et votre contexte de navigation sont conservés sur ce téléphone.',
         ),
+        if (AppConfig.isLocalDevelopment)
+          SelectableText(
+            'Serveur configuré : ${AppConfig.apiBaseUrl}${_retryError == null ? '' : '\n$_retryError'}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: authMuted, fontSize: 12, height: 1.4),
+          ),
+      ],
+      button: OvaniePrimaryButton(
+        label: 'Réessayer',
+        loading: _retrying,
+        loadingLabel: 'Vérification…',
+        height: 54,
+        onPressed: _retry,
       ),
     );
   }

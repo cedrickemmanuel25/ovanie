@@ -1,10 +1,11 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/ui/mk_dialogs.dart';
+import '../../core/ui/mk_file_pick.dart';
 import '../menu/menu_ui.dart';
 import '../orders/order_detail_screen.dart';
 import '../orders/order_widgets.dart' show showOrderPhoneSheet;
@@ -247,12 +248,13 @@ class _CaseState extends State<CaseDetailScreen> {
 
   Future<void> pickRejectionProof() async {
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+      final file = await pickMkFile(
+        context,
+        title: 'Preuve du refus',
+        message: 'Photo ou PDF qui justifie votre décision.',
+        extensions: const ['pdf'],
       );
-      final path = result?.files.single.path;
-      if (path != null && mounted) setState(() => rejectionProof = File(path));
+      if (file != null && mounted) setState(() => rejectionProof = file);
     } catch (e) {
       if (mounted) menuError(context, e);
     }
@@ -260,69 +262,154 @@ class _CaseState extends State<CaseDetailScreen> {
 
   void _warn(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
-  Future<bool> _confirm(String title, String message, String confirmLabel, {Color color = Mk.orange}) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => MkTheme(
-        lightStatusBar: false,
-        child: Dialog(
-          backgroundColor: Colors.white,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 22, 18, 16),
+  /// Rappel du dossier dans les confirmations : produit, référence, client, montant.
+  Widget _caseSummary({bool withStatus = false}) {
+    final p = mapOf(data['product']), client = mapOf(data['client']);
+    final amount = p['amount'] ?? data['amount'];
+    return MkSheetSummary(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          menuImage(p['image_url'] ?? data['image_url'], size: 76, radius: 10),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: menuBlue, fontSize: 19, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: menuMuted, fontSize: 14, height: 1.45, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 18),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(dialog, false),
-                        child: const Text('Annuler', style: TextStyle(color: menuBlue, fontSize: 15, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        screenText(p['name'] ?? data['product_name'], 'Produit'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: menuBlue, fontSize: 15, height: 1.25, fontWeight: FontWeight.w800),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: MkBarButton(label: confirmLabel, filled: true, color: color, onTap: () => Navigator.pop(dialog, true)),
-                    ),
+                    if (withStatus) ...[
+                      const SizedBox(width: 6),
+                      menuPill(caseStatus(data['status']), color: caseColor(data['status']), icon: Icons.error_outline_rounded),
+                    ],
                   ],
                 ),
+                if (screenText(data['reference'], '').isNotEmpty)
+                  Text('${data['reference']}', style: const TextStyle(color: menuMuted, fontSize: 13, fontWeight: FontWeight.w500)),
+                if (screenText(client['name'], '').isNotEmpty)
+                  Text(
+                    'Client : ${client['name']}',
+                    style: const TextStyle(color: menuMuted, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                if (amount != null)
+                  Text(orderMoney(amount), style: const TextStyle(color: menuBlue, fontSize: 16, fontWeight: FontWeight.w800)),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
-    return ok == true;
+  }
+
+  static const _ovanieNote = MkInfoBox(
+    icon: Icons.info_rounded,
+    child: Text('Le remboursement et la suite logistique suivent le traitement du dossier par OVANIE.'),
+  );
+
+  Future<bool> _confirmAction(String action) async {
+    switch (action) {
+      case 'accept':
+        return showMkConfirmSheet(
+          context,
+          icon: Icons.check_rounded,
+          iconColor: menuGreen,
+          title: 'Valider le retour ?',
+          summary: _caseSummary(),
+          body: _ovanieNote,
+          confirmLabel: 'Valider le retour',
+          confirmIcon: Icons.check_circle_rounded,
+          confirmColor: menuGreen,
+          cancelColor: orderBlue,
+        );
+      case 'refund':
+        final amount = mapOf(data['product'])['amount'] ?? data['amount'];
+        return showMkConfirmSheet(
+          context,
+          icon: Icons.currency_exchange_rounded,
+          iconColor: Mk.orange,
+          title: 'Rembourser le client ?',
+          summary: _caseSummary(),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (amount != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Mk.softOrange,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFFD2B3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Text('Montant', style: TextStyle(color: Color(0xFFE85400), fontSize: 14.5, fontWeight: FontWeight.w700)),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            orderMoney(amount),
+                            style: const TextStyle(color: Color(0xFFE85400), fontSize: 26, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 10),
+              _ovanieNote,
+            ],
+          ),
+          confirmLabel: 'Rembourser le client',
+          confirmIcon: Icons.currency_exchange_rounded,
+          cancelColor: orderBlue,
+        );
+      case 'reject':
+        final ok = await showMkSheet<bool>(
+          context,
+          builder: (_) => _RejectSheet(
+            summary: _caseSummary(),
+            response: response,
+            proof: rejectionProof,
+            onProof: (file) => setState(() => rejectionProof = file),
+          ),
+        );
+        return ok == true;
+      case 'escalate':
+        return showMkConfirmSheet(
+          context,
+          icon: Icons.support_agent_rounded,
+          iconColor: orderBlue,
+          title: 'Transmettre à OVANIE ?',
+          summary: _caseSummary(withStatus: true),
+          message: 'Le dossier passera au statut En attente OVANIE.',
+          confirmLabel: 'Transmettre à OVANIE',
+          confirmIcon: Icons.support_agent_rounded,
+          confirmColor: orderBlue,
+          cancelColor: orderBlue,
+        );
+      default:
+        return true;
+    }
   }
 
   Future<void> action(String action) async {
     final text = response.text.trim();
     if (action == 'respond' && text.isEmpty) return _warn('Rédigez une solution avant de l’envoyer.');
-    if (action == 'reject' && text.length < 10) return _warn('Expliquez le refus en au moins 10 caractères.');
-    if (action == 'reject' && rejectionProof == null) return _warn('Ajoutez un justificatif avant de refuser ce retour.');
 
-    final confirmed = switch (action) {
-      'accept' => await _confirm('Valider ce retour ?', 'Le client sera informé que sa demande de retour est acceptée.', 'Valider', color: menuGreen),
-      'refund' => await _confirm('Rembourser le client ?', 'Le remboursement sera traité par OVANIE. Cette décision ne peut pas être annulée.', 'Rembourser'),
-      'reject' => await _confirm('Refuser ce retour ?', 'Votre explication et votre justificatif seront transmis au client et à OVANIE.', 'Refuser', color: menuRed),
-      'escalate' => await _confirm('Transmettre à OVANIE ?', 'L’équipe OVANIE prendra le relais pour traiter ce litige avec le client.', 'Transmettre', color: orderBlue),
-      _ => true,
-    };
+    final confirmed = await _confirmAction(action);
     if (!confirmed || !mounted) return;
+    final finalText = response.text.trim();
 
     setState(() => busy = true);
     try {
@@ -330,8 +417,8 @@ class _CaseState extends State<CaseDetailScreen> {
         '$path/${widget.id}/$action',
         method: 'POST',
         data: {
-          if (action == 'respond') 'response': text,
-          if (!widget.disputes) 'vendor_response': text,
+          if (action == 'respond') 'response': finalText,
+          if (!widget.disputes) 'vendor_response': finalText,
         },
         files: action == 'reject' && rejectionProof != null ? {'vendor_rejection_proof': rejectionProof!} : null,
       );
@@ -421,8 +508,8 @@ class _CaseState extends State<CaseDetailScreen> {
                     menuHeading(screenText(p['name'], 'Produit')),
                     const SizedBox(height: 4),
                     if (p['quantity'] != null) _bullet('Quantité', screenText(p['quantity'])),
-                    if (p['price'] != null) _bullet('Prix unitaire', orderMoney(p['price'])),
-                    if (p['amount'] != null) _bullet('Montant', orderMoney(p['amount'])),
+                    if (p['price'] != null) _bullet('Prix payé par le client', orderMoney(p['price'])),
+                    if (p['amount'] != null) _bullet('Montant concerné', orderMoney(p['amount'])),
                   ],
                 ),
               ),
@@ -460,6 +547,22 @@ class _CaseState extends State<CaseDetailScreen> {
                   ),
                 ],
               ),
+              if (phone.isEmpty && data['handled_by_ovanie'] == true) ...[
+                const SizedBox(height: 10),
+                const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_rounded, color: Mk.hint, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Commande livrée par OVANIE Logistics : OVANIE gère le contact avec le client.',
+                        style: TextStyle(color: menuMuted, fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               if (phone.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 MkBarButton(
@@ -802,5 +905,155 @@ class _CaseState extends State<CaseDetailScreen> {
         ),
       ],
     ),
+  );
+}
+
+/// Feuille « Refuser le retour ? » : explication au client et justificatif
+/// obligatoires, vérifiés avant l'envoi.
+class _RejectSheet extends StatefulWidget {
+  const _RejectSheet({required this.summary, required this.response, required this.proof, required this.onProof});
+  final Widget summary;
+  final TextEditingController response;
+  final File? proof;
+  final ValueChanged<File> onProof;
+  @override
+  State<_RejectSheet> createState() => _RejectSheetState();
+}
+
+class _RejectSheetState extends State<_RejectSheet> {
+  late File? _proof = widget.proof;
+  String? _error;
+
+  bool get _isImage => RegExp(r'\.(jpe?g|png|webp)$', caseSensitive: false).hasMatch(_proof?.path ?? '');
+
+  Future<void> _pick() async {
+    try {
+      final file = await pickMkFile(
+        context,
+        title: 'Preuve du refus',
+        message: 'Photo ou PDF qui justifie votre décision.',
+        extensions: const ['pdf'],
+      );
+      if (file == null || !mounted) return;
+      widget.onProof(file);
+      setState(() {
+        _proof = file;
+        _error = null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = ApiClient.friendlyError(e));
+    }
+  }
+
+  void _confirm() {
+    final text = widget.response.text.trim();
+    final problem = text.length < 10
+        ? 'Expliquez le refus au client en au moins 10 caractères.'
+        : _proof == null
+        ? 'Ajoutez une photo ou un document justificatif.'
+        : null;
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) => MkSheetFrame(
+    children: [
+      const Center(child: MkIconDisc(Icons.close_rounded, color: menuRed, size: 66)),
+      const SizedBox(height: 10),
+      const Text(
+        'Refuser le retour ?',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: menuBlue, fontSize: 21, fontWeight: FontWeight.w800),
+      ),
+      const SizedBox(height: 12),
+      widget.summary,
+      const SizedBox(height: 10),
+      MkSheetSummary(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Réponse au client', style: TextStyle(color: menuBlue, fontSize: 15, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: widget.response,
+              minLines: 2,
+              maxLines: 5,
+              textCapitalization: TextCapitalization.sentences,
+              inputFormatters: [LengthLimitingTextInputFormatter(1000)],
+              style: mkFieldText.copyWith(height: 1.45),
+              decoration: mkInput(hint: 'Expliquez pourquoi le retour est refusé'),
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
+            ),
+            const SizedBox(height: 12),
+            const Text('Justificatif de refus', style: TextStyle(color: menuBlue, fontSize: 15, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Semantics(
+                  button: true,
+                  label: _proof == null ? 'Ajouter un justificatif' : 'Remplacer le justificatif',
+                  child: GestureDetector(
+                    onTap: _pick,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            width: 110,
+                            height: 82,
+                            color: Mk.softBlue,
+                            child: _proof == null
+                                ? const Icon(Icons.add_photo_alternate_outlined, color: Mk.icon, size: 32)
+                                : _isImage
+                                ? Image.file(_proof!, fit: BoxFit.cover)
+                                : const Icon(Icons.picture_as_pdf_outlined, color: menuRed, size: 34),
+                          ),
+                        ),
+                        if (_proof != null)
+                          const Positioned(
+                            right: -6,
+                            top: -6,
+                            child: CircleAvatar(
+                              radius: 13,
+                              backgroundColor: Colors.white,
+                              child: Icon(Icons.check_circle_rounded, color: menuGreen, size: 24),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _proof == null
+                        ? 'Une photo ou un document est obligatoire pour refuser un retour. Touchez le cadre pour l’ajouter.'
+                        : _proof!.path.split(RegExp(r'[\\/]')).last,
+                    style: const TextStyle(color: menuMuted, fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      if (_error != null) ...[const SizedBox(height: 10), MkNotice(_error!)],
+      const SizedBox(height: 16),
+      Row(
+        children: [
+          Expanded(flex: 4, child: MkBarButton(label: 'Annuler', color: orderBlue, onTap: () => Navigator.pop(context, false))),
+          const SizedBox(width: 10),
+          Expanded(flex: 6, child: MkBarButton(label: 'Refuser le retour', filled: true, color: menuRed, onTap: _confirm)),
+        ],
+      ),
+    ],
   );
 }

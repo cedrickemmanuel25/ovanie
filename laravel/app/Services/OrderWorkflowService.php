@@ -81,8 +81,10 @@ class OrderWorkflowService
             return 'delivered';
         }
 
-        if ($items->contains(fn ($item) => in_array($item->delivery_status, [
-            self::DELIVERY_ASSIGNED,
+        // Un livreur simplement désigné n'a pas encore collecté : la commande
+        // n'est « expédiée » qu'à partir de l'enlèvement (remise confirmée).
+        if ($items->contains(fn ($item) => ($item->delivery_status === self::DELIVERY_ASSIGNED && filled($item->picked_up_at))
+            || in_array($item->delivery_status, [
             self::DELIVERY_PICKED_UP,
             self::DELIVERY_IN_TRANSIT,
             self::DELIVERY_LATE,
@@ -325,6 +327,9 @@ class OrderWorkflowService
         return $item->refresh();
     }
 
+    /** Commandes dont la boutique a déjà été prévenue de la réception (requête en cours). */
+    private static array $receptionNoticeSent = [];
+
     public function confirmClientReception(OrderItem $item, ?User $actor = null, ?string $note = null): OrderItem
     {
         $oldStatus = $item->reception_status;
@@ -352,8 +357,12 @@ class OrderWorkflowService
             app(LoyaltyService::class)->awardForCompletedOrder($order->fresh(['items']));
         }
 
-        if ($this->isVendorVisible($item)) {
-            $this->notify($item->product?->shop?->user, 'Réception confirmée par le client', 'Le montant de cette commande entre dans votre prochain versement.', [
+        // Une seule notification par boutique et par commande, quel que soit le nombre d'articles.
+        $vendor = $item->product?->shop?->user;
+        $noticeKey = $item->order_id . ':' . ($vendor?->id ?? 0);
+        if ($this->isVendorVisible($item) && ! isset(self::$receptionNoticeSent[$noticeKey])) {
+            self::$receptionNoticeSent[$noticeKey] = true;
+            $this->notify($vendor, 'Réception confirmée par le client', 'Le montant de cette commande entre dans votre prochain versement.', [
                 'category' => 'payouts',
                 'order_id' => $item->order_id,
                 'order_item_id' => $item->id,

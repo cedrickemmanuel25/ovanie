@@ -15,12 +15,7 @@ class LoginScreen extends StatefulWidget {
   final String? initialIdentifier;
   final bool sessionRecovery;
 
-  const LoginScreen({
-    super.key,
-    this.onLoggedIn,
-    this.initialIdentifier,
-    this.sessionRecovery = false,
-  });
+  const LoginScreen({super.key, this.onLoggedIn, this.initialIdentifier, this.sessionRecovery = false});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -95,11 +90,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openRegister() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => RegisterScreen(onRegistered: widget.onLoggedIn),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute<void>(builder: (_) => RegisterScreen(onRegistered: widget.onLoggedIn)));
   }
 
   Future<void> _openForgotPassword() async {
@@ -107,9 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
       MaterialPageRoute<void>(
         builder: (_) {
           final identifier = _identifierController.text.trim();
-          return ForgotPasswordScreen(
-            initialIdentifier: identifier.contains('@') ? identifier : '',
-          );
+          return ForgotPasswordScreen(initialIdentifier: identifier.contains('@') ? identifier : '');
         },
       ),
     );
@@ -118,126 +109,91 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return OvanieAuthPage(
+      title: widget.sessionRecovery ? 'Reconnectez-vous' : 'Connexion',
+      subtitle: widget.sessionRecovery
+          ? 'Votre session a expiré. Connectez-vous pour reprendre là où vous en étiez.'
+          : 'Retrouvez vos commandes, votre panier et vos favoris.',
+      onBack: Navigator.of(context).canPop() ? () => Navigator.of(context).maybePop() : null,
       child: Form(
         key: _formKey,
         child: AutofillGroup(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              OvanieAuthHeader(
-                icon: Icons.person_rounded,
-                title: widget.sessionRecovery ? 'Reconnectez-vous' : 'Connexion',
-                subtitle: widget.sessionRecovery
-                    ? 'Votre session a expiré. Connectez-vous pour reprendre là où vous en étiez.'
-                    : 'Retrouvez vos commandes, votre panier et vos favoris.',
-                onBack: () => Navigator.of(context).maybePop(),
+              if (_serverError != null) ...[OvanieAuthMessage(message: _serverError!), const SizedBox(height: 12)],
+              OvanieAuthField(
+                controller: _identifierController,
+                hint: 'E-mail ou téléphone',
+                icon: Icons.person_outline_rounded,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.username, AutofillHints.email],
+                enabled: !_loading,
+                validator: (value) =>
+                    (value ?? '').trim().isEmpty ? 'Renseignez votre e-mail ou numéro de téléphone.' : null,
               ),
-              const SizedBox(height: 24),
-              OvanieAuthCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_serverError != null) ...[
-                      OvanieAuthMessage(message: _serverError!),
-                      const SizedBox(height: 14),
-                    ],
-                    OvanieAuthField(
-                      controller: _identifierController,
-                      hint: 'E-mail ou téléphone',
-                      icon: Icons.person_outline_rounded,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.username, AutofillHints.email],
-                      enabled: !_loading,
-                      validator: (value) => (value ?? '').trim().isEmpty
-                          ? 'Renseignez votre e-mail ou numéro de téléphone.'
-                          : null,
-                    ),
-                    const SizedBox(height: 12),
-                    OvanieAuthField(
-                      controller: _passwordController,
-                      hint: 'Mot de passe',
-                      icon: Icons.lock_outline_rounded,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.password],
-                      enabled: !_loading,
-                      onSubmitted: (_) => _submit(),
-                      suffix: OvaniePasswordToggle(
-                        visible: !_obscurePassword,
-                        onPressed: _loading
-                            ? null
-                            : () => setState(() => _obscurePassword = !_obscurePassword),
-                      ),
-                      validator: (value) => (value ?? '').isEmpty
-                          ? 'Renseignez votre mot de passe.'
-                          : null,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(8),
-                            onTap: _loading
-                                ? null
-                                : () => setState(() => _rememberMe = !_rememberMe),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Row(
-                                children: [
-                                  OvanieAuthCheckbox(
-                                    value: _rememberMe,
-                                    onChanged: _loading
-                                        ? null
-                                        : (value) => setState(() => _rememberMe = value),
-                                  ),
-                                  const SizedBox(width: 9),
-                                  const Flexible(
-                                    child: Text(
-                                      'Rester connecté',
-                                      style: TextStyle(
-                                        color: authNavy,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+              const SizedBox(height: 12),
+              OvanieAuthField(
+                controller: _passwordController,
+                hint: 'Mot de passe',
+                icon: Icons.lock_outline_rounded,
+                obscureText: _obscurePassword,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.password],
+                enabled: !_loading,
+                onSubmitted: (_) => _submit(),
+                suffix: OvaniePasswordToggle(
+                  visible: !_obscurePassword,
+                  onPressed: _loading ? null : () => setState(() => _obscurePassword = !_obscurePassword),
+                ),
+                validator: (value) => (value ?? '').isEmpty ? 'Renseignez votre mot de passe.' : null,
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: _loading ? null : () => setState(() => _rememberMe = !_rememberMe),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Row(
+                          children: [
+                            OvanieAuthCheckbox(
+                              value: _rememberMe,
+                              onChanged: _loading ? null : (value) => setState(() => _rememberMe = value),
+                            ),
+                            const SizedBox(width: 10),
+                            const Flexible(
+                              child: Text(
+                                'Rester connecté',
+                                style: TextStyle(color: authNavy, fontSize: 13, fontWeight: FontWeight.w500),
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                        TextButton(
-                          onPressed: _loading ? null : _openForgotPassword,
-                          style: TextButton.styleFrom(
-                            foregroundColor: authOrange,
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                          ),
-                          child: const Text(
-                            'Mot de passe oublié ?',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    OvaniePrimaryButton(
-                      label: 'Se connecter',
-                      loading: _loading,
-                      onPressed: _submit,
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: _loading ? null : _openForgotPassword,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 2, vertical: 10),
+                      child: Text(
+                        'Mot de passe oublié ?',
+                        style: TextStyle(color: authBlue, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              OvanieAuthSwitchLink(
-                question: 'Pas encore de compte ?',
-                action: 'Créer un compte',
-                onTap: _loading ? null : _openRegister,
-              ),
+              const SizedBox(height: 10),
+              OvaniePrimaryButton(label: 'Se connecter', loading: _loading, onPressed: _submit),
               const SizedBox(height: 18),
-              const OvanieAuthSecureNote(),
+              const OvanieAuthDivider(question: 'Pas encore de compte ?'),
+              const SizedBox(height: 16),
+              OvanieOutlineButton(label: 'Créer un compte', onPressed: _loading ? null : _openRegister),
             ],
           ),
         ),

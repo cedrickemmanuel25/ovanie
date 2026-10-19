@@ -219,7 +219,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     final message = delivered
         ? 'La livraison est terminée.'
         : moving
-            ? 'Le livreur poursuit sa tournée de livraison.'
+            ? (_ovanie ? 'Le livreur partenaire poursuit sa tournée de livraison.' : 'Votre chauffeur est en route vers le client.')
             : _ovanie
                 ? 'OVANIE Logistics organise automatiquement la prise en charge.'
                 : sellerDriverPlanned && !cancelled && !failed
@@ -232,7 +232,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
             : moving
                 ? orderBlue
                 : const Color(0xFFE85400);
-    final estimated = orderShortDate(tracking['estimated_delivery_at']);
+    // Une fois livrée, l'estimation n'a plus lieu d'être affichée.
+    final estimated = delivered ? '' : orderShortDate(tracking['estimated_delivery_at']);
 
     return OrderCard(
       child: Row(
@@ -308,8 +309,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     final steps = <(String, Object?)>[
       ('Commande reçue', timeline['received_at'] ?? _order['created_at']),
       ('Préparation', timeline['prepared_at']),
-      ('Expédiée', timeline['shipped_at']),
-      // Une fois remise à OVANIE Logistics, le suivi vendeur s'arrête à « Expédiée ».
+      (_ovanie ? 'Remise au livreur' : 'Expédiée', timeline['shipped_at']),
+      // Une fois la commande remise à OVANIE Logistics, le suivi vendeur s'arrête là.
       if (!_ovanie) ('Livrée', timeline['delivered_at']),
     ];
     final firstPending = steps.indexWhere((step) => step.$2 == null);

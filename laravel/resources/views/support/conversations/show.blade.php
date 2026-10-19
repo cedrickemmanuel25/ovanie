@@ -49,6 +49,9 @@
                         <div class="timeline-body {{ $message->is_internal ? 'internal' : '' }}">
                             <span class="timeline-meta"><strong>{{ $label }}{{ $message->is_internal ? ' · Note interne' : '' }}</strong><span>{{ $message->created_at?->format('d/m/Y H:i') }}</span></span>
                             <p>{{ $message->body }}</p>
+                            @foreach((array) data_get($message->metadata, 'attachments', []) as $attachmentIndex => $attachment)
+                                <p><a href="{{ route('support.conversations.attachment', [$conversation, $message->id, $attachmentIndex]) }}" target="_blank" rel="noopener"><i data-lucide="paperclip"></i> {{ $attachment['name'] ?? 'Pièce jointe' }}</a></p>
+                            @endforeach
                         </div>
                     </div>
                 @empty

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/ui/mk_dialogs.dart';
+
 import '../../core/network/api_client.dart';
 import '../../core/ui/vendor_mockup_ui.dart';
 import '../../data/vendor_repository.dart';
@@ -13,12 +15,7 @@ class ResetPasswordScreen extends StatefulWidget {
   @visibleForTesting
   final bool previewDone;
 
-  const ResetPasswordScreen({
-    super.key,
-    required this.token,
-    required this.email,
-    this.previewDone = false,
-  });
+  const ResetPasswordScreen({super.key, required this.token, required this.email, this.previewDone = false});
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -32,8 +29,13 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _hidePassword = true;
   bool _hideConfirmation = true;
   bool _saving = false;
-  late bool _done = widget.previewDone;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.previewDone) WidgetsBinding.instance.addPostFrameCallback((_) => _showDone());
+  }
 
   @override
   void dispose() {
@@ -59,7 +61,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         password: _password.text,
         confirmation: _confirmation.text,
       );
-      if (mounted) setState(() => _done = true);
+      if (mounted) await _showDone();
     } catch (error) {
       if (mounted) setState(() => _error = ApiClient.friendlyError(error));
     } finally {
@@ -68,34 +70,58 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 
   void _goToLogin() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-      (_) => false,
+    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute<void>(builder: (_) => const LoginScreen()), (_) => false);
+  }
+
+  /// Fenêtre de succès : le seul chemin est la connexion avec le nouveau mot de passe.
+  Future<void> _showDone() async {
+    if (!mounted) return;
+    await showMkDialog<void>(
+      context,
+      dismissible: false,
+      header: Padding(
+        // Place laissée sous l'image pour la pastille verte qui la chevauche.
+        padding: const EdgeInsets.only(bottom: 44),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.bottomCenter,
+          children: [
+            ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (rect) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.white, Colors.white, Colors.transparent],
+                stops: [0, .7, 1],
+              ).createShader(rect),
+              child: Image.asset(
+                'assets/images/mockups/reset_done.jpg',
+                height: 190,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                excludeFromSemantics: true,
+              ),
+            ),
+            Positioned(
+              bottom: -34,
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: const MkIconDisc(Icons.check_rounded, color: Color(0xFF16A34A), size: 68),
+              ),
+            ),
+          ],
+        ),
+      ),
+      title: 'Mot de passe modifié',
+      message: 'Votre nouveau mot de passe est maintenant valable sur le Web et dans l’application Vendeur.',
+      actions: const [MkDialogAction('Se connecter', null)],
     );
+    if (mounted) _goToLogin();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_done) {
-      return PopScope(
-        canPop: false,
-        child: MkCardAuthScaffold(
-          showBack: false,
-          icon: Icons.check_rounded,
-          title: 'Mot de passe modifié',
-          subtitle: 'Votre nouveau mot de passe est actif sur le site et dans l’application Vendeur.',
-          children: <Widget>[
-            const MkNotice(
-              'Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.',
-              success: true,
-            ),
-            const SizedBox(height: 22),
-            MkButton(label: 'Se connecter', onPressed: _goToLogin),
-          ],
-        ),
-      );
-    }
-
     return MkCardAuthScaffold(
       icon: Icons.lock_reset_rounded,
       title: 'Réinitialiser le mot de passe',
@@ -106,10 +132,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              if (_error != null) ...<Widget>[
-                MkNotice(_error!),
-                const SizedBox(height: 16),
-              ],
+              if (_error != null) ...<Widget>[MkNotice(_error!), const SizedBox(height: 16)],
               const MkLabel('Adresse e-mail'),
               TextFormField(
                 controller: _email,
@@ -131,13 +154,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 decoration: mkInput(
                   hint: 'Au moins 8 caractères',
                   icon: Icons.lock_outline_rounded,
-                  suffix: MkEye(
-                    hidden: _hidePassword,
-                    onTap: _saving ? null : () => setState(() => _hidePassword = !_hidePassword),
-                  ),
+                  suffix: MkEye(hidden: _hidePassword, onTap: _saving ? null : () => setState(() => _hidePassword = !_hidePassword)),
                 ),
-                validator: (value) =>
-                    (value ?? '').length < 8 ? 'Le mot de passe doit contenir au moins 8 caractères.' : null,
+                validator: (value) => (value ?? '').length < 8 ? 'Le mot de passe doit contenir au moins 8 caractères.' : null,
               ),
               const SizedBox(height: 18),
               const MkLabel('Confirmer le mot de passe'),
@@ -159,15 +178,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     onTap: _saving ? null : () => setState(() => _hideConfirmation = !_hideConfirmation),
                   ),
                 ),
-                validator: (value) =>
-                    value != _password.text ? 'Les deux mots de passe ne sont pas identiques.' : null,
+                validator: (value) => value != _password.text ? 'Les deux mots de passe ne sont pas identiques.' : null,
               ),
               const SizedBox(height: 24),
-              MkButton(
-                label: _saving ? 'Enregistrement…' : 'Réinitialiser le mot de passe',
-                loading: _saving,
-                onPressed: _submit,
-              ),
+              MkButton(label: _saving ? 'Enregistrement…' : 'Réinitialiser le mot de passe', loading: _saving, onPressed: _submit),
             ],
           ),
         ),

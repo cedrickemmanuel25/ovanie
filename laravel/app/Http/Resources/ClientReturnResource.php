@@ -41,10 +41,32 @@ class ClientReturnResource extends JsonResource
             'logistics_status_label' => $this->logisticsLabel($return->logistics_status),
             'vendor_response' => $return->vendor_response,
             'refund_amount' => $return->refund_amount !== null ? (float) $return->refund_amount : null,
+            // Méthode et référence du remboursement réellement exécuté.
+            'refund_method' => data_get($return->meta, 'refund_method'),
+            'refund_method_label' => match ((string) data_get($return->meta, 'refund_method', '')) {
+                'mobile_money' => 'Mobile Money',
+                'bank_transfer' => 'Virement bancaire',
+                'cash' => 'Espèces',
+                'paydunya_manual' => 'Paiement en ligne',
+                default => null,
+            },
+            'refund_reference' => data_get($return->meta, 'refund_reference'),
             'unit_price' => $return->orderItem?->price !== null ? (float) $return->orderItem->price : null,
             'has_photos' => count($photoPaths) > 0,
             'photo_count' => count($photoPaths),
             'video_count' => count($videoPaths),
+            // Liens signés (30 min) vers les preuves du client, photos puis vidéos.
+            'proof_media' => \App\Http\Controllers\SensitiveDocumentController::clientProofPaths($return)
+                ->map(fn (string $path, int $index) => [
+                    'url' => \Illuminate\Support\Facades\URL::temporarySignedRoute(
+                        'api.client.returns.proof',
+                        now()->addMinutes(30),
+                        ['return' => $return->id, 'document' => $index]
+                    ),
+                    'type' => in_array($path, $videoPaths, true) ? 'video' : 'photo',
+                ])
+                ->values()
+                ->all(),
             'order_context' => [
                 'created_at' => $order?->created_at?->toIso8601String(),
                 'delivery_address' => (string) ($order?->delivery_address ?: $order?->address ?: ''),

@@ -41,6 +41,12 @@ class ShopLogisticsSettingsService
                 ]);
             }
             $changing = $previous !== $data['logistics_type'];
+            // Une boutique qui n'a encore confirmé aucun mode fait son premier choix librement.
+            if ($changing && $shop->hasConfirmedLogistics() && ($open = $this->openOrdersCount($shop, $previous)) > 0) {
+                throw ValidationException::withMessages([
+                    'logistics_type' => $this->switchBlockedMessage($open, $previous),
+                ]);
+            }
             if ($changing) {
                 Validator::make($input, ['confirmed' => ['required', 'accepted']], [
                     'confirmed.accepted' => 'Confirmez le changement de mode logistique.',
@@ -134,6 +140,38 @@ class ShopLogisticsSettingsService
 
             return $shop->refresh();
         });
+    }
+
+    /**
+     * Commandes de la boutique encore en cours sous un mode logistique donné.
+     * Tant qu'il en reste, la boutique garde ce mode : sinon le vendeur aurait
+     * en même temps des commandes à livrer lui-même et d'autres remises à
+     * OVANIE Logistics, avec deux parcours différents dans son espace.
+     */
+    public function openOrdersCount(Shop $shop, ?string $mode = null): int
+    {
+        $mode ??= $shop->usesSellerLogistics() ? 'seller' : 'ovanie';
+
+        return (int) OrderItem::query()
+            ->where(fn ($q) => $q->where('shop_id', $shop->id)->orWhere(fn ($legacy) =>
+                $legacy->whereNull('shop_id')->whereHas('product', fn ($p) => $p->where('shop_id', $shop->id))))
+            ->whereNotNull('vendor_visible_at')
+            ->whereIn('vendor_status', ['pending', 'accepted', 'preparing', 'ready', 'shipped'])
+            ->where(fn ($q) => $mode === 'seller'
+                ? $q->where('delivery_provider', 'seller')
+                : $q->where('delivery_provider', '!=', 'seller')->orWhereNull('delivery_provider'))
+            ->whereHas('order', fn ($order) => $order->whereNotIn('status', ['cancelled', 'canceled', 'refunded']))
+            ->distinct()
+            ->count('order_id');
+    }
+
+    public function switchBlockedMessage(int $open, string $mode): string
+    {
+        $label = $mode === 'seller' ? 'en livraison par votre boutique' : 'confiée'.($open > 1 ? 's' : '').' à OVANIE Logistics';
+
+        return $open > 1
+            ? "Vous avez {$open} commandes en cours {$label}. Terminez-les avant de changer de mode logistique."
+            : "Vous avez 1 commande en cours {$label}. Terminez-la avant de changer de mode logistique.";
     }
 
     private function preserveLegacyOrderModes(Shop $shop, string $previous): void

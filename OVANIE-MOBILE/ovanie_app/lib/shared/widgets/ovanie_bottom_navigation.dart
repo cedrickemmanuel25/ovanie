@@ -103,15 +103,17 @@ class OvanieBottomNavigation extends StatelessWidget {
               child: SizedBox(
                 height: 62,
                 child: Row(
-                  children: items.map((item) {
-                    return Expanded(
-                      child: _BottomNavigationButton(
-                        data: item,
-                        selected: selectedTab == item.tab,
-                        onTap: () => _select(context, item.tab),
-                      ),
-                    );
-                  }).toList(growable: false),
+                  children: items
+                      .map((item) {
+                        return Expanded(
+                          child: _BottomNavigationButton(
+                            data: item,
+                            selected: selectedTab == item.tab,
+                            onTap: () => _select(context, item.tab),
+                          ),
+                        );
+                      })
+                      .toList(growable: false),
                 ),
               ),
             ),
@@ -149,66 +151,91 @@ class _BottomNavigationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? OvanieColors.orange : OvanieColors.navy;
+    final color = selected ? const Color(0xFF0A1B4F) : const Color(0xFF5B6785);
 
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(2, 7, 2, 4),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 30,
-              height: 25,
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  Icon(data.icon, color: color, size: 23),
-                  if (data.badgeCount > 0)
-                    Positioned(
-                      right: -2,
-                      top: -4,
-                      child: Container(
-                        constraints: const BoxConstraints(
-                          minWidth: 16,
-                          minHeight: 16,
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        alignment: Alignment.center,
-                        decoration: const BoxDecoration(
-                          color: OvanieColors.orange,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          data.badgeCount > 99 ? '99+' : '${data.badgeCount}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 7.5,
-                            height: 1,
-                            fontWeight: FontWeight.w900,
-                          ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _content(color),
+          if (selected)
+            Align(
+              alignment: Alignment.topCenter,
+              child: FractionallySizedBox(
+                widthFactor: .82,
+                child: Container(
+                  height: 2.5,
+                  decoration: const BoxDecoration(
+                    color: OvanieColors.orange,
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(3),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _content(Color color) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 7, 2, 4),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 30,
+            height: 25,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Icon(data.icon, color: color, size: 23),
+                if (data.badgeCount > 0)
+                  Positioned(
+                    right: -2,
+                    top: -4,
+                    child: Container(
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: OvanieColors.orange,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        data.badgeCount > 99 ? '99+' : '${data.badgeCount}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 7.5,
+                          height: 1,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
-            const SizedBox(height: 3),
-            Text(
-              data.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-                height: 1,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-              ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            data.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 10.5,
+              height: 1,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

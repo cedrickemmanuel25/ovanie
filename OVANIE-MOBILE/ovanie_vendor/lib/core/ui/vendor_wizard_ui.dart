@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'mk_dialogs.dart';
+
 /// Kit UI de l'assistant d'ouverture de boutique.
 ///
 /// Principes : en-tête compact (retour, « Étape X sur N », barre de
@@ -650,144 +652,22 @@ Future<T?> showWizardSelector<T>(
   T? selected,
   Widget Function(T)? leading,
   bool searchable = false,
-}) async {
-  return showModalBottomSheet<T>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: .42),
-    builder: (sheetContext) => _WizardSelectorSheet<T>(
-      title: title,
-      items: items,
-      label: label,
-      selected: selected,
-      leading: leading,
-      searchable: searchable,
-    ),
+  String? subtitle,
+  IconData? icon,
+}) {
+  // Options illustrées (logos d'opérateur) : cartes à bouton radio.
+  return showMkChoiceSheet<T>(
+    context,
+    title: title,
+    items: items,
+    label: label,
+    selected: selected,
+    subtitle: subtitle,
+    icon: icon,
+    leading: leading,
+    boxed: leading != null,
+    closeButton: leading == null,
+    searchable: searchable,
   );
 }
 
-class _WizardSelectorSheet<T> extends StatefulWidget {
-  const _WizardSelectorSheet({
-    required this.title,
-    required this.items,
-    required this.label,
-    this.selected,
-    this.leading,
-    this.searchable = false,
-  });
-  final String title;
-  final List<T> items;
-  final String Function(T) label;
-  final T? selected;
-  final Widget Function(T)? leading;
-  final bool searchable;
-
-  @override
-  State<_WizardSelectorSheet<T>> createState() => _WizardSelectorSheetState<T>();
-}
-
-class _WizardSelectorSheetState<T> extends State<_WizardSelectorSheet<T>> {
-  final _search = TextEditingController();
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final q = _search.text.trim().toLowerCase();
-    final filtered = q.isEmpty
-        ? widget.items
-        : widget.items.where((e) => widget.label(e).toLowerCase().contains(q)).toList();
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SafeArea(
-        top: false,
-        child: Container(
-          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .72),
-          padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD4DAE4),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.title,
-                      style: const TextStyle(
-                        color: wizardNavy,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded, color: wizardText),
-                  ),
-                ],
-              ),
-              if (widget.searchable) ...[
-                const SizedBox(height: 4),
-                TextField(
-                  controller: _search,
-                  onChanged: (_) => setState(() {}),
-                  decoration: wizardInput(hint: 'Rechercher…', icon: Icons.search_rounded),
-                ),
-                const SizedBox(height: 8),
-              ],
-              Flexible(
-                child: filtered.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Text('Aucun résultat', style: TextStyle(color: wizardMuted)),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (_, index) {
-                          final item = filtered[index];
-                          final selected = item == widget.selected;
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                            leading: widget.leading?.call(item),
-                            title: Text(
-                              widget.label(item),
-                              style: TextStyle(
-                                color: wizardText,
-                                fontSize: 15.5,
-                                fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                              ),
-                            ),
-                            trailing: selected
-                                ? const Icon(Icons.check_circle_rounded, color: wizardOrange)
-                                : null,
-                            onTap: () => Navigator.pop(context, item),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

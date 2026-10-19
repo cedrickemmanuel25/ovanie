@@ -4,6 +4,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/network/api_client.dart';
+import '../../core/reference_data/reference_data_store.dart';
+import '../../core/ui/mk_dialogs.dart';
+import '../../core/ui/mk_file_pick.dart';
 import '../orders/order_ui.dart';
 
 String screenText(Object? value, [String fallback = '—']) =>
@@ -406,7 +409,7 @@ Widget dataSupport(BuildContext context) => DataCard(
     dataButton(
       'Contacter le support',
       Icons.headset_mic_outlined,
-      () => openVendorUrl(context, 'tel:0161781818'),
+      () => openVendorUrl(context, OvanieReferenceDataStore.instance.contact.telUrl),
     ),
   ),
 );
@@ -422,6 +425,8 @@ Future<void> exportData(
   String filename,
   List<List<Object?>> rows,
 ) async {
+  if (!await confirmMkSave(context, fileName: filename)) return;
+  if (!context.mounted) return;
   try {
     final bytes = Uint8List.fromList(
       utf8.encode(
@@ -444,6 +449,8 @@ Future<void> exportData(
 }
 
 Future<void> downloadReceipt(BuildContext context, int id) async {
+  if (!await confirmMkSave(context, fileName: 'Reçu du versement', title: 'Enregistrer le reçu ?')) return;
+  if (!context.mounted) return;
   try {
     final response = await ApiClient.dio.get<List<int>>(
       '/mobile/v1/vendor/payouts/$id/receipt',
@@ -473,5 +480,46 @@ Future<void> downloadReceipt(BuildContext context, int id) async {
         context,
       ).showSnackBar(SnackBar(content: Text(ApiClient.friendlyError(e))));
     }
+  }
+}
+/// Télécharge un fichier produit par le serveur (PDF, CSV, image) et propose
+/// de l'enregistrer sur le téléphone.
+Future<bool> downloadVendorFile(
+  BuildContext context,
+  String path,
+  String fileName, {
+  String done = 'Fichier enregistré.',
+  String? label,
+}) async {
+  if (!await confirmMkSave(context, fileName: label ?? fileName)) return false;
+  if (!context.mounted) return false;
+  try {
+    final response = await ApiClient.dio.get<List<int>>(
+      path,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    ApiClient.ensureSuccess(response);
+    var name = fileName;
+    if (!name.contains('.')) {
+      final type = response.headers.value('content-type') ?? '';
+      name += type.contains('pdf')
+          ? '.pdf'
+          : type.contains('csv')
+          ? '.csv'
+          : type.contains('png')
+          ? '.png'
+          : type.contains('jpeg')
+          ? '.jpg'
+          : '';
+    }
+    final saved = await FilePicker.saveFile(
+      fileName: name,
+      bytes: Uint8List.fromList(response.data ?? []),
+    );
+    if (saved != null && context.mounted) mkToast(context, done);
+    return saved != null;
+  } catch (e) {
+    if (context.mounted) mkToast(context, ApiClient.friendlyError(e), error: true);
+    return false;
   }
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/push/push_notification_service.dart';
 import '../../core/storage/device_storage.dart';
 import '../../data/vendor_repository.dart';
 
@@ -291,6 +292,7 @@ class VendorSession extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await PushNotificationService.instance.unregister();
     try {
       await _repo.logout();
     } catch (_) {}

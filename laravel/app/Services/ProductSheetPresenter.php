@@ -164,6 +164,8 @@ class ProductSheetPresenter
                 'url' => (string) ($image->public_url ?? $image->url ?? ''),
                 'card_url' => (string) ($image->card_url ?? $image->public_url ?? ''),
                 'thumb_url' => (string) ($image->thumb_url ?? $image->card_url ?? $image->public_url ?? ''),
+                // Photo telle qu'envoyée par le vendeur, avant recadrage (vide si elle n'a pas été conservée).
+                'original_url' => filled($image->original_path ?? null) ? (string) $image->original_url : '',
                 'is_main' => (bool) ($image->is_main ?? $image->is_primary ?? false),
             ])
             ->values()
@@ -372,6 +374,7 @@ class ProductSheetPresenter
             'id' => (int) $review->id,
             'rating' => (int) ($review->rating ?? 0),
             'comment' => ovanie_public_text((string) ($review->comment ?? $review->content ?? '')),
+            'vendor_reply' => filled($review->vendor_reply) ? ovanie_public_text((string) $review->vendor_reply) : null,
             'created_at' => optional($review->created_at)->toDateTimeString(),
             'user' => $review->relationLoaded('user') && $review->user
                 ? ['name' => ovanie_public_text((string) $review->user->name)]

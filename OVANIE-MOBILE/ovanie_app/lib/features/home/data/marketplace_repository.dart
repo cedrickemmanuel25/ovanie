@@ -8,10 +8,7 @@ class MarketplaceRepository {
   const MarketplaceRepository();
 
   Future<List<CategoryModel>> getAllCategories({bool activeOnly = true}) async {
-    final response = await ApiClient.dio.get(
-      '/categories',
-      queryParameters: {if (activeOnly) 'active': 1},
-    );
+    final response = await ApiClient.dio.get('/categories', queryParameters: {if (activeOnly) 'active': 1});
     ApiClient.ensureSuccess(response);
     return _parseCategories(response.data);
   }
@@ -23,10 +20,7 @@ class MarketplaceRepository {
     // historique. Ce repli permet a l'application mobile de rester compatible
     // pendant le deploiement progressif des nouvelles routes marketplace.
     if (response.statusCode == 404) {
-      response = await ApiClient.dio.get(
-        '/categories',
-        queryParameters: const {'active': 1},
-      );
+      response = await ApiClient.dio.get('/categories', queryParameters: const {'active': 1});
     }
 
     ApiClient.ensureSuccess(response);
@@ -44,17 +38,16 @@ class MarketplaceRepository {
     final rawSections = data['sections'];
     final sections = rawSections is List
         ? rawSections
-            .whereType<Map>()
-            .map((item) => HomeMarketplaceSection.fromJson(Map<String, dynamic>.from(item)))
-            .where((section) => section.products.isNotEmpty)
-            .toList()
+              .whereType<Map>()
+              .map((item) => HomeMarketplaceSection.fromJson(Map<String, dynamic>.from(item)))
+              .where((section) => section.products.isNotEmpty)
+              .toList()
         : <HomeMarketplaceSection>[];
 
     final receivedAtUtc = DateTime.now().toUtc();
     final serverTimeUtc = _parseDateTime(data['server_time']) ?? receivedAtUtc;
     final flashSaleEndsAtUtc = _parseDateTime(data['flash_sale_ends_at']);
-    final blackFridayMaxDiscountPercent =
-        _toInt(data['black_friday_max_discount_percent']);
+    final blackFridayMaxDiscountPercent = _toInt(data['black_friday_max_discount_percent']);
     final blackFridayProductCount = _toInt(data['black_friday_product_count']);
 
     return HomeMarketplaceData(
@@ -69,11 +62,7 @@ class MarketplaceRepository {
     );
   }
 
-  Future<SearchSuggestions> getSearchSuggestions(
-    String query, {
-    String? categorySlug,
-    int limit = 8,
-  }) async {
+  Future<SearchSuggestions> getSearchSuggestions(String query, {String? categorySlug, int limit = 8}) async {
     final term = query.trim();
     if (term.length < 2) return const SearchSuggestions.empty();
 
@@ -81,8 +70,7 @@ class MarketplaceRepository {
       '/search',
       queryParameters: {
         'q': term,
-        if (categorySlug != null && categorySlug.trim().isNotEmpty)
-          'category': categorySlug.trim(),
+        if (categorySlug != null && categorySlug.trim().isNotEmpty) 'category': categorySlug.trim(),
         'limit': limit.clamp(1, 10),
       },
     );
@@ -97,20 +85,30 @@ class MarketplaceRepository {
       query: data['query']?.toString() ?? term,
       products: productsRaw is List
           ? productsRaw
-              .whereType<Map>()
-              .map((item) => SearchProductSuggestion.fromJson(Map<String, dynamic>.from(item)))
-              .toList()
+                .whereType<Map>()
+                .map((item) => SearchProductSuggestion.fromJson(Map<String, dynamic>.from(item)))
+                .toList()
           : const [],
       categories: categoriesRaw is List
           ? categoriesRaw
-              .whereType<Map>()
-              .map((item) => SearchCategorySuggestion.fromJson(Map<String, dynamic>.from(item)))
-              .toList()
+                .whereType<Map>()
+                .map((item) => SearchCategorySuggestion.fromJson(Map<String, dynamic>.from(item)))
+                .toList()
           : const [],
       popular: popularRaw is List
           ? popularRaw.map((item) => item.toString()).where((item) => item.trim().isNotEmpty).toList()
           : const [],
     );
+  }
+
+  /// Recherches les plus fréquentes sur OVANIE (écran Recherche, champ vide).
+  Future<List<String>> getPopularSearches() async {
+    final response = await ApiClient.dio.get('/search', queryParameters: const {'q': ''});
+    ApiClient.ensureSuccess(response);
+    final popular = _asMap(response.data)['popular'];
+    return popular is List
+        ? popular.map((item) => item.toString().trim()).where((item) => item.isNotEmpty).toList()
+        : const <String>[];
   }
 
   Future<CatalogFilters> getCatalogFilters() async {
@@ -132,11 +130,7 @@ class MarketplaceRepository {
     int page = 1,
     int perPage = 20,
   }) async {
-    final params = <String, dynamic>{
-      'sort': sort,
-      'page': page.clamp(1, 1000000),
-      'per_page': perPage.clamp(12, 48),
-    };
+    final params = <String, dynamic>{'sort': sort, 'page': page.clamp(1, 1000000), 'per_page': perPage.clamp(12, 48)};
 
     if (categorySlug != null && categorySlug.trim().isNotEmpty) {
       params['category'] = categorySlug.trim();
@@ -218,10 +212,7 @@ class MarketplaceRepository {
   }
 
   Future<List<ProductModel>> getBestSellers({int limit = 12}) async {
-    final response = await ApiClient.dio.get(
-      '/products/top-sellers',
-      queryParameters: {'limit': limit.clamp(1, 60)},
-    );
+    final response = await ApiClient.dio.get('/products/top-sellers', queryParameters: {'limit': limit.clamp(1, 60)});
     ApiClient.ensureSuccess(response);
     return _parseProducts(response.data).take(limit).toList();
   }
@@ -235,15 +226,10 @@ class MarketplaceRepository {
     return _parseProducts(response.data).take(limit).toList();
   }
 
-  CategoryModel? findCategoryInRoots(
-    List<CategoryModel> roots, {
-    int? id,
-    String? slug,
-  }) {
+  CategoryModel? findCategoryInRoots(List<CategoryModel> roots, {int? id, String? slug}) {
     final targetSlug = slug?.toLowerCase().trim();
     for (final root in roots) {
-      if ((id != null && id > 0 && root.id == id) ||
-          (targetSlug != null && _slugEquivalent(root.slug, targetSlug))) {
+      if ((id != null && id > 0 && root.id == id) || (targetSlug != null && _slugEquivalent(root.slug, targetSlug))) {
         return root;
       }
       for (final child in root.children) {
@@ -295,18 +281,12 @@ class MarketplaceRepository {
 
   List<CategoryModel> _parseCategories(dynamic data) {
     final items = _extractList(data);
-    return items
-        .whereType<Map>()
-        .map((item) => CategoryModel.fromJson(Map<String, dynamic>.from(item)))
-        .toList();
+    return items.whereType<Map>().map((item) => CategoryModel.fromJson(Map<String, dynamic>.from(item))).toList();
   }
 
   static List<ProductModel> _parseProducts(dynamic data) {
     final items = _extractList(data);
-    return items
-        .whereType<Map>()
-        .map((item) => ProductModel.fromJson(Map<String, dynamic>.from(item)))
-        .toList();
+    return items.whereType<Map>().map((item) => ProductModel.fromJson(Map<String, dynamic>.from(item))).toList();
   }
 
   static List<dynamic> _extractList(dynamic data) {
@@ -436,10 +416,7 @@ class CatalogFilters {
 
   static List<CatalogOption> _parseOptions(dynamic raw) {
     if (raw is! List) return const [];
-    return raw
-        .whereType<Map>()
-        .map((item) => CatalogOption.fromJson(Map<String, dynamic>.from(item)))
-        .toList();
+    return raw.whereType<Map>().map((item) => CatalogOption.fromJson(Map<String, dynamic>.from(item))).toList();
   }
 }
 
@@ -450,10 +427,7 @@ class CatalogOption {
   const CatalogOption({required this.value, required this.label});
 
   factory CatalogOption.fromJson(Map<String, dynamic> json) {
-    return CatalogOption(
-      value: json['value']?.toString() ?? '',
-      label: json['label']?.toString() ?? '',
-    );
+    return CatalogOption(value: json['value']?.toString() ?? '', label: json['label']?.toString() ?? '');
   }
 }
 
@@ -470,11 +444,7 @@ class SearchSuggestions {
     required this.popular,
   });
 
-  const SearchSuggestions.empty()
-      : query = '',
-        products = const [],
-        categories = const [],
-        popular = const [];
+  const SearchSuggestions.empty() : query = '', products = const [], categories = const [], popular = const [];
 }
 
 class SearchProductSuggestion {

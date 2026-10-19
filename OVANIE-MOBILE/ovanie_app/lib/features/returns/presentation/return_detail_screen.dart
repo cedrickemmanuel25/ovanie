@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/ovanie_bottom_navigation.dart';
+import '../../payments/presentation/payment_ui.dart';
 import '../../shell/domain/main_navigation_store.dart';
-import '../../cart/presentation/cart_screen.dart';
-import '../../catalog/presentation/catalog_screen.dart';
-import '../../favorites/presentation/favorites_screen.dart';
 import '../../support/presentation/support_center_screen.dart';
 import '../data/returns_repository.dart';
 import '../domain/return_model.dart';
@@ -20,10 +19,20 @@ class ReturnDetailScreen extends StatefulWidget {
   State<ReturnDetailScreen> createState() => _ReturnDetailScreenState();
 }
 
+/// État global affiché : en cours, refusé ou terminé (remboursé / clos).
+enum _CaseState { ongoing, rejected, done }
+
 class _ReturnDetailScreenState extends State<ReturnDetailScreen> {
   final ReturnsRepository _repository = const ReturnsRepository();
   late ClientReturnCase _item = widget.initial;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Les liens des photos sont temporaires : on recharge le dossier complet.
+    _refresh();
+  }
 
   Future<void> _refresh() async {
     if (_loading) return;
@@ -38,60 +47,214 @@ class _ReturnDetailScreenState extends State<ReturnDetailScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ApiClient.friendlyError(error))),
-      );
+      showOvanieToast(context, ApiClient.friendlyError(error), error: true);
     }
   }
 
   void _openSupport() {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => SupportCenterScreen(
-        initialCategory: 'returns',
-        contextType: 'return',
-        contextId: _item.id,
-        initialSubject: 'Assistance retour ${_item.orderNumber.isNotEmpty ? _item.orderNumber : '#${_item.id}'}',
-      )),
+      MaterialPageRoute<void>(
+        builder: (_) => SupportCenterScreen(
+          initialCategory: 'returns',
+          contextType: 'return',
+          contextId: _item.id,
+          initialSubject: 'Assistance retour ${_item.orderNumber.isNotEmpty ? _item.orderNumber : '#${_item.id}'}',
+        ),
+      ),
     );
   }
 
+  _CaseState get _state {
+    if (_item.status == 'rejected' || _item.status == 'cancelled') return _CaseState.rejected;
+    if (_item.status == 'refunded' ||
+        _item.logisticsStatus == 'refunded' ||
+        _item.status == 'resolved' ||
+        _item.status == 'closed') {
+      return _CaseState.done;
+    }
+    return _CaseState.ongoing;
+  }
+
+  String get _number =>
+      'Retour #RET-${_item.createdAt?.year ?? DateTime.now().year}-${_item.id.toString().padLeft(5, '0')}';
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      bottomNavigationBar: const OvanieBottomNavigation(
-        selectedTab: OvanieMainTab.account,
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: RefreshIndicator(
-          color: OvanieColors.orange,
-          onRefresh: _refresh,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            slivers: [
-              SliverToBoxAdapter(child: _header()),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate.fixed([
-                    _productCard(),
-                    const SizedBox(height: 20),
-                    const Text('Statut du retour', style: TextStyle(color: OvanieColors.navy, fontSize: 18, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 14),
-                    _ReturnTimeline(item: _item),
-                    const SizedBox(height: 20),
-                    _ReasonCard(item: _item),
-                    const SizedBox(height: 14),
-                    _ReturnLogisticsCard(item: _item),
-                    const SizedBox(height: 14),
-                    _RefundSummary(item: _item),
-                    const SizedBox(height: 14),
-                    _ImportantInfo(item: _item),
-                    const SizedBox(height: 14),
-                    _HelpCard(onTap: _openSupport),
-                    const SizedBox(height: 14),
-                  ]),
+    final state = _state;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF7F8FA),
+        bottomNavigationBar: const OvanieBottomNavigation(selectedTab: OvanieMainTab.account),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              SizedBox(
+                height: 62,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 4),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      tooltip: 'Retour',
+                      icon: const Icon(Icons.chevron_left_rounded, color: payNavy, size: 36),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Détail du retour',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: payNavy, fontSize: 23, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const SizedBox(width: 52),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  color: OvanieColors.orange,
+                  onRefresh: _refresh,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
+                    children: [
+                      _Card(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      _number,
+                                      style: const TextStyle(color: payNavy, fontSize: 19, fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                _StatePill(state: state),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                OrderItemThumbnail(url: _item.imageUrl, width: 132, height: 92),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _item.productName,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: payNavy,
+                                          fontSize: 16.5,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text('Commande #${_item.orderNumber}', style: _muted),
+                                      if (_item.orderCreatedAt != null)
+                                        Text('Acheté le ${paymentShortDate(_item.orderCreatedAt)}', style: _muted),
+                                      Text('Qté retournée : ${_item.quantity}', style: _muted),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _Card(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Statut du retour', style: _title),
+                            const SizedBox(height: 16),
+                            _Steps(item: _item, state: state),
+                            if (state != _CaseState.ongoing) ...[
+                              const SizedBox(height: 14),
+                              _StateBanner(state: state),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _Card(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Motif du retour', style: _title),
+                            const SizedBox(height: 12),
+                            _ReasonRow(item: _item),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _Card(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Informations de livraison du retour', style: _title),
+                            const SizedBox(height: 8),
+                            const _InfoRow(
+                              icon: Icons.local_shipping_outlined,
+                              label: 'Mode de retour',
+                              value: 'Collecte à l’adresse indiquée par OVANIE',
+                            ),
+                            _InfoRow(
+                              icon: Icons.location_on_outlined,
+                              label: 'Adresse de collecte',
+                              value: _item.pickupAddress.trim().isNotEmpty
+                                  ? _item.pickupAddress
+                                  : _item.collectionAddress,
+                            ),
+                            _InfoRow(
+                              icon: Icons.calendar_month_outlined,
+                              label: 'Date de collecte souhaitée',
+                              value: _item.pickupDate == null ? '' : paymentShortDate(_item.pickupDate),
+                            ),
+                            _InfoRow(
+                              icon: Icons.schedule_rounded,
+                              label: 'Créneau préféré',
+                              value: _item.pickupTimeSlot,
+                            ),
+                            _InfoRow(icon: Icons.call_outlined, label: 'Contact', value: _contactLine(_item)),
+                            _InfoRow(
+                              icon: Icons.info_outline_rounded,
+                              label: 'Suivi',
+                              value: _item.logisticsStatusLabel.trim().isNotEmpty
+                                  ? _item.logisticsStatusLabel
+                                  : 'OVANIE organisera la récupération et vous notifiera à chaque étape.',
+                              accent: true,
+                              last: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _Card(
+                        child: _Summary(item: _item, state: state),
+                      ),
+                      if (state == _CaseState.ongoing) ...[
+                        const SizedBox(height: 12),
+                        const PaymentInfoNote(
+                          background: Color(0xFFE8F1FC),
+                          text:
+                              'Votre retour est en cours de traitement par notre équipe. Vous serez notifié dès qu’une nouvelle étape sera confirmée.',
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      _HelpCard(onTap: _openSupport),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -100,388 +263,466 @@ class _ReturnDetailScreenState extends State<ReturnDetailScreen> {
       ),
     );
   }
-
-  Widget _header() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 18, 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back_rounded, color: OvanieColors.navy, size: 29),
-          ),
-          const SizedBox(width: 3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Détail du retour', style: TextStyle(color: OvanieColors.navy, fontSize: 24, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 4),
-                Text(
-                  'Retour #RET-${_item.createdAt?.year ?? DateTime.now().year}-${_item.id.toString().padLeft(5, '0')}',
-                  style: const TextStyle(color: Color(0xFF31456D), fontSize: 12.5, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-          _StatusPill(item: _item),
-        ],
-      ),
-    );
-  }
-
-  Widget _productCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _detailCardDecoration(),
-      child: Row(
-        children: [
-          _ProductImage(url: _item.imageUrl, size: 100),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_item.productName, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.navy, fontSize: 16, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 7),
-                Text('Commande #${_item.orderNumber}', style: const TextStyle(color: Color(0xFF40547A), fontSize: 12)),
-                if (_item.orderCreatedAt != null) ...[
-                  const SizedBox(height: 5),
-                  Text('Acheté le ${_date(_item.orderCreatedAt!)}', style: const TextStyle(color: Color(0xFF40547A), fontSize: 12)),
-                ],
-                if (_item.unitPrice != null) ...[
-                  const SizedBox(height: 9),
-                  Text(formatFcfa(_item.unitPrice!), style: const TextStyle(color: OvanieColors.orange, fontSize: 16, fontWeight: FontWeight.w900)),
-                ],
-                const SizedBox(height: 5),
-                Text('Qté retournée : ${_item.quantity}', style: const TextStyle(color: Color(0xFF40547A), fontSize: 12)),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded, color: OvanieColors.navy, size: 27),
-        ],
-      ),
-    );
-  }
 }
 
-class _StatusPill extends StatelessWidget {
-  final ClientReturnCase item;
-  const _StatusPill({required this.item});
+const _title = TextStyle(color: payNavy, fontSize: 19, fontWeight: FontWeight.w800);
+const _muted = TextStyle(color: payMuted, fontSize: 14.5, height: 1.4);
 
-  @override
-  Widget build(BuildContext context) {
-    Color color;
-    Color background;
-    String text;
-    if (item.status == 'rejected' || item.status == 'cancelled') {
-      color = const Color(0xFFD92D20);
-      background = const Color(0xFFFFECEA);
-      text = 'Refusé';
-    } else if (item.status == 'refunded' || item.status == 'resolved' || item.status == 'closed') {
-      color = OvanieColors.success;
-      background = const Color(0xFFEAF8EF);
-      text = 'Terminé';
-    } else if (item.logisticsStatus == 'return_in_transit') {
-      color = const Color(0xFF1262D8);
-      background = const Color(0xFFEAF3FF);
-      text = 'Expédié';
-    } else {
-      color = const Color(0xFFD87800);
-      background = const Color(0xFFFFF3E3);
-      text = 'En cours';
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(10)),
-      child: Text(text, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800)),
-    );
-  }
+String _contactLine(ClientReturnCase item) {
+  final name = item.pickupContactName.trim().isNotEmpty ? item.pickupContactName.trim() : item.recipientName.trim();
+  final phone = item.pickupContactPhone.trim().isNotEmpty ? item.pickupContactPhone : item.recipientPhone;
+  return [
+    name,
+    if (phone.trim().isNotEmpty) formatCiPhoneDisplay(phone),
+  ].where((part) => part.isNotEmpty).join('  •  ');
 }
 
-class _ReturnTimeline extends StatelessWidget {
-  final ClientReturnCase item;
-  const _ReturnTimeline({required this.item});
+class _Card extends StatelessWidget {
+  final Widget child;
 
-  @override
-  Widget build(BuildContext context) {
-    final steps = <_TimelineData>[
-      _TimelineData('Demande\ninitiée', item.createdAt ?? item.requestDate, true),
-      _TimelineData('Détails &\npreuves', item.updatedAt ?? item.createdAt, item.photoCount > 0 || item.detailedDescription.isNotEmpty),
-      _TimelineData(
-        'Livraison du\nretour',
-        item.pickupDate ?? item.acceptedAt,
-        item.hasPickupPlan || const {'return_in_transit', 'return_received', 'refund_pending', 'refunded'}.contains(item.logisticsStatus),
-      ),
-      _TimelineData(
-        'Vérification &\nconfirmation',
-        item.resolvedAt ?? item.refundedAt,
-        item.isClosed,
-      ),
-    ];
+  const _Card({required this.child});
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SizedBox(
-          height: 126,
-          child: Stack(
-            children: [
-              Positioned(left: constraints.maxWidth / 8, right: constraints.maxWidth / 8, top: 15, child: Container(height: 1.5, color: OvanieColors.navy)),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: steps.map((step) {
-                  return Expanded(
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 31,
-                          height: 31,
-                          decoration: BoxDecoration(
-                            color: step.done ? OvanieColors.success : Colors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: step.done ? OvanieColors.success : OvanieColors.orange, width: 2),
-                          ),
-                          child: step.done ? const Icon(Icons.check_rounded, color: Colors.white, size: 19) : null,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(step.label, textAlign: TextAlign.center, style: TextStyle(color: step.done ? OvanieColors.navy : OvanieColors.orange, fontSize: 12, height: 1.3, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 6),
-                        Text(step.date == null ? (step.done ? 'Validé' : 'En cours') : _dateTime(step.date!), textAlign: TextAlign.center, style: TextStyle(color: step.done ? const Color(0xFF40547A) : OvanieColors.orange, fontSize: 11.5, height: 1.25)),
-                      ],
-                    ),
-                  );
-                }).toList(growable: false),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _TimelineData {
-  final String label;
-  final DateTime? date;
-  final bool done;
-  const _TimelineData(this.label, this.date, this.done);
-}
-
-class _ReasonCard extends StatelessWidget {
-  final ClientReturnCase item;
-  const _ReasonCard({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final description = item.detailedDescription.trim().isNotEmpty ? item.detailedDescription.trim() : item.reason;
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: _detailCardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Motif du retour', style: TextStyle(color: OvanieColors.navy, fontSize: 17, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(width: 54, height: 54, decoration: const BoxDecoration(color: Color(0xFFFFEEE5), shape: BoxShape.circle), child: const Icon(Icons.inventory_2_outlined, color: OvanieColors.orange, size: 27)),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.reason.isEmpty ? 'Retour produit' : item.reason, style: const TextStyle(color: OvanieColors.navy, fontSize: 13.5, fontWeight: FontWeight.w900)),
-                    if (description.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(description, style: const TextStyle(color: Color(0xFF40547A), fontSize: 11.5, height: 1.45)),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReturnLogisticsCard extends StatelessWidget {
-  final ClientReturnCase item;
-  const _ReturnLogisticsCard({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final address = item.collectionAddress;
-    final contact = item.pickupContactName.trim().isNotEmpty ? item.pickupContactName : item.recipientName;
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: _detailCardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Informations de livraison du retour', style: TextStyle(color: OvanieColors.navy, fontSize: 17, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(width: 54, height: 54, decoration: const BoxDecoration(color: Color(0xFFF4EAFE), shape: BoxShape.circle), child: const Icon(Icons.local_shipping_outlined, color: Color(0xFF8E35E8), size: 27)),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const _InfoLine(label: 'Mode de retour', value: 'Collecte à l’adresse indiquée par OVANIE'),
-                    if (address.isNotEmpty) _InfoLine(label: 'Adresse de collecte', value: address),
-                    if (item.pickupDate != null) _InfoLine(label: 'Date de collecte souhaitée', value: _date(item.pickupDate!)),
-                    if (item.pickupTimeSlot.isNotEmpty) _InfoLine(label: 'Créneau préféré', value: item.pickupTimeSlot),
-                    if (contact.isNotEmpty) _InfoLine(label: 'Contact', value: contact),
-                    if (item.logisticsStatusLabel.isNotEmpty) _InfoLine(label: 'Suivi', value: item.logisticsStatusLabel),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoLine extends StatelessWidget {
-  final String label;
-  final String value;
-  const _InfoLine({required this.label, required this.value});
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 9),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(color: OvanieColors.navy, fontSize: 11.5, fontWeight: FontWeight.w900)), const SizedBox(height: 3), Text(value, style: const TextStyle(color: Color(0xFF40547A), fontSize: 11.5, height: 1.35))]),
-      );
-}
-
-class _RefundSummary extends StatelessWidget {
-  final ClientReturnCase item;
-  const _RefundSummary({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final double estimated = item.refundAmount ?? ((item.unitPrice ?? 0.0) * item.quantity);
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: _detailCardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Récapitulatif', style: TextStyle(color: OvanieColors.navy, fontSize: 15, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Container(width: 50, height: 50, decoration: const BoxDecoration(color: Color(0xFFEAF8EF), shape: BoxShape.circle), child: const Icon(Icons.receipt_long_outlined, color: OvanieColors.success, size: 26)),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  children: [
-                    _AmountLine(label: 'Montant remboursable (estimé)', amount: estimated),
-                    const SizedBox(height: 9),
-                    const _AmountLine(label: 'Frais de retour', amount: 0.0, green: true),
-                    const Divider(height: 20, color: OvanieColors.border),
-                    _AmountLine(label: 'Total estimé du remboursement', amount: estimated, strong: true),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AmountLine extends StatelessWidget {
-  final String label;
-  final double amount;
-  final bool strong;
-  final bool green;
-  const _AmountLine({required this.label, required this.amount, this.strong = false, this.green = false});
-  @override
-  Widget build(BuildContext context) => Row(
-        children: [
-          Expanded(child: Text(label, style: TextStyle(color: OvanieColors.navy, fontSize: 11.5, fontWeight: strong ? FontWeight.w900 : FontWeight.w500))),
-          Text(formatFcfa(amount), style: TextStyle(color: green ? OvanieColors.success : OvanieColors.orange, fontSize: strong ? 14 : 12, fontWeight: FontWeight.w900)),
-        ],
-      );
-}
-
-class _ImportantInfo extends StatelessWidget {
-  final ClientReturnCase item;
-  const _ImportantInfo({required this.item});
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(color: const Color(0xFFF6FAFF), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFD9E9FF))),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.info_outline_rounded, color: Color(0xFF0A66E8), size: 28), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Informations importantes', style: TextStyle(color: OvanieColors.navy, fontSize: 12.5, fontWeight: FontWeight.w900)), const SizedBox(height: 4), Text(_importantText(item), style: const TextStyle(color: OvanieColors.navy, fontSize: 11.5, height: 1.45))]))]),
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: payBorder),
+    ),
+    child: child,
+  );
 }
 
-String _importantText(ClientReturnCase item) {
-  if (item.status == 'rejected') return 'Votre demande a été examinée et refusée. Consultez les informations du dossier ou contactez le support OVANIE pour toute précision.';
-  if (item.status == 'refunded' || item.logisticsStatus == 'refunded') return 'Votre retour est finalisé et le remboursement associé a été traité.';
-  if (item.logisticsStatus == 'return_received') return 'Votre retour a été reçu et est en cours de vérification par notre équipe. Vous serez informé dès la prochaine étape.';
-  return 'Votre retour est en cours de traitement par notre équipe. Vous serez notifié dès qu’une nouvelle étape sera confirmée.';
+class _StatePill extends StatelessWidget {
+  final _CaseState state;
+
+  const _StatePill({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, icon, color, background) = switch (state) {
+      _CaseState.rejected => ('Refusé', Icons.close_rounded, const Color(0xFFDC2626), const Color(0xFFFFE8E8)),
+      _CaseState.done => ('Terminé', Icons.check_rounded, payGreenDark, payGreenSoft),
+      _CaseState.ongoing => ('En cours', Icons.schedule_rounded, const Color(0xFFC2410C), const Color(0xFFFFF1E6)),
+    };
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 7, 14, 7),
+      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            child: Icon(icon, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Quatre étapes du dossier, avec pastille Validé / En cours / Refusé.
+class _Steps extends StatelessWidget {
+  final ClientReturnCase item;
+  final _CaseState state;
+
+  const _Steps({required this.item, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['Demande initiée', 'Détails & preuves', 'Livraison du retour', 'Vérification & confirmation'];
+    final collected = const {
+      'return_in_transit',
+      'return_received',
+      'refund_pending',
+      'refunded',
+    }.contains(item.logisticsStatus);
+    final proofs = item.photoCount > 0 || item.videoCount > 0 || item.detailedDescription.trim().isNotEmpty;
+
+    // 'done', 'current', 'error' ou 'todo' pour chaque étape.
+    final status = List<String>.filled(4, 'todo');
+    status[0] = 'done';
+    status[1] = proofs ? 'done' : 'current';
+    switch (state) {
+      case _CaseState.done:
+        status.fillRange(0, 4, 'done');
+      case _CaseState.rejected:
+        if (proofs) status[2] = collected ? 'done' : 'todo';
+        status[3] = 'error';
+      case _CaseState.ongoing:
+        if (proofs) {
+          status[2] = collected ? 'done' : 'current';
+          if (collected) status[3] = 'current';
+        }
+    }
+
+    Widget dot(int i) {
+      return switch (status[i]) {
+        'done' => const CircleAvatar(
+          radius: 21,
+          backgroundColor: payGreenDark,
+          child: Icon(Icons.check_rounded, color: Colors.white, size: 24),
+        ),
+        'current' => CircleAvatar(
+          radius: 21,
+          backgroundColor: OvanieColors.orange,
+          child: Text(
+            '${i + 1}',
+            style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+        ),
+        'error' => const CircleAvatar(
+          radius: 21,
+          backgroundColor: Color(0xFFDC2626),
+          child: Icon(Icons.close_rounded, color: Colors.white, size: 24),
+        ),
+        _ => CircleAvatar(
+          radius: 21,
+          backgroundColor: const Color(0xFFE6E9EE),
+          child: Text(
+            '${i + 1}',
+            style: const TextStyle(color: payMuted, fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+        ),
+      };
+    }
+
+    Color lineColor(int i) => switch (status[i + 1]) {
+      'done' => payGreenDark,
+      'current' => OvanieColors.orange,
+      'error' => const Color(0xFFDC2626),
+      _ => const Color(0xFFDDE2EA),
+    };
+
+    Widget badge(int i) {
+      final (label, color, background) = switch (status[i]) {
+        'done' => ('Validé', payGreenDark, payGreenSoft),
+        'current' => ('En cours', const Color(0xFFC2410C), const Color(0xFFFFF1E6)),
+        'error' => ('Refusé', const Color(0xFFDC2626), const Color(0xFFFFE8E8)),
+        _ => ('', payMuted, Colors.transparent),
+      };
+      if (label.isEmpty) return const SizedBox(height: 30);
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(16)),
+        child: Text(
+          label,
+          style: TextStyle(color: color, fontSize: 13.5, fontWeight: FontWeight.w600),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 26),
+          child: Row(
+            children: [
+              for (var i = 0; i < 4; i++) ...[
+                dot(i),
+                if (i != 3) Expanded(child: Container(height: 3, color: lineColor(i))),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < 4; i++)
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      labels[i].replaceFirst(' & conf', ' &\nconf'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: status[i] == 'current' ? OvanieColors.orange : payNavy,
+                        fontSize: 12.5,
+                        height: 1.25,
+                        fontWeight: status[i] == 'current' ? FontWeight.w700 : FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    badge(i),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _StateBanner extends StatelessWidget {
+  final _CaseState state;
+
+  const _StateBanner({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final rejected = state == _CaseState.rejected;
+    final color = rejected ? const Color(0xFFDC2626) : payGreenDark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: rejected ? const Color(0xFFFFEEEE) : payGreenSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: rejected ? Border.all(color: const Color(0xFFF7B7B7)) : null,
+      ),
+      child: Row(
+        children: [
+          rejected
+              ? Icon(Icons.cancel_outlined, color: color, size: 30)
+              : CircleAvatar(
+                  radius: 15,
+                  backgroundColor: color,
+                  child: const Icon(Icons.check_rounded, color: Colors.white, size: 20),
+                ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              rejected
+                  ? 'Votre demande a été examinée et refusée. Consultez les informations du dossier ou contactez le support OVANIE pour toute précision.'
+                  : 'Votre retour est finalisé et le remboursement associé a été traité.',
+              style: TextStyle(color: rejected ? color : const Color(0xFF14532D), fontSize: 15, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReasonRow extends StatelessWidget {
+  final ClientReturnCase item;
+
+  const _ReasonRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = item.proofMedia.where((media) => !media.video).map((media) => media.url).firstOrNull;
+    final description = item.detailedDescription.trim();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (photo != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(
+              photo,
+              width: 132,
+              height: 92,
+              fit: BoxFit.cover,
+              cacheWidth: 360,
+              errorBuilder: (_, __, ___) => const _ReasonIcon(),
+            ),
+          )
+        else
+          const _ReasonIcon(),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.reason.trim().isEmpty ? 'Retour produit' : item.reason.trim(),
+                style: const TextStyle(color: payNavy, fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+              if (description.isNotEmpty) ...[const SizedBox(height: 4), Text(description, style: _muted)],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReasonIcon extends StatelessWidget {
+  const _ReasonIcon();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 132,
+    height: 92,
+    decoration: BoxDecoration(color: const Color(0xFFFFF1E6), borderRadius: BorderRadius.circular(10)),
+    child: const Icon(Icons.inventory_2_outlined, color: OvanieColors.orange, size: 40),
+  );
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool accent;
+  final bool last;
+
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.accent = false,
+    this.last = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    decoration: BoxDecoration(
+      border: last ? null : const Border(bottom: BorderSide(color: payBorder)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: const BoxDecoration(color: Color(0xFFF1F3F6), shape: BoxShape.circle),
+          child: Icon(icon, color: payNavy, size: 20),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 108,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 9),
+            child: Text(label, style: const TextStyle(color: payMuted, fontSize: 13.5)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 9),
+            child: Text(
+              value.trim().isEmpty ? '—' : value,
+              style: TextStyle(color: accent ? payMuted : payNavy, fontSize: 14, height: 1.4),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _Summary extends StatelessWidget {
+  final ClientReturnCase item;
+  final _CaseState state;
+
+  const _Summary({required this.item, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final requested = (item.unitPrice ?? 0.0) * item.quantity;
+    final refunded = item.refundAmount ?? requested;
+    Widget line(String label, double amount) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label, style: const TextStyle(color: payMuted, fontSize: 14.5)),
+          ),
+          Text(formatFcfa(amount), style: const TextStyle(color: payNavy, fontSize: 14.5)),
+        ],
+      ),
+    );
+    final (String firstLabel, double firstAmount, String totalLabel, double total) = switch (state) {
+      _CaseState.done => ('Montant remboursé', refunded, 'Total remboursé', refunded),
+      _CaseState.rejected => ('Montant demandé', requested, 'Total remboursé', 0.0),
+      _CaseState.ongoing => ('Montant remboursable (estimé)', refunded, 'Total estimé du remboursement', refunded),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Récapitulatif', style: _title),
+        const SizedBox(height: 10),
+        line(firstLabel, firstAmount),
+        line('Frais de retour', 0),
+        if (state == _CaseState.done && item.refundMethodLabel.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text('Méthode', style: TextStyle(color: payMuted, fontSize: 14.5)),
+                ),
+                Text(item.refundMethodLabel, style: const TextStyle(color: payNavy, fontSize: 14.5)),
+              ],
+            ),
+          ),
+        const Divider(height: 22, color: payBorder),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                totalLabel,
+                style: const TextStyle(color: payNavy, fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+            Text(
+              formatFcfa(total),
+              style: const TextStyle(color: payNavy, fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 class _HelpCard extends StatelessWidget {
   final VoidCallback onTap;
+
   const _HelpCard({required this.onTap});
+
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-        decoration: BoxDecoration(color: const Color(0xFFFFF6EF), borderRadius: BorderRadius.circular(10)),
-        child: Row(children: [const Icon(Icons.headset_mic_outlined, color: OvanieColors.orange, size: 31), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Besoin d’aide ?', style: TextStyle(color: OvanieColors.navy, fontSize: 12.5, fontWeight: FontWeight.w900)), SizedBox(height: 3), Text('Notre équipe est disponible pour vous accompagner.', style: TextStyle(color: OvanieColors.navy, fontSize: 12))])), OutlinedButton(onPressed: onTap, style: OutlinedButton.styleFrom(foregroundColor: OvanieColors.orange, side: const BorderSide(color: OvanieColors.orange), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))), child: const Text('Nous contacter', style: TextStyle(fontWeight: FontWeight.w800)))]),
-      );
-}
-
-class _ProductImage extends StatelessWidget {
-  final String url;
-  final double size;
-  const _ProductImage({required this.url, required this.size});
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        width: size,
-        height: size,
-        child: url.isEmpty
-            ? const Icon(Icons.inventory_2_outlined, color: Color(0xFFB6C0D0), size: 48)
-            : Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.inventory_2_outlined, color: Color(0xFFB6C0D0), size: 48)),
-      );
-}
-
-BoxDecoration _detailCardDecoration() => BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: OvanieColors.border),
-    );
-
-String _date(DateTime value) {
-  const months = <String>[
-    'janv.',
-    'févr.',
-    'mars',
-    'avr.',
-    'mai',
-    'juin',
-    'juil.',
-    'août',
-    'sept.',
-    'oct.',
-    'nov.',
-    'déc.',
-  ];
-  return '${value.day} ${months[value.month - 1]} ${value.year}';
-}
-
-String _dateTime(DateTime value) {
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${_date(value)}\n${two(value.hour)}:${two(value.minute)}';
+  Widget build(BuildContext context) => _Card(
+    child: Row(
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: const BoxDecoration(color: Color(0xFFEFF3F9), shape: BoxShape.circle),
+          child: const Icon(Icons.headset_mic_outlined, color: payNavy, size: 34),
+        ),
+        const SizedBox(width: 14),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Besoin d’aide ?',
+                style: TextStyle(color: payNavy, fontSize: 16.5, fontWeight: FontWeight.w800),
+              ),
+              SizedBox(height: 3),
+              Text(
+                'Notre équipe est disponible pour vous accompagner.',
+                style: TextStyle(color: payMuted, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton(
+          onPressed: onTap,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: payNavy,
+            side: const BorderSide(color: payNavy, width: 1.4),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: const Text('Nous contacter', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ),
+  );
 }

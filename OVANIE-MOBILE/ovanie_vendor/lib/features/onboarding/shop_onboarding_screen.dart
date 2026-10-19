@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:file_picker/file_picker.dart';
+import '../../core/ui/mk_file_pick.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -915,31 +915,35 @@ class _ShopOnboardingScreenState extends State<ShopOnboardingScreen> {
   }
 
   Future<void> _pickCompanyFile({required bool rccm}) async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+    final file = await pickMkFile(
+      context,
+      title: rccm ? 'Registre du commerce (RCCM)' : 'Document fiscal',
+      message: 'Photo nette ou PDF lisible, 5 Mo maximum.',
+      extensions: const ['pdf'],
     );
-    final path = result?.files.single.path;
-    if (path == null || !mounted) return;
+    if (file == null || !mounted) return;
     setState(() {
       if (rccm) {
-        _rccmFile = File(path);
+        _rccmFile = file;
       } else {
-        _taxFile = File(path);
+        _taxFile = file;
       }
       _error = null;
     });
   }
 
   Future<void> _pickIdentityPdf() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf'],
+    final file = await pickMkFile(
+      context,
+      title: 'Pièce d’identité (PDF)',
+      message: 'Un seul fichier PDF avec le recto et le verso.',
+      camera: false,
+      gallery: false,
+      extensions: const ['pdf'],
     );
-    final path = result?.files.single.path;
-    if (path != null && mounted) {
+    if (file != null && mounted) {
       setState(() {
-        _identityPdf = File(path);
+        _identityPdf = file;
         _error = null;
       });
     }
@@ -1209,6 +1213,7 @@ class _ShopOnboardingScreenState extends State<ShopOnboardingScreen> {
             final picked = await showWizardSelector<String>(
               context,
               title: 'Forme juridique',
+              icon: Icons.apartment_rounded,
               items: _legalForms.keys.toList(growable: false),
               selected: _legalForm,
               label: (v) => _legalForms[v] ?? v,
@@ -1281,6 +1286,12 @@ class _ShopOnboardingScreenState extends State<ShopOnboardingScreen> {
               final picked = await showWizardSelector<dynamic>(
                 context,
                 title: 'Quartier',
+                subtitle: ctrl('commune').text.trim().isEmpty ? null : ctrl('commune').text.trim(),
+                icon: Icons.location_on_outlined,
+                selected: _quarters.cast<dynamic>().firstWhere(
+                  (q) => int.tryParse('${q['id']}') == _quarterId,
+                  orElse: () => null,
+                ),
                 items: _quarters,
                 searchable: true,
                 label: (m) => _cleanUiText(m['name']),
@@ -1654,7 +1665,7 @@ class _ShopOnboardingScreenState extends State<ShopOnboardingScreen> {
             selected: _operator,
             items: operatorData.keys.toList(),
             label: (v) => operatorData[v]!.$1,
-            leading: (v) => logo(v, 34),
+            leading: (v) => logo(v, 46),
           );
           if (picked != null) {
             setState(() {

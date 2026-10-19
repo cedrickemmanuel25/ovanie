@@ -2,19 +2,21 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/widgets/api_error_card.dart';
+import '../../auth/presentation/auth_branding.dart';
 import '../../catalog/domain/catalog_navigation_store.dart';
 import '../../home/data/marketplace_repository.dart';
 import '../../search/presentation/search_screen.dart';
 import '../domain/category_model.dart';
+import 'catalog_widgets.dart';
 import 'subcategory_screen.dart';
 
 /// Écran Catégories OVANIE reconstruit selon la maquette mobile :
-/// - recherche en haut ;
-/// - catégories racines dans un rail vertical à gauche ;
-/// - sous-catégories de la catégorie sélectionnée à droite ;
+/// - logo, titre et recherche en haut ;
+/// - catégories principales dans un rail vertical à gauche, avec leur visuel ;
+/// - bannière puis sous-catégories de la catégorie sélectionnée à droite
+///   (les images des sous-catégories sont celles ajoutées par l'administrateur) ;
 /// - clic sur une sous-catégorie => écran Sous-catégorie sans quitter
 ///   l'onglet Catégories du MainShell.
 ///
@@ -25,12 +27,7 @@ class CategoriesScreen extends StatefulWidget {
   final bool showBackButton;
   final CatalogNavigationStore? navigationStore;
 
-  const CategoriesScreen({
-    super.key,
-    this.initialCategorySlug,
-    this.showBackButton = false,
-    this.navigationStore,
-  });
+  const CategoriesScreen({super.key, this.initialCategorySlug, this.showBackButton = false, this.navigationStore});
 
   @override
   State<CategoriesScreen> createState() => _CategoriesScreenState();
@@ -77,7 +74,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     }
 
     try {
-      final roots = await _repository.getRootCategories(limit: 50);
+      final roots = categoriesInDisplayOrder(await _repository.getRootCategories(limit: 50));
       if (!mounted) return;
 
       CategoryModel? selectedRoot;
@@ -85,10 +82,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       final requestedSlug = widget.initialCategorySlug?.trim();
 
       if (requestedSlug != null && requestedSlug.isNotEmpty) {
-        final target = _repository.findCategoryInRoots(
-          roots,
-          slug: requestedSlug,
-        );
+        final target = _repository.findCategoryInRoots(roots, slug: requestedSlug);
         if (target != null) {
           if (target.parentId == null) {
             selectedRoot = target;
@@ -174,9 +168,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   void _openSearch() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SearchScreen()),
-    );
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SearchScreen()));
   }
 
   @override
@@ -192,15 +184,54 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       );
     }
 
-    return ColoredBox(
-      color: Colors.white,
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _CategorySearchBar(onTap: _openSearch),
-            Expanded(child: _buildBody()),
-          ],
+    return OvanieAuthTheme(
+      child: Material(
+        color: Colors.white,
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(15, 12, 15, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (widget.showBackButton)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: InkResponse(
+                              onTap: () => Navigator.of(context).maybePop(),
+                              radius: 22,
+                              child: const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: Icon(
+                                  Icons.arrow_back_ios_new_rounded,
+                                  size: 20,
+                                  color: authNavy,
+                                  semanticLabel: 'Retour',
+                                ),
+                              ),
+                            ),
+                          ),
+                        const OvanieLogo(width: 112),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Catégories',
+                      style: TextStyle(color: authNavy, fontSize: 23, height: 1.1, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 10),
+                    CatalogSearchField(onTap: _openSearch),
+                  ],
+                ),
+              ),
+              Expanded(child: _buildBody()),
+            ],
+          ),
         ),
       ),
     );
@@ -208,34 +239,24 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: OvanieColors.orange),
-      );
+      return const Center(child: CircularProgressIndicator(color: authOrange));
     }
 
     if (_error != null) {
       return ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          const SizedBox(height: 80),
-          ApiErrorCard(
-            message: ApiClient.friendlyError(_error!),
-            onRetry: _loadCategories,
-          ),
+          const SizedBox(height: 60),
+          ApiErrorCard(message: ApiClient.friendlyError(_error!), onRetry: _loadCategories),
         ],
       );
     }
 
     if (_roots.isEmpty) {
       return const Center(
-        child: Text(
-          'Aucune catégorie disponible pour le moment.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: OvanieColors.muted,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+        child: CatalogEmptyState(
+          icon: Icons.grid_view_outlined,
+          message: 'Aucune catégorie disponible pour le moment.',
         ),
       );
     }
@@ -244,27 +265,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final railWidth = (width * .275).clamp(104.0, 126.0).toDouble();
+        final railWidth = (constraints.maxWidth * .33).clamp(112.0, 156.0).toDouble();
 
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
               width: railWidth,
-              child: _CategoryRail(
-                categories: _roots,
-                selected: selected,
-                onSelect: _selectRoot,
-              ),
-            ),
-            const VerticalDivider(
-              width: 1,
-              thickness: 1,
-              color: Color(0xFFE9EDF3),
+              child: _CategoryRail(categories: _roots, selected: selected, onSelect: _selectRoot),
             ),
             Expanded(
               child: _SubcategoriesPanel(
+                key: ValueKey<int>(selected.id),
                 category: selected,
                 onOpenSubcategory: _openSubcategory,
               ),
@@ -276,54 +288,100 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 }
 
-class _CategorySearchBar extends StatelessWidget {
-  final VoidCallback onTap;
+/// Rail des catégories principales : pastille ronde avec le visuel officiel
+/// et nom sur deux lignes. La catégorie ouverte est blanche, barre orange.
+class _CategoryRail extends StatelessWidget {
+  final List<CategoryModel> categories;
+  final CategoryModel selected;
+  final ValueChanged<CategoryModel> onSelect;
 
-  const _CategorySearchBar({required this.onTap});
+  const _CategoryRail({required this.categories, required this.selected, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+    return ColoredBox(
+      color: const Color(0xFFF3F5F9),
+      child: ListView.builder(
+        padding: const EdgeInsets.only(bottom: 18),
+        physics: const BouncingScrollPhysics(),
+        itemCount: categories.length,
+        itemBuilder: (context, index) {
+          final category = categories[index];
+          return _CategoryRailTile(
+            category: category,
+            selected: selected.id == category.id,
+            onTap: () => onSelect(category),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CategoryRailTile extends StatelessWidget {
+  final CategoryModel category;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryRailTile({required this.category, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      color: authNavy,
+      fontFamily: authFont,
+      fontSize: 10.5,
+      height: 1.28,
+      fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+    );
+
+    return Semantics(
+      button: true,
+      selected: selected,
       child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
+        color: selected ? Colors.white : Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(15),
           child: Container(
-            height: 54,
-            padding: const EdgeInsets.symmetric(horizontal: 15),
+            constraints: const BoxConstraints(minHeight: 56),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: const Color(0xFFDDE3EB)),
+              border: Border(left: BorderSide(color: selected ? authOrange : Colors.transparent, width: 3)),
             ),
-            child: const Row(
+            padding: const EdgeInsets.fromLTRB(6, 8, 3, 8),
+            child: Row(
               children: [
-                Icon(
-                  Icons.search_rounded,
-                  size: 27,
-                  color: Color(0xFF52627D),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Rechercher un produit, une marque...',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Color(0xFF77839A),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                ClipOval(
+                  child: SizedBox(
+                    width: 38,
+                    height: 38,
+                    child: CatalogImage(
+                      urls: rootCategoryImages(category),
+                      placeholder: const ColoredBox(
+                        color: Color(0xFFE6EAF1),
+                        child: Icon(Icons.category_outlined, size: 18, color: Color(0xFF9AA3B5)),
+                      ),
                     ),
                   ),
                 ),
-                SizedBox(width: 8),
-                Icon(
-                  Icons.center_focus_weak_rounded,
-                  size: 28,
-                  color: OvanieColors.navy,
+                const SizedBox(width: 6),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, box) => Text(
+                      category.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: style.copyWith(
+                        fontSize: fitTextFontSize(
+                          category.name,
+                          // Marge d'un point : l'arrondi du moteur de texte ne
+                          // doit pas faire basculer le dernier caractère.
+                          box.maxWidth - 1,
+                          DefaultTextStyle.of(context).style.merge(style),
+                          textScaler: MediaQuery.textScalerOf(context),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -334,95 +392,12 @@ class _CategorySearchBar extends StatelessWidget {
   }
 }
 
-class _CategoryRail extends StatelessWidget {
-  final List<CategoryModel> categories;
-  final CategoryModel selected;
-  final ValueChanged<CategoryModel> onSelect;
-
-  const _CategoryRail({
-    required this.categories,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 2, 8, 18),
-      physics: const BouncingScrollPhysics(),
-      itemCount: categories.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 7),
-      itemBuilder: (context, index) {
-        final category = categories[index];
-        return _CategoryRailTile(
-          category: category,
-          selected: selected.id == category.id,
-          onTap: () => onSelect(category),
-        );
-      },
-    );
-  }
-}
-
-class _CategoryRailTile extends StatelessWidget {
-  final CategoryModel category;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _CategoryRailTile({
-    required this.category,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          constraints: const BoxConstraints(minHeight: 72),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? OvanieColors.orange : const Color(0xFFE0E5EC),
-              width: selected ? 1.7 : 1,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              category.name,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: selected ? OvanieColors.orange : OvanieColors.navy,
-                fontSize: 11.5,
-                height: 1.12,
-                fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
+/// Partie droite : bannière de la catégorie puis grille des sous-catégories.
 class _SubcategoriesPanel extends StatelessWidget {
   final CategoryModel category;
   final ValueChanged<CategoryModel> onOpenSubcategory;
 
-  const _SubcategoriesPanel({
-    required this.category,
-    required this.onOpenSubcategory,
-  });
+  const _SubcategoriesPanel({super.key, required this.category, required this.onOpenSubcategory});
 
   @override
   Widget build(BuildContext context) {
@@ -432,66 +407,39 @@ class _SubcategoriesPanel extends StatelessWidget {
       physics: const BouncingScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 0),
-          sliver: SliverToBoxAdapter(
-            child: Text(
-              category.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: OvanieColors.navy,
-                fontSize: 24,
-                height: 1.05,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
+          padding: const EdgeInsets.fromLTRB(8, 3, 9, 0),
+          sliver: SliverToBoxAdapter(child: _CategoryBanner(category: category)),
         ),
         if (children.isEmpty)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'Aucune sous-catégorie disponible pour le moment.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: OvanieColors.muted,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              child: CatalogEmptyState(
+                icon: Icons.grid_view_outlined,
+                discSize: 78,
+                message: 'Aucune sous-catégorie disponible pour le moment.',
               ),
             ),
           )
         else
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(14, 24, 12, 22),
+            padding: const EdgeInsets.fromLTRB(8, 12, 9, 22),
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) {
-                final availableWidth = constraints.crossAxisExtent;
-                final columns = availableWidth >= 430
-                    ? 5
-                    : availableWidth >= 250
-                        ? 4
-                        : 3;
+                final width = constraints.crossAxisExtent;
+                final columns = width >= 520 ? 5 : (width >= 380 ? 4 : 3);
+                const gap = 7.0;
+                final tile = (width - gap * (columns - 1)) / columns;
                 return SliverGrid(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final child = children[index];
-                      return _SubcategoryCard(
-                        category: child,
-                        onTap: () => onOpenSubcategory(child),
-                      );
-                    },
-                    childCount: children.length,
-                  ),
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final child = children[index];
+                    return _SubcategoryCard(category: child, onTap: () => onOpenSubcategory(child));
+                  }, childCount: children.length),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: columns,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 10,
-                    childAspectRatio: .48,
+                    crossAxisSpacing: gap,
+                    mainAxisSpacing: 6,
+                    mainAxisExtent: tile * 1.1 + 34,
                   ),
                 );
               },
@@ -502,149 +450,113 @@ class _SubcategoriesPanel extends StatelessWidget {
   }
 }
 
+class _CategoryBanner extends StatelessWidget {
+  final CategoryModel category;
+
+  const _CategoryBanner({required this.category});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(9),
+      child: AspectRatio(
+        aspectRatio: 562 / 293,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CatalogImage(
+              urls: rootCategoryImages(category),
+              placeholder: const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF16307A), authNavy],
+                  ),
+                ),
+              ),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x00000000), Color(0x26000000), Color(0xB3000000)],
+                  stops: [.3, .55, 1],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 11,
+              right: 11,
+              bottom: 9,
+              child: Text(
+                category.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  height: 1.2,
+                  fontWeight: FontWeight.w800,
+                  shadows: [Shadow(color: Color(0x80000000), blurRadius: 6, offset: Offset(0, 1))],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Sous-catégorie : vignette (image ajoutée par l'administrateur, sinon un
+/// fond neutre) et nom centré dessous.
 class _SubcategoryCard extends StatelessWidget {
   final CategoryModel category;
   final VoidCallback onTap;
 
-  const _SubcategoryCard({
-    required this.category,
-    required this.onTap,
-  });
+  const _SubcategoryCard({required this.category, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(13),
+    final image = category.imageUrl.trim();
+
+    return Semantics(
+      button: true,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(13),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: const Color(0xFFE0E5EC)),
-          ),
-          child: Column(
-            children: [
-              Expanded(
-                flex: 7,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(5, 8, 5, 3),
-                  child: _RemoteCategoryImage(
-                    url: _categoryImage(category),
-                    fallbackIcon: _fallbackCategoryIcon(category.name),
+        borderRadius: BorderRadius.circular(8),
+        child: Column(
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: ColoredBox(
+                  color: catalogSoft,
+                  child: CatalogImage(
+                    urls: image.isEmpty ? const <String>[] : <String>[image],
+                    placeholder: const Center(child: Icon(Icons.image_outlined, size: 24, color: Color(0xFFC2C9D6))),
                   ),
                 ),
               ),
-              Expanded(
-                flex: 3,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
-                  child: Center(
-                    child: Text(
-                      category.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: OvanieColors.navy,
-                        fontSize: 10.7,
-                        height: 1.08,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RemoteCategoryImage extends StatelessWidget {
-  final String url;
-  final IconData fallbackIcon;
-
-  const _RemoteCategoryImage({
-    required this.url,
-    required this.fallbackIcon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (url.trim().isEmpty) {
-      return Center(
-        child: Icon(
-          fallbackIcon,
-          size: 36,
-          color: const Color(0xFFAEB7C5),
-        ),
-      );
-    }
-
-    return Image.network(
-      url,
-      fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => Center(
-        child: Icon(
-          fallbackIcon,
-          size: 36,
-          color: const Color(0xFFAEB7C5),
-        ),
-      ),
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return const Center(
-          child: SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.4,
-              color: Color(0xFFD6DCE5),
             ),
-          ),
-        );
-      },
+            SizedBox(
+              height: 34,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Text(
+                  category.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: authNavy, fontSize: 9.8, height: 1.2, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
-}
-
-String _categoryImage(CategoryModel category) {
-  final direct = category.imageUrl.trim();
-  if (direct.isNotEmpty) return direct;
-
-  for (final child in category.children) {
-    final childUrl = child.imageUrl.trim();
-    if (childUrl.isNotEmpty) return childUrl;
-  }
-  return '';
-}
-
-IconData _fallbackCategoryIcon(String name) {
-  final value = name.toLowerCase();
-  if (value.contains('ciment') || value.contains('mortier')) {
-    return Icons.inventory_2_outlined;
-  }
-  if (value.contains('fer') || value.contains('métal')) {
-    return Icons.horizontal_rule_rounded;
-  }
-  if (value.contains('élect')) return Icons.electrical_services_outlined;
-  if (value.contains('plomb') || value.contains('sanitaire')) {
-    return Icons.plumbing_outlined;
-  }
-  if (value.contains('peint') || value.contains('enduit')) {
-    return Icons.format_paint_outlined;
-  }
-  if (value.contains('outil')) return Icons.handyman_outlined;
-  if (value.contains('sécur')) return Icons.health_and_safety_outlined;
-  if (value.contains('bois')) return Icons.carpenter_outlined;
-  if (value.contains('carrel')) return Icons.grid_on_rounded;
-  if (value.contains('béton') || value.contains('gros')) {
-    return Icons.view_in_ar_outlined;
-  }
-  return Icons.category_outlined;
 }

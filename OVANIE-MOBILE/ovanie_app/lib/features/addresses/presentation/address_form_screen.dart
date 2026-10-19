@@ -1,27 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
-import '../../../core/reference_data/reference_data_store.dart';
 import '../../../core/platform/device_location.dart';
+import '../../../core/reference_data/reference_data_store.dart';
 import '../../../core/utils/formatters.dart';
 import '../../auth/domain/session_store.dart';
+import '../../checkout/data/abidjan_localities.dart';
 import '../../checkout/data/geo_repository.dart';
+import '../../checkout/presentation/checkout_screen.dart' show showLocationPickerSheet;
 import '../data/addresses_repository.dart';
 import '../domain/client_address.dart';
 import 'address_map_picker_screen.dart';
+
+const _navy = Color(0xFF0A1B3D);
+const _muted = Color(0xFF5E6B80);
+const _line = Color(0xFFE7ECF2);
+const _fieldBorder = Color(0xFFD5DCE6);
+const _pageBackground = Color(0xFFF6F8FB);
+
+const _abidjan = 'Abidjan';
+const _otherCity = 'Autre ville';
+const _otherQuarter = 'Autre quartier / zone';
+const _landmarkPrefix = 'Repère : ';
 
 class AddressFormScreen extends StatefulWidget {
   final ClientAddress? existing;
   final List<AddressTypeOption> types;
   final bool startWithCurrentPosition;
 
-  const AddressFormScreen({
-    super.key,
-    this.existing,
-    this.types = const [],
-    this.startWithCurrentPosition = false,
-  });
+  const AddressFormScreen({super.key, this.existing, this.types = const [], this.startWithCurrentPosition = false});
 
   @override
   State<AddressFormScreen> createState() => _AddressFormScreenState();
@@ -30,7 +39,6 @@ class AddressFormScreen extends StatefulWidget {
 class _AddressFormScreenState extends State<AddressFormScreen> {
   final _repository = const AddressesRepository();
   final _geo = const GeoRepository();
-  final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _label;
   late final TextEditingController _city;
@@ -48,43 +56,58 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
   bool _isDefault = false;
   bool _saving = false;
   bool _locating = false;
-  String? _error;
+  bool _otherCityMode = false;
+  bool _otherQuarterMode = false;
+  String? _locationWarning;
+  String? _saveError;
+  final Map<String, String> _errors = {};
 
   @override
   void initState() {
     super.initState();
     final existing = widget.existing;
     final existingType = existing?.type ?? 'home';
-    _type = const {'home', 'office', 'site', 'warehouse', 'other'}.contains(existingType)
-        ? existingType
-        : 'home';
+    _type = const {'home', 'office', 'site', 'warehouse', 'other'}.contains(existingType) ? existingType : 'home';
 
+    // L'adresse enregistrée contient « adresse, sous-quartier, Repère : … » :
+    // on redistribue chaque partie dans son champ pour éviter les doublons.
+    var storedAddress = existing?.address.trim() ?? '';
+    var landmark = '';
+    final landmarkIndex = storedAddress.indexOf(_landmarkPrefix);
+    if (landmarkIndex >= 0) {
+      landmark = storedAddress.substring(landmarkIndex + _landmarkPrefix.length).trim();
+      storedAddress = storedAddress.substring(0, landmarkIndex).trim();
+    }
+    final subQuarter = existing?.sousQuartier.trim() ?? '';
+    storedAddress = storedAddress.replaceAll(RegExp(r',\s*$'), '').trim();
+    if (subQuarter.isNotEmpty && storedAddress.endsWith(', $subQuarter')) {
+      storedAddress = storedAddress.substring(0, storedAddress.length - subQuarter.length - 2).trim();
+    }
+
+    final city = existing?.city.trim().isNotEmpty == true ? existing!.city.trim() : _abidjan;
+    _otherCityMode = city.toLowerCase() != _abidjan.toLowerCase();
     _label = TextEditingController(text: existing?.label ?? '');
-    _city = TextEditingController(text: existing?.city.isNotEmpty == true ? existing!.city : 'Abidjan');
+    _city = TextEditingController(text: city);
     _commune = TextEditingController(text: existing?.commune ?? '');
     _quartier = TextEditingController(
-      text: existing?.quartierPrincipal.isNotEmpty == true
-          ? existing!.quartierPrincipal
-          : (existing?.quartier ?? ''),
+      text: existing?.quartierPrincipal.isNotEmpty == true ? existing!.quartierPrincipal : (existing?.quartier ?? ''),
     );
-    _subQuarter = TextEditingController(text: existing?.sousQuartier ?? '');
-    _fullAddress = TextEditingController(text: existing?.address ?? '');
-    _landmark = TextEditingController();
+    _subQuarter = TextEditingController(text: subQuarter);
+    _fullAddress = TextEditingController(text: storedAddress);
+    _landmark = TextEditingController(text: landmark);
     _contactName = TextEditingController(
-      text: existing?.recipientName.isNotEmpty == true
-          ? existing!.recipientName
-          : (SessionStore.instance.name ?? ''),
+      text: existing?.recipientName.isNotEmpty == true ? existing!.recipientName : (SessionStore.instance.name ?? ''),
     );
     _contactPhone = TextEditingController(
       text: formatCiPhoneDisplay(
-        existing?.phone.isNotEmpty == true
-            ? existing!.phone
-            : (SessionStore.instance.phone ?? ''),
+        existing?.phone.isNotEmpty == true ? existing!.phone : (SessionStore.instance.phone ?? ''),
+        includeCountryCode: false,
       ),
     );
     _latitude = existing?.latitude;
     _longitude = existing?.longitude;
     _isDefault = existing?.isDefault ?? false;
+    _otherQuarterMode = _quartier.text.isNotEmpty && !_quartersFor(_commune.text).contains(_quartier.text);
 
     if (widget.startWithCurrentPosition && existing == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _useCurrentPosition());
@@ -93,40 +116,75 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
 
   @override
   void dispose() {
-    _label.dispose();
-    _city.dispose();
-    _commune.dispose();
-    _quartier.dispose();
-    _subQuarter.dispose();
-    _fullAddress.dispose();
-    _landmark.dispose();
-    _contactName.dispose();
-    _contactPhone.dispose();
+    for (final controller in [
+      _label,
+      _city,
+      _commune,
+      _quartier,
+      _subQuarter,
+      _fullAddress,
+      _landmark,
+      _contactName,
+      _contactPhone,
+    ]) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  List<String> get _communes {
+    final loaded = OvanieReferenceDataStore.instance.communeNames;
+    return loaded.isNotEmpty ? loaded : kAbidjanQuartiersByCommune.keys.toList(growable: false);
+  }
+
+  List<String> _quartersFor(String commune) {
+    final loaded = OvanieReferenceDataStore.instance.quartersByCommuneName;
+    final source = loaded.isNotEmpty ? loaded : kAbidjanQuartiersByCommune;
+    for (final entry in source.entries) {
+      if (entry.key.toLowerCase() == commune.trim().toLowerCase()) return entry.value;
+    }
+    return const [];
+  }
+
+  List<AddressTypeOption> get _effectiveTypes {
+    final remote = OvanieReferenceDataStore.instance.options('address_types');
+    if (remote.isNotEmpty) {
+      return remote.map((item) => AddressTypeOption(code: item.code, label: item.label)).toList(growable: false);
+    }
+    // `widget.types` provient lui aussi de Laravel (payload adresses).
+    return widget.types;
+  }
+
+  IconData _typeIcon(String code) => switch (code) {
+    'home' => Icons.home_outlined,
+    'office' => Icons.business_rounded,
+    'site' => Icons.apartment_rounded,
+    'warehouse' => Icons.warehouse_outlined,
+    _ => Icons.location_on_outlined,
+  };
+
+  void _clearError(String key) {
+    if (_errors.containsKey(key)) setState(() => _errors.remove(key));
   }
 
   Future<void> _useCurrentPosition() async {
     if (_locating) return;
     setState(() {
       _locating = true;
-      _error = null;
+      _locationWarning = null;
     });
     try {
       final position = await DeviceLocation.currentPosition();
       if (!position.hasGoodDeliveryAccuracy) {
         throw const DeviceLocationException(
-          'La position n’est pas encore assez précise. Réessayez dans quelques instants ou choisissez l’adresse sur la carte.',
+          'La position n’est pas encore assez précise. Réessayez dans quelques instants ou choisissez l’adresse sur '
+          'la carte.',
         );
       }
-      final place = await _geo.reverse(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        fresh: true,
-      );
+      final place = await _geo.reverse(latitude: position.latitude, longitude: position.longitude, fresh: true);
       _applyPlace(place);
     } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = ApiClient.friendlyError(error));
+      if (mounted) setState(() => _locationWarning = ApiClient.friendlyError(error));
     } finally {
       if (mounted) setState(() => _locating = false);
     }
@@ -135,10 +193,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
   Future<void> _pickOnMap() async {
     final place = await Navigator.of(context).push<GeoResolvedPlace>(
       MaterialPageRoute<GeoResolvedPlace>(
-        builder: (_) => AddressMapPickerScreen(
-          initialLatitude: _latitude,
-          initialLongitude: _longitude,
-        ),
+        builder: (_) => AddressMapPickerScreen(initialLatitude: _latitude, initialLongitude: _longitude),
       ),
     );
     if (place == null || !mounted) return;
@@ -146,87 +201,119 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
   }
 
   void _applyPlace(GeoResolvedPlace place) {
-    _city.text = place.city.trim().isEmpty ? 'Abidjan' : place.city.trim();
+    final city = place.city.trim().isEmpty ? _abidjan : place.city.trim();
+    _city.text = city;
     _commune.text = place.commune.trim();
     _quartier.text = place.quartier.trim();
     _fullAddress.text = place.displayName.trim();
     setState(() {
+      _otherCityMode = city.toLowerCase() != _abidjan.toLowerCase();
+      _otherQuarterMode = _quartier.text.isNotEmpty && !_quartersFor(_commune.text).contains(_quartier.text);
       _latitude = place.latitude;
       _longitude = place.longitude;
-      _error = null;
+      _locationWarning = null;
+      _errors.removeWhere((key, _) => const {'city', 'commune', 'quartier', 'address'}.contains(key));
     });
   }
 
-  String _buildPersistedAddress() {
+  Future<void> _pickCity() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final picked = await showLocationPickerSheet(
+      context,
+      title: 'Ville',
+      items: const [_abidjan, _otherCity],
+      selected: _otherCityMode ? _otherCity : _abidjan,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      final other = picked == _otherCity;
+      if (other != _otherCityMode) {
+        _commune.clear();
+        _quartier.clear();
+        _otherQuarterMode = false;
+      }
+      _otherCityMode = other;
+      _city.text = other ? '' : _abidjan;
+      _errors.remove('city');
+    });
+  }
+
+  Future<void> _pickCommune() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final picked = await showLocationPickerSheet(
+      context,
+      title: 'Commune',
+      items: _communes,
+      selected: _commune.text.isEmpty ? null : _commune.text,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (picked != _commune.text) {
+        _quartier.clear();
+        _otherQuarterMode = false;
+      }
+      _commune.text = picked;
+      _errors.remove('commune');
+    });
+  }
+
+  Future<void> _pickQuarter() async {
+    if (_commune.text.trim().isEmpty) {
+      setState(() => _errors['commune'] = 'Choisissez d’abord la commune.');
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    final picked = await showLocationPickerSheet(
+      context,
+      title: 'Quartier',
+      items: [..._quartersFor(_commune.text), _otherQuarter],
+      selected: _otherQuarterMode ? _otherQuarter : (_quartier.text.isEmpty ? null : _quartier.text),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _otherQuarterMode = picked == _otherQuarter;
+      _quartier.text = _otherQuarterMode ? '' : picked;
+      _errors.remove('quartier');
+    });
+  }
+
+  bool _validate() {
+    final errors = <String, String>{};
+    if (_label.text.trim().isEmpty) errors['label'] = 'Renseignez le nom de l’adresse.';
+    if (_city.text.trim().isEmpty) errors['city'] = 'Ville requise.';
+    if (_commune.text.trim().isEmpty) errors['commune'] = 'Commune requise.';
+    if (_quartier.text.trim().isEmpty) errors['quartier'] = 'Quartier requis.';
+    if (_fullAddress.text.trim().isEmpty) errors['address'] = 'Adresse complète requise.';
+    if (ciLocalPhoneDigits(_contactPhone.text).length != 10) {
+      errors['phone'] = 'Renseignez un numéro de téléphone de contact valide.';
+    }
+    setState(() {
+      _errors
+        ..clear()
+        ..addAll(errors);
+    });
+    return errors.isEmpty;
+  }
+
+  String _persistedAddress() {
     final parts = <String>[
       _fullAddress.text.trim(),
       if (_subQuarter.text.trim().isNotEmpty) _subQuarter.text.trim(),
-      if (_landmark.text.trim().isNotEmpty) 'Repère : ${_landmark.text.trim()}',
+      if (_landmark.text.trim().isNotEmpty) '$_landmarkPrefix${_landmark.text.trim()}',
     ];
     return parts.where((e) => e.isNotEmpty).join(', ');
   }
 
-
-  List<AddressTypeOption> get _effectiveTypes {
-    final remote =
-        OvanieReferenceDataStore.instance.options('address_types');
-    if (remote.isNotEmpty) {
-      return remote
-          .map(
-            (item) => AddressTypeOption(code: item.code, label: item.label),
-          )
-          .toList(growable: false);
-    }
-    // `widget.types` provient lui aussi de Laravel (payload adresses).
-    // On le conserve comme source serveur secondaire, mais plus aucune liste
-    // métier n'est codée en dur dans Flutter.
-    if (widget.types.isNotEmpty) return widget.types;
-
-    return const <AddressTypeOption>[];
-  }
-
-  IconData _addressTypeIcon(String code) => switch (code) {
-        'home' => Icons.home_outlined,
-        'office' => Icons.apartment_rounded,
-        'site' => Icons.construction_rounded,
-        'warehouse' => Icons.warehouse_rounded,
-        _ => Icons.location_on_outlined,
-      };
-
-  Color _addressTypeColor(String code) => switch (code) {
-        'home' => const Color(0xFFFF6500),
-        'office' => const Color(0xFF6739E6),
-        'site' => const Color(0xFF0B56E6),
-        'warehouse' => const Color(0xFF079843),
-        _ => const Color(0xFF536C98),
-      };
-
   Future<void> _save() async {
-    if (_saving || !_formKey.currentState!.validate()) return;
+    if (_saving) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _saveError = null);
+    if (!_validate()) return;
     if (_effectiveTypes.isEmpty) {
-      setState(() {
-        _error =
-            'Les types d’adresse OVANIE sont indisponibles. Rechargez les données puis réessayez.';
-      });
+      setState(() => _saveError = 'Les types d’adresse OVANIE sont indisponibles. Rechargez puis réessayez.');
       return;
     }
-
-    final phoneDigits = ciLocalPhoneDigits(_contactPhone.text);
-    final sessionPhoneDigits = ciLocalPhoneDigits(SessionStore.instance.phone ?? '');
-    final effectivePhone = phoneDigits.length == 10
-        ? _contactPhone.text
-        : (sessionPhoneDigits.length == 10 ? SessionStore.instance.phone ?? '' : '');
-
-    if (effectivePhone.trim().isEmpty) {
-      setState(() => _error = 'Renseignez un numéro de téléphone de contact valide.');
-      return;
-    }
-
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-
+    setState(() => _saving = true);
     try {
       final draft = ClientAddressDraft(
         type: _type,
@@ -237,21 +324,18 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
         city: _city.text.trim(),
         commune: _commune.text.trim(),
         quartier: _quartier.text.trim(),
-        address: _buildPersistedAddress(),
-        phone: normalizeCiPhoneForApi(effectivePhone),
+        address: _persistedAddress(),
+        phone: normalizeCiPhoneForApi(_contactPhone.text),
         latitude: _latitude,
         longitude: _longitude,
         isDefault: _isDefault,
       );
-
       final saved = widget.existing == null
           ? await _repository.create(draft)
           : await _repository.update(widget.existing!.id, draft);
-      if (!mounted) return;
-      Navigator.of(context).pop(saved);
+      if (mounted) Navigator.of(context).pop(saved);
     } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = ApiClient.friendlyError(error));
+      if (mounted) setState(() => _saveError = ApiClient.friendlyError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -260,419 +344,287 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.existing != null;
-
+    final types = _effectiveTypes;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: _pageBackground,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          onPressed: () => Navigator.maybePop(context),
+          tooltip: 'Retour',
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _navy, size: 22),
+        ),
+        title: Text(
+          editing ? 'Modifier l’adresse' : 'Ajouter une adresse',
+          style: const TextStyle(color: _navy, fontSize: 20, fontWeight: FontWeight.w800),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(62),
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(14, 2, 14, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _TopButton(
+                    icon: Icons.gps_fixed_rounded,
+                    label: _locating ? 'Localisation…' : 'Ma position',
+                    loading: _locating,
+                    onTap: _locating ? null : _useCurrentPosition,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _TopButton(icon: Icons.map_outlined, label: 'Sur la carte', onTap: _pickOnMap),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFE4EAF2)))),
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
           child: SizedBox(
             height: 50,
             child: FilledButton(
-              onPressed: _saving ? null : _save,
+              onPressed: _saving ? () {} : _save,
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFFF6500),
+                backgroundColor: OvanieColors.orange,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               child: _saving
-                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.3, color: Colors.white))
-                  : Text(editing ? 'Enregistrer les modifications' : 'Enregistrer l’adresse', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  ? const SizedBox.square(
+                      dimension: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.3, color: Colors.white),
+                    )
+                  : Text(
+                      editing ? 'Enregistrer les modifications' : 'Enregistrer l’adresse',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    ),
             ),
           ),
         ),
       ),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
-                  child: _FormHeader(
-                    title: editing ? 'Modifier l’adresse' : 'Ajouter une adresse',
-                    subtitle: '',
-                    onBack: () => Navigator.maybePop(context),
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _TopLocationButton(
-                          filled: true,
-                          icon: Icons.my_location_rounded,
-                          label: _locating ? 'Localisation…' : 'Ma position',
-                          onTap: _locating ? null : _useCurrentPosition,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _TopLocationButton(
-                          filled: false,
-                          icon: Icons.map_outlined,
-                          label: 'Sur la carte',
-                          onTap: _pickOnMap,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const _SectionTitle('Type d’adresse'),
-                      const SizedBox(height: 10),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final types = _effectiveTypes;
-                          final width = constraints.maxWidth < 620
-                              ? (constraints.maxWidth - 12) / 2
-                              : (constraints.maxWidth - 36) / 4;
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              for (final item in types)
-                                SizedBox(
-                                  width: width,
-                                  child: _TypeButton(
-                                    type: item.code,
-                                    label: item.label,
-                                    icon: _addressTypeIcon(item.code),
-                                    color: _addressTypeColor(item.code),
-                                    selected: _type == item.code,
-                                    onTap: () => setState(() => _type = item.code),
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      _LabeledField(
-                        label: 'Nom de l’adresse',
-                        requiredField: true,
-                        controller: _label,
-                        hint: 'Ex. Chantier Cocody Riviera 3',
-                        validator: (value) => (value ?? '').trim().isEmpty ? 'Renseignez le nom de l’adresse.' : null,
-                      ),
-                      const SizedBox(height: 28),
-                      const _SectionTitle('Localisation'),
-                      const SizedBox(height: 14),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _LabeledField(
-                              label: 'Ville',
-                              requiredField: true,
-                              controller: _city,
-                              hint: 'Abidjan',
-                              validator: (value) => (value ?? '').trim().isEmpty ? 'Ville requise.' : null,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _LabeledField(
-                              label: 'Commune',
-                              requiredField: true,
-                              controller: _commune,
-                              hint: 'Cocody',
-                              validator: (value) => (value ?? '').trim().isEmpty ? 'Commune requise.' : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _LabeledField(
-                              label: 'Quartier / Zone',
-                              requiredField: true,
-                              controller: _quartier,
-                              hint: 'Riviera 3',
-                              validator: (value) => (value ?? '').trim().isEmpty ? 'Quartier requis.' : null,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _LabeledField(
-                              label: 'Sous-quartier / Lot',
-                              labelSuffix: '(optionnel)',
-                              controller: _subQuarter,
-                              hint: 'Ex. Lot 123, Zone A',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      _LabeledField(
-                        label: 'Adresse complète',
-                        requiredField: true,
-                        controller: _fullAddress,
-                        hint: 'Rue des Jardins, près du carrefour, Chantier Cocody Riviera 3.',
-                        maxLines: 3,
-                        maxLength: 200,
-                        validator: (value) => (value ?? '').trim().isEmpty ? 'Adresse complète requise.' : null,
-                      ),
-                      const SizedBox(height: 20),
-                      _LabeledField(
-                        label: 'Point de repère',
-                        labelSuffix: '(optionnel)',
-                        controller: _landmark,
-                        hint: 'Ex. Immeuble beige à côté de la station Shell',
-                      ),
-                      const SizedBox(height: 28),
-                      const _SectionTitle('Contact sur place'),
-                      const SizedBox(height: 14),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _LabeledField(
-                              label: 'Nom complet',
-                              compactLabel: true,
-                              controller: _contactName,
-                              hint: 'Ex. Ali Koné',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _LabeledField(
-                              label: 'Téléphone',
-                              compactLabel: true,
-                              controller: _contactPhone,
-                              hint: '07 00 00 00 00',
-                              keyboardType: TextInputType.phone,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Adresse principale',
-                                  style: TextStyle(color: Color(0xFF061A56), fontSize: 15, fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Switch.adaptive(
-                            value: _isDefault,
-                            activeColor: const Color(0xFF1557E8),
-                            onChanged: (value) => setState(() => _isDefault = value),
-                          ),
-                        ],
-                      ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 16),
-                        _ErrorBox(message: _error!),
-                      ],
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FormHeader extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final VoidCallback onBack;
-
-  const _FormHeader({required this.title, required this.subtitle, required this.onBack});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        InkWell(
-          onTap: onBack,
-          borderRadius: BorderRadius.circular(30),
-          child: const Padding(
-            padding: EdgeInsets.all(3),
-            child: Icon(Icons.arrow_back_rounded, color: Color(0xFF061A56), size: 26),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Color(0xFF061A56),
-                  fontSize: 21,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.4,
-                ),
-              ),
-              if (subtitle.isNotEmpty) const SizedBox(height: 7),
-              if (subtitle.isNotEmpty) Text(
-                subtitle,
-                style: const TextStyle(color: Color(0xFF53658F), fontSize: 13.5),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _InfoBanner extends StatelessWidget {
-  final String text;
-  const _InfoBanner({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFE),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFD3DEF4)),
-      ),
-      child: Row(
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 20),
         children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xFF0A50EB), size: 24),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(color: Color(0xFF17306A), fontSize: 12.8, height: 1.35),
+          if (_locationWarning != null) ...[
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7E0),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF6D98B)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: const BoxDecoration(color: Color(0xFFF2A60C), shape: BoxShape.circle),
+                    child: const Icon(Icons.priority_high_rounded, color: Colors.white, size: 16),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _locationWarning!,
+                      style: const TextStyle(color: Color(0xFF6B4A06), fontSize: 13, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          _Section(
+            title: 'Type d’adresse',
+            children: [
+              SizedBox(
+                height: 40,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: types.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final item = types[index];
+                    return _TypeChip(
+                      label: item.label,
+                      icon: _typeIcon(item.code),
+                      selected: _type == item.code,
+                      onTap: () => setState(() => _type = item.code),
+                    );
+                  },
+                ),
+              ),
+              _Field(
+                label: 'Nom de l’adresse',
+                controller: _label,
+                hint: 'Ex. Chantier Cocody Riviera 3',
+                error: _errors['label'],
+                onChanged: () => _clearError('label'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _Section(
+            title: 'Localisation',
+            children: [
+              _Picker(label: 'Ville', value: _otherCityMode ? _otherCity : _abidjan, onTap: _pickCity),
+              if (_otherCityMode) ...[
+                _Field(
+                  label: 'Nom de la ville',
+                  controller: _city,
+                  hint: 'Ex. Bouaké',
+                  error: _errors['city'],
+                  onChanged: () => _clearError('city'),
+                ),
+                _Field(
+                  label: 'Commune',
+                  controller: _commune,
+                  hint: 'Ex. Koko',
+                  error: _errors['commune'],
+                  onChanged: () => _clearError('commune'),
+                ),
+                _Field(
+                  label: 'Quartier / Zone',
+                  controller: _quartier,
+                  hint: 'Ex. Quartier Commerce',
+                  error: _errors['quartier'],
+                  onChanged: () => _clearError('quartier'),
+                ),
+              ] else ...[
+                _Picker(
+                  label: 'Commune',
+                  value: _commune.text,
+                  hint: 'Choisir la commune',
+                  error: _errors['commune'],
+                  onTap: _pickCommune,
+                ),
+                _Picker(
+                  label: 'Quartier / Zone',
+                  value: _otherQuarterMode ? _otherQuarter : _quartier.text,
+                  hint: _commune.text.isEmpty ? 'Choisissez d’abord la commune' : 'Choisir le quartier',
+                  error: _otherQuarterMode ? null : _errors['quartier'],
+                  onTap: _pickQuarter,
+                ),
+                if (_otherQuarterMode)
+                  _Field(
+                    label: 'Nom du quartier / de la zone',
+                    controller: _quartier,
+                    hint: 'Ex. Cité des Arts',
+                    error: _errors['quartier'],
+                    onChanged: () => _clearError('quartier'),
+                  ),
+              ],
+              _Field(label: 'Sous-quartier / Lot', controller: _subQuarter, hint: 'Ex. Lot 123, Zone A'),
+              _Field(
+                label: 'Adresse complète',
+                controller: _fullAddress,
+                hint: 'Ex. Rue des Jardins, près du carrefour, Chantier Cocody Riviera 3.',
+                maxLines: 3,
+                maxLength: 200,
+                error: _errors['address'],
+                onChanged: () => _clearError('address'),
+              ),
+              _Field(
+                label: 'Point de repère',
+                controller: _landmark,
+                hint: 'Ex. Immeuble beige à côté de la station Shell',
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _Section(
+            title: 'Contact sur place',
+            children: [
+              _Field(label: 'Nom complet', controller: _contactName, hint: 'Ex. Ali Koné'),
+              _PhoneField(controller: _contactPhone, error: _errors['phone'], onChanged: () => _clearError('phone')),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _line),
+            ),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Adresse principale',
+                    style: TextStyle(color: _navy, fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Switch(
+                  value: _isDefault,
+                  onChanged: (value) => setState(() => _isDefault = value),
+                  activeThumbColor: Colors.white,
+                  activeTrackColor: OvanieColors.orange,
+                  inactiveThumbColor: Colors.white,
+                  inactiveTrackColor: const Color(0xFFDDE2E9),
+                  trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+                ),
+              ],
             ),
           ),
+          if (_saveError != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF7C9C9)),
+              ),
+              child: Text(_saveError!, style: const TextStyle(color: OvanieColors.danger, fontSize: 13.5)),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _TopLocationButton extends StatelessWidget {
-  final bool filled;
+class _TopButton extends StatelessWidget {
+  const _TopButton({required this.icon, required this.label, required this.onTap, this.loading = false});
+
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
-
-  const _TopLocationButton({required this.filled, required this.icon, required this.label, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final child = FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 23),
-          const SizedBox(width: 11),
-          Text(label, maxLines: 1, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
-        ],
-      ),
-    );
-    return SizedBox(
-      height: 58,
-      child: filled
-          ? FilledButton(
-              onPressed: onTap,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFFF4C0A),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: child,
-            )
-          : OutlinedButton(
-              onPressed: onTap,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF0A50EB),
-                side: const BorderSide(color: Color(0xFFB7C4E4), width: 1.1),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: child,
-            ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(color: Color(0xFF061A56), fontSize: 17, fontWeight: FontWeight.w900),
-    );
-  }
-}
-
-class _TypeButton extends StatelessWidget {
-  final String type;
-  final String label;
-  final IconData icon;
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _TypeButton({
-    required this.type,
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 62,
+      height: 46,
       child: OutlinedButton(
-        onPressed: onTap,
+        onPressed: onTap ?? (loading ? () {} : null),
         style: OutlinedButton.styleFrom(
-          foregroundColor: selected ? const Color(0xFF0A50EB) : const Color(0xFF061A56),
-          backgroundColor: Colors.white,
-          side: BorderSide(color: selected ? const Color(0xFF0A50EB) : const Color(0xFFD6DDEB), width: selected ? 1.6 : 1),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          foregroundColor: _navy,
+          side: const BorderSide(color: _navy, width: 1.3),
           padding: const EdgeInsets.symmetric(horizontal: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
         ),
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(width: 9),
-              Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+              if (loading)
+                const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2.2, color: _navy))
+              else
+                Icon(icon, size: 22),
+              const SizedBox(width: 10),
+              Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             ],
           ),
         ),
@@ -681,155 +633,268 @@ class _TypeButton extends StatelessWidget {
   }
 }
 
-class _StaticSelectField extends StatelessWidget {
-  final String label;
-  final bool requiredField;
-  final String value;
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.children});
 
-  const _StaticSelectField({required this.label, required this.requiredField, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FieldLabel(label: label, requiredField: requiredField),
-        const SizedBox(height: 9),
-        Container(
-          height: 54,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFD5DCEB)),
-          ),
-          child: Row(
-            children: [
-              Expanded(child: Text(value, style: const TextStyle(color: Color(0xFF061A56), fontSize: 14.5))),
-              const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF061A56)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LabeledField extends StatelessWidget {
-  final String label;
-  final String? labelSuffix;
-  final bool requiredField;
-  final bool compactLabel;
-  final TextEditingController controller;
-  final String? hint;
-  final int maxLines;
-  final int? maxLength;
-  final IconData? suffixIcon;
-  final TextInputType? keyboardType;
-  final String? Function(String?)? validator;
-
-  const _LabeledField({
-    required this.label,
-    required this.controller,
-    this.labelSuffix,
-    this.requiredField = false,
-    this.compactLabel = false,
-    this.hint,
-    this.maxLines = 1,
-    this.maxLength,
-    this.suffixIcon,
-    this.keyboardType,
-    this.validator,
-  });
+  final String title;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FieldLabel(
-          label: label,
-          suffix: labelSuffix,
-          requiredField: requiredField,
-          compact: compactLabel,
-        ),
-        const SizedBox(height: 9),
-        TextFormField(
-          controller: controller,
-          validator: validator,
-          keyboardType: keyboardType,
-          maxLines: maxLines,
-          maxLength: maxLength,
-          style: const TextStyle(color: Color(0xFF061A56), fontSize: 14.2),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(color: Color(0xFF8A96B0), fontSize: 13.8),
-            filled: true,
-            fillColor: Colors.white,
-            counterStyle: const TextStyle(color: Color(0xFF53658F), fontSize: 10.5),
-            suffixIcon: suffixIcon == null ? null : Icon(suffixIcon, color: const Color(0xFF061A56)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: maxLines > 1 ? 14 : 15),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFD5DCEB)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFD5DCEB)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF0A50EB), width: 1.4),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _FieldLabel extends StatelessWidget {
-  final String label;
-  final String? suffix;
-  final bool requiredField;
-  final bool compact;
-
-  const _FieldLabel({required this.label, this.suffix, this.requiredField = false, this.compact = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return RichText(
-      text: TextSpan(
-        style: TextStyle(
-          color: const Color(0xFF061A56),
-          fontSize: compact ? 11.5 : 13.2,
-          fontWeight: FontWeight.w700,
-        ),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextSpan(text: label),
-          if (suffix != null) TextSpan(text: ' $suffix', style: const TextStyle(color: Color(0xFF53658F), fontWeight: FontWeight.w500)),
-          if (requiredField) const TextSpan(text: ' *', style: TextStyle(color: Color(0xFFFF3B16))),
+          Text(
+            title,
+            style: const TextStyle(color: _navy, fontSize: 17, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 10),
+          ...children,
         ],
       ),
     );
   }
 }
 
-class _ErrorBox extends StatelessWidget {
-  final String message;
-  const _ErrorBox({required this.message});
+class _TypeChip extends StatelessWidget {
+  const _TypeChip({required this.label, required this.icon, required this.selected, required this.onTap});
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF1F1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFFC8C8)),
+    return Material(
+      color: selected ? OvanieColors.orange : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: selected ? OvanieColors.orange : _fieldBorder),
       ),
-      child: Text(message, style: const TextStyle(color: Color(0xFFB42318), fontWeight: FontWeight.w700)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: selected ? Colors.white : const Color(0xFF3B4A60)),
+              const SizedBox(width: 7),
+              Text(
+                label,
+                style: TextStyle(color: selected ? Colors.white : _navy, fontSize: 13.5, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Label extends StatelessWidget {
+  const _Label(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 12, bottom: 6),
+    child: Text(text, style: const TextStyle(color: _muted, fontSize: 13.5)),
+  );
+}
+
+class _ErrorText extends StatelessWidget {
+  const _ErrorText(this.text);
+
+  final String? text;
+
+  @override
+  Widget build(BuildContext context) {
+    if (text == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Text(text!, style: const TextStyle(color: OvanieColors.danger, fontSize: 13)),
+    );
+  }
+}
+
+OutlineInputBorder _border(Color color, [double width = 1.1]) => OutlineInputBorder(
+  borderRadius: BorderRadius.circular(9),
+  borderSide: BorderSide(color: color, width: width),
+);
+
+class _Field extends StatelessWidget {
+  const _Field({
+    required this.label,
+    required this.controller,
+    this.hint,
+    this.error,
+    this.onChanged,
+    this.maxLines = 1,
+    this.maxLength,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String? hint;
+  final String? error;
+  final VoidCallback? onChanged;
+  final int maxLines;
+  final int? maxLength;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasError = error != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Label(label),
+        TextField(
+          controller: controller,
+          minLines: maxLines > 1 ? 2 : 1,
+          maxLines: maxLines,
+          maxLength: maxLength,
+          textCapitalization: TextCapitalization.sentences,
+          onChanged: (_) => onChanged?.call(),
+          style: const TextStyle(color: _navy, fontSize: 15),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: Color(0xFF9AA5B5), fontSize: 14.5),
+            isDense: true,
+            filled: true,
+            fillColor: Colors.white,
+            counterText: '',
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            enabledBorder: _border(hasError ? OvanieColors.danger : _fieldBorder),
+            focusedBorder: _border(hasError ? OvanieColors.danger : _navy, 1.3),
+          ),
+        ),
+        _ErrorText(error),
+      ],
+    );
+  }
+}
+
+class _Picker extends StatelessWidget {
+  const _Picker({required this.label, required this.value, required this.onTap, this.hint = '', this.error});
+
+  final String label;
+  final String value;
+  final String hint;
+  final String? error;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Label(label),
+        Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(9),
+            side: BorderSide(color: error != null ? OvanieColors.danger : _fieldBorder, width: 1.1),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(9),
+            child: SizedBox(
+              height: 48,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 10, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        value.isEmpty ? hint : value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: value.isEmpty ? const Color(0xFF9AA5B5) : _navy,
+                          fontSize: value.isEmpty ? 14.5 : 15,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.keyboard_arrow_down_rounded, color: _navy, size: 24),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        _ErrorText(error),
+      ],
+    );
+  }
+}
+
+class _PhoneField extends StatelessWidget {
+  const _PhoneField({required this.controller, this.error, this.onChanged});
+
+  final TextEditingController controller;
+  final String? error;
+  final VoidCallback? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasError = error != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Label('Téléphone'),
+        Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: hasError ? OvanieColors.danger : _fieldBorder, width: 1.1),
+          ),
+          child: Row(
+            children: [
+              // Les adresses de livraison OVANIE sont en Côte d'Ivoire : indicatif fixe.
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 14),
+                child: Text('+225', style: TextStyle(color: _navy, fontSize: 15)),
+              ),
+              Container(width: 1, height: 28, color: _fieldBorder),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
+                    LengthLimitingTextInputFormatter(14),
+                  ],
+                  onChanged: (_) => onChanged?.call(),
+                  style: const TextStyle(color: _navy, fontSize: 15),
+                  decoration: const InputDecoration(
+                    hintText: '07 08 12 34 56',
+                    hintStyle: TextStyle(color: Color(0xFF9AA5B5), fontSize: 14.5),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    filled: false,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        _ErrorText(error),
+      ],
     );
   }
 }

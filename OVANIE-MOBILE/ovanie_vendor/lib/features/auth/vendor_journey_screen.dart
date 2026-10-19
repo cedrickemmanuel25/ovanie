@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/reference_data/reference_data_store.dart';
+
 import '../../core/ui/ovanie_ui.dart';
 import '../../core/ui/vendor_mockup_ui.dart';
 import '../onboarding/shop_onboarding_screen.dart';
@@ -277,16 +279,16 @@ class _HelpSheet extends StatelessWidget {
               icon: Icons.chat_outlined,
               color: const Color(0xFF128C4A),
               title: 'WhatsApp',
-              value: '01 61 78 18 18',
-              onTap: () => _open(context, 'https://wa.me/2250161781818'),
+              value: OvanieReferenceDataStore.instance.contact.whatsappDisplay,
+              onTap: () => _open(context, OvanieReferenceDataStore.instance.contact.whatsappUrl),
             ),
             const SizedBox(height: 10),
             _HelpAction(
               icon: Icons.call_outlined,
               color: Ov.blue,
               title: 'Appeler',
-              value: '01 61 78 00 00',
-              onTap: () => _open(context, 'tel:0161780000'),
+              value: OvanieReferenceDataStore.instance.contact.phoneDisplay,
+              onTap: () => _open(context, OvanieReferenceDataStore.instance.contact.telUrl),
             ),
           ],
         ),

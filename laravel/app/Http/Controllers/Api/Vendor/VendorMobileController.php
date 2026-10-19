@@ -47,6 +47,7 @@ use Laravel\Sanctum\PersonalAccessToken;
 class VendorMobileController extends Controller
 {
     use VendorMenuEndpoints;
+    use VendorAccountEndpoints;
     /**
      * Ouvre une boutique pour un nouveau vendeur sans compte préalable.
      * Le compte vendeur et la boutique sont créés atomiquement par le même
@@ -295,8 +296,17 @@ class VendorMobileController extends Controller
     public function deliverySettings(Request $request): JsonResponse
     {
         $shop = $this->shopFor($request)->loadMissing('sellerDeliveryProfile', 'sellerDeliveryZones');
+        $settings = app(\App\Services\ShopLogisticsSettingsService::class);
+        $currentMode = $shop->usesSellerLogistics() ? 'seller' : 'ovanie';
+        $openOrders = $shop->hasConfirmedLogistics() ? $settings->openOrdersCount($shop, $currentMode) : 0;
+        $showZones = $shop->usesSellerLogistics() || $request->boolean('configure');
 
         return response()->json([
+            'mode_switch' => [
+                'allowed' => $openOrders === 0,
+                'open_orders' => $openOrders,
+                'message' => $openOrders > 0 ? $settings->switchBlockedMessage($openOrders, $currentMode) : null,
+            ],
             'logistics_type' => $shop->logistics_type,
             'logistics_configured' => $shop->hasConfirmedLogistics(),
             'uses_seller_logistics' => $shop->usesSellerLogistics(),
@@ -304,7 +314,26 @@ class VendorMobileController extends Controller
             'profile' => $shop->usesSellerLogistics() || $request->boolean('configure') ? $shop->sellerDeliveryProfile : null,
             'zones' => $shop->usesSellerLogistics() || $request->boolean('configure') ? $shop->sellerDeliveryZones->values() : [],
             'area_map_url' => $this->staticAreaMapUrl(),
+            // Couverture réelle : contours des communes de chaque zone (orange si active, gris si suspendue).
+            'coverage_map' => ! $showZones ? null : app(\App\Services\CommuneCoverageMapService::class)->map(
+                $shop->sellerDeliveryZones
+                    ->filter(fn ($zone) => filled($zone->commune))
+                    ->map(fn ($zone) => ['name' => (string) $zone->commune, 'active' => (bool) $zone->is_active])
+                    ->unique('name')
+                    ->values()
+                    ->all()
+            ),
         ]);
+    }
+
+    /** Carte d'une ou plusieurs communes, pour l'aperçu d'une zone en cours de saisie. */
+    public function communeCoverageMap(Request $request, \App\Services\CommuneCoverageMapService $maps): JsonResponse
+    {
+        $this->shopFor($request);
+        $ids = collect((array) $request->input('commune_ids', []))->map(fn ($id) => (int) $id)->filter()->take(13);
+        $names = $ids->isEmpty() ? collect() : \Illuminate\Support\Facades\DB::table('abidjan_communes')->whereIn('id', $ids)->pluck('name');
+
+        return response()->json($maps->map($names->map(fn ($name) => ['name' => (string) $name, 'active' => true])->values()->all()));
     }
 
 
@@ -856,6 +885,7 @@ class VendorMobileController extends Controller
                 'vendor_status' => $this->vendorOrderStatus($order->items),
                 'delivery_provider' => $deliveryProvider,
                 'delivery_provider_label' => $deliveryProviderLabel,
+                'shop_logistics_type' => $shop->usesSellerLogistics() ? 'seller' : 'ovanie',
                 'delivery_status' => $deliveryStatus,
                 'delivery_status_label' => app(OrderWorkflowService::class)->deliveryStatusLabel($deliveryStatus),
                 'estimated_delivery_label' => data_get($tracking, 'estimated_delivery_label'),
@@ -1014,7 +1044,14 @@ class VendorMobileController extends Controller
 
     public function reportCodPayment(Request $request, Order $order): JsonResponse
     {
-        $this->shopFor($request);
+        $shop = $this->shopFor($request);
+        $this->authorizeOrder($order, $shop);
+        $order->loadMissing('items');
+        if (! ($this->cashReportPayload($order, $shop)['can_report'] ?? false)) {
+            return response()->json([
+                'message' => 'Cet encaissement ne peut pas être signalé par la boutique : avec OVANIE Logistics, le livreur partenaire encaisse le client.',
+            ], 422);
+        }
         $this->bindUserToAuth($request);
         $response = $this->callController(VendorOrderController::class, 'confirmPayment', [
             'request' => $request,
@@ -1076,7 +1113,10 @@ class VendorMobileController extends Controller
             ->where('shop_id', $shop->id)
             ->where('status', VendorPayout::STATUS_APPROVED)
             ->where('payout_amount', '>', 0)
-            ->get();
+            ->get()
+            // Un versement déjà demandé n'est pas redemandé.
+            ->filter(fn (VendorPayout $payout) => blank(data_get($payout->meta, 'withdrawal_requested_at')))
+            ->values();
         if ($payouts->isEmpty()) {
             return response()->json(['message' => 'Aucun montant disponible au retrait pour le moment.'], 422);
         }
@@ -1096,6 +1136,21 @@ class VendorMobileController extends Controller
         }
 
         $amount = (float) $payouts->sum('payout_amount');
+
+        // Virement manuel : l'administration doit être prévenue de la demande.
+        if ($sent < $payouts->count()) {
+            app(OrderWorkflowService::class)->notifyAdmins(
+                'Retrait vendeur à effectuer',
+                sprintf('%s demande le virement de %s FCFA (%d versement%s) vers %s %s.',
+                    $shop->name,
+                    number_format($amount, 0, ',', ' '),
+                    $payouts->count(),
+                    $payouts->count() > 1 ? 's' : '',
+                    ['orange' => 'Orange Money', 'mtn' => 'MTN Mobile Money', 'wave' => 'Wave', 'moov' => 'Moov Money'][(string) $shop->mm_operator] ?? 'Mobile Money',
+                    (string) $shop->mm_number),
+                ['category' => 'admin', 'shop_id' => $shop->id, 'url' => route('admin.payouts.index', ['status' => VendorPayout::STATUS_APPROVED])]
+            );
+        }
 
         return response()->json([
             'message' => $sent > 0
@@ -1132,6 +1187,12 @@ class VendorMobileController extends Controller
             'request' => $request,
             'payout' => $payout,
         ]);
+
+        app(OrderWorkflowService::class)->notifyAdmins(
+            'Suivi de versement demandé',
+            sprintf('%s demande un suivi du versement %s (%s FCFA).', $shop->name, $payout->payout_reference, number_format((float) $payout->payout_amount, 0, ',', ' ')),
+            ['category' => 'admin', 'shop_id' => $shop->id, 'url' => route('admin.payouts.index')]
+        );
 
         return response()->json(['message' => 'Demande de suivi envoyée à OVANIE.']);
     }
@@ -1400,11 +1461,15 @@ class VendorMobileController extends Controller
         $paid = in_array($order->payment_status, ['paid', 'escrow_held', 'released_to_vendor'], true);
         $pending = \App\Models\VendorPaymentVerificationRequest::query()
             ->where('order_id', $order->id)->where('shop_id', $shop->id)->where('status', 'pending')->exists();
-        $delivered = $this->visibleVendorItems($order->items(), $shop)->get()
-            ->every(fn ($item) => $item->isVendorDelivered());
+        $items = $this->visibleVendorItems($order->items(), $shop)->get();
+        $delivered = $items->every(fn ($item) => $item->isVendorDelivered());
+        // Avec OVANIE Logistics, c'est le livreur partenaire qui encaisse : le
+        // vendeur n'a rien à déclarer. Seule sa propre livraison est concernée.
+        $sellerDelivery = $items->isNotEmpty()
+            && $items->every(fn ($item) => (string) $item->delivery_provider === OrderWorkflowService::PROVIDER_SELLER);
 
         return [
-            'can_report' => $isCash && ! $paid && ! $pending && $delivered,
+            'can_report' => $isCash && ! $paid && ! $pending && $delivered && $sellerDelivery,
             'pending' => $isCash && $pending,
         ];
     }
@@ -1594,6 +1659,9 @@ class VendorMobileController extends Controller
         $clientName = $order->relationLoaded('client') ? $order->client?->name : null;
         $displayName = trim((string) ($order->delivery_site_name ?: $clientName ?: $order->customer_name ?: 'Client OVANIE'));
         $vendorStatus = $this->vendorOrderStatus($vendorItems);
+        $listProvider = $vendorItems->contains(fn ($item) => $item->delivery_provider === OrderWorkflowService::PROVIDER_SELLER)
+            ? 'seller'
+            : 'ovanie';
 
         return [
             'id' => $order->id,
@@ -1604,6 +1672,9 @@ class VendorMobileController extends Controller
             'payment_method' => $order->payment_method,
             'payment_method_label' => $this->paymentMethodLabel($order->payment_method),
             'vendor_status' => $vendorStatus,
+            // Mode sous lequel la commande a été passée, et s'il diffère du mode actuel de la boutique.
+            'delivery_provider' => $listProvider,
+            'other_logistics_mode' => $listProvider !== ($shop->usesSellerLogistics() ? 'seller' : 'ovanie'),
             'items_count' => $vendorItems->count(),
             'public_products_total' => round($publicTotal, 2),
             'seller_products_total' => round($sellerTotal, 2),

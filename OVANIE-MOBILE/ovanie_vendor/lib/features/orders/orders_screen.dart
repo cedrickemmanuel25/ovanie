@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
 import '../../core/ui/vendor_mockup_ui.dart';
 import '../../data/vendor_repository.dart';
+import '../auth/vendor_session.dart';
 import '../notifications/vendor_notifications_screen.dart';
 import 'order_detail_screen.dart';
 import 'order_ui.dart';
@@ -34,6 +35,8 @@ class _OrdersScreenState extends State<OrdersScreen>
   String _status = 'all';
   String _sort = 'newest';
   int _notificationCount = 0;
+
+  bool get _sellerLogistics => '${VendorSession.instance.shop?['logistics_type']}' == 'seller';
 
   static const Map<String, String> _filters = <String, String>{
     'all': 'Toutes',
@@ -457,9 +460,11 @@ class _OrdersScreenState extends State<OrdersScreen>
               ),
               const SizedBox(width: 8),
               Expanded(
+                // Avec OVANIE Logistics, le vendeur n'expédie pas : il remet
+                // la commande prête au livreur partenaire.
                 child: _QuickAction(
-                  icon: Icons.local_shipping_outlined,
-                  label: 'Expédier',
+                  icon: _sellerLogistics ? Icons.local_shipping_outlined : Icons.handshake_outlined,
+                  label: _sellerLogistics ? 'Expédier' : 'Remettre',
                   color: const Color(0xFF1456D9),
                   background: const Color(0xFFE1ECFD),
                   onTap: () => _setFilter('preparing'),
@@ -582,6 +587,26 @@ class _OrdersScreenState extends State<OrdersScreen>
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w500),
                       ),
+                      // Commande terminée sous l'ancien mode logistique de la boutique.
+                      if (item['other_logistics_mode'] == true) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.history_rounded, color: Mk.hint, size: 15),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                item['delivery_provider'] == 'seller'
+                                    ? 'Ancien mode : livraison par votre boutique'
+                                    : 'Ancien mode : OVANIE Logistics',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Mk.muted, fontSize: 12, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 8,

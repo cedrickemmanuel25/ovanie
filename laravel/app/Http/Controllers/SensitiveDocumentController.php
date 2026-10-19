@@ -62,6 +62,27 @@ class SensitiveDocumentController extends Controller
         return $paths->filter()->unique()->values();
     }
 
+    /**
+     * Preuves envoyées par le client (photos puis vidéos), dans l'ordre affiché
+     * par l'application mobile. Les preuves du vendeur n'en font pas partie.
+     */
+    public static function clientProofPaths(ReturnModel $return): \Illuminate\Support\Collection
+    {
+        $paths = collect([$return->photo_proof]);
+        foreach (['photo_proofs', 'video_proofs'] as $key) {
+            foreach ((array) data_get($return->meta, $key, []) as $entry) {
+                $paths->push(is_string($entry) ? $entry : data_get($entry, 'path'));
+            }
+        }
+        return $paths->filter()->unique()->values();
+    }
+
+    // Lien signé à durée limitée : l'application client affiche ses propres preuves.
+    public function signedClientReturn(ReturnModel $return, int $document): Response
+    {
+        return $this->serve(self::clientProofPaths($return)->get($document));
+    }
+
     public function clientReturn(ReturnModel $return): Response
     {
         abort_unless((int) $return->client_id === (int) auth()->id(), 403);

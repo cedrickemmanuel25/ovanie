@@ -167,6 +167,14 @@ class SupportConversationController extends Controller
             ->with('success', 'Suivi sortant créé. Il est pris en charge par vous et n’est pas renvoyé automatiquement à l’assistant IA.');
     }
 
+    /** Pièce jointe envoyée par le demandeur dans la conversation. */
+    public function attachment(SupportConversation $conversation, int $message, int $index)
+    {
+        $row = $conversation->messages()->whereKey($message)->firstOrFail();
+
+        return \App\Http\Controllers\Api\Support\PublicSupportChatController::attachmentResponse($row, $index);
+    }
+
     public function show(SupportConversation $conversation)
     {
         $conversation->load([

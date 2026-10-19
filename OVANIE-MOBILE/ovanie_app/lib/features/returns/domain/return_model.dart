@@ -40,6 +40,11 @@ class ClientReturnCase {
   final String logisticsStatusLabel;
   final String vendorResponse;
   final double? refundAmount;
+  final String refundMethodLabel;
+  final String refundReference;
+
+  /// Preuves envoyées par le client (liens signés temporaires).
+  final List<ReturnProofMedia> proofMedia;
   final double? unitPrice;
   final int photoCount;
   final int videoCount;
@@ -90,6 +95,9 @@ class ClientReturnCase {
     required this.logisticsStatusLabel,
     required this.vendorResponse,
     required this.refundAmount,
+    this.refundMethodLabel = '',
+    this.refundReference = '',
+    this.proofMedia = const [],
     required this.unitPrice,
     required this.photoCount,
     required this.videoCount,
@@ -168,6 +176,18 @@ class ClientReturnCase {
       logisticsStatusLabel: cleanOvanieText((json['logistics_status_label'] ?? '').toString()),
       vendorResponse: cleanOvanieText((json['vendor_response'] ?? '').toString()),
       refundAmount: refundAmount,
+      refundMethodLabel: (json['refund_method_label'] ?? '').toString().trim(),
+      refundReference: (json['refund_reference'] ?? '').toString().trim(),
+      proofMedia: json['proof_media'] is List
+          ? (json['proof_media'] as List)
+                .whereType<Map>()
+                .map((raw) => ReturnProofMedia(
+                      url: (raw['url'] ?? '').toString(),
+                      video: raw['type'] == 'video',
+                    ))
+                .where((media) => media.url.isNotEmpty)
+                .toList(growable: false)
+          : const [],
       unitPrice: unitPrice,
       photoCount: int.tryParse('${json['photo_count'] ?? 0}') ?? 0,
       videoCount: int.tryParse('${json['video_count'] ?? 0}') ?? 0,
@@ -322,4 +342,11 @@ class EligibleReturnItem {
       delivered: json['delivered'] == true,
     );
   }
+}
+
+class ReturnProofMedia {
+  final String url;
+  final bool video;
+
+  const ReturnProofMedia({required this.url, required this.video});
 }

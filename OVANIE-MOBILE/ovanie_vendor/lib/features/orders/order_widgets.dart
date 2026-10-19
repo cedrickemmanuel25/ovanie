@@ -51,7 +51,11 @@ class OrderPage extends StatelessWidget {
     this.emptyMessage = 'Cette commande est indisponible.',
     this.gap = 10,
     this.showLogo = false,
+    this.showTabs = true,
   });
+
+  /// Faux pour un écran de saisie : la barre d'onglets laisse la place au bouton.
+  final bool showTabs;
 
   final String title;
   final String subtitle;
@@ -136,8 +140,8 @@ class OrderPage extends StatelessWidget {
         bottomNavigationBar: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (hasContent && actions.isNotEmpty) MkActionBar(children: actions),
-            VendorBottomBar(selected: tab),
+            if (hasContent && actions.isNotEmpty) MkActionBar(safeArea: !showTabs, children: actions),
+            if (showTabs) VendorBottomBar(selected: tab),
           ],
         ),
       ),
@@ -180,7 +184,7 @@ class OrderHeadCard extends StatelessWidget {
           OrderProgressStepper(
             currentStep: currentStep,
             compact: true,
-            lastLabel: orderUsesOvanieLogistics(order) ? 'Remise à OVANIE' : 'Livrée',
+            shippedLabel: orderUsesOvanieLogistics(order) ? 'Remise au livreur' : 'Expédiée',
           ),
         ],
       ),

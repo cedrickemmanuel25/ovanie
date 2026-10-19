@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/ui/mk_dialogs.dart';
 import '../menu/menu_ui.dart';
 import 'vendor_ai_chat_screen.dart';
 
@@ -136,9 +137,7 @@ class _VendorSupportScreenState extends State<VendorSupportScreen> {
       ),
     );
     if (sent == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Votre demande a été envoyée au Support OVANIE.')),
-      );
+      mkToast(context, 'Votre demande a été envoyée au Support OVANIE.');
       await _load();
     }
   }
@@ -175,25 +174,47 @@ class _VendorSupportScreenState extends State<VendorSupportScreen> {
       hasContent: _loaded,
       children: [
         _hero(),
-        MenuMetrics(
-          items: [
-            ('À suivre', '$following', Icons.description_outlined, menuOrange),
-            ('Total', '${tickets.length}', Icons.folder_open_rounded, menuAzure),
-          ],
-        ),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Material(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: const BorderSide(color: Color(0xFFFFB37A), width: 1.2),
+            ),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const VendorAiChatScreen())),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
                 child: Row(
                   children: [
-                    menuIcon(Icons.chat_bubble_outline_rounded, color: menuAzure, size: 42),
+                    Stack(
+                      children: [
+                        ClipOval(
+                          child: Image.asset(
+                            'assets/images/mockups/nnan.jpg',
+                            width: 52,
+                            height: 52,
+                            fit: BoxFit.cover,
+                            excludeFromSemantics: true,
+                          ),
+                        ),
+                        Positioned(
+                          right: 1,
+                          bottom: 1,
+                          child: Container(
+                            width: 13,
+                            height: 13,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF22C55E),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Column(
@@ -201,15 +222,18 @@ class _VendorSupportScreenState extends State<VendorSupportScreen> {
                         children: [
                           Text(
                             'Discuter avec le support',
-                            style: TextStyle(color: menuBlue, fontSize: 14.5, fontWeight: FontWeight.w700),
+                            style: TextStyle(color: menuBlue, fontSize: 15, fontWeight: FontWeight.w800),
                           ),
+                          SizedBox(height: 2),
                           Text(
                             'Réponse immédiate, relais vers un conseiller',
-                            style: TextStyle(color: menuMuted, fontSize: 12.5, fontWeight: FontWeight.w500),
+                            style: TextStyle(color: menuMuted, fontSize: 12.5, height: 1.3, fontWeight: FontWeight.w500),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(width: 6),
+                    menuIcon(Icons.sms_outlined, color: menuOrange, size: 40),
                     const Icon(Icons.chevron_right_rounded, color: Mk.icon, size: 24),
                   ],
                 ),
@@ -217,12 +241,21 @@ class _VendorSupportScreenState extends State<VendorSupportScreen> {
             ),
           ),
         ),
+        MenuMetrics(
+          items: [
+            ('À suivre', '$following', Icons.description_outlined, menuOrange),
+            ('Total', '${tickets.length}', Icons.folder_open_rounded, menuAzure),
+          ],
+        ),
         Row(
           children: [
             const Expanded(
               child: Padding(
                 padding: EdgeInsets.only(left: 4),
-                child: Text('Mes dossiers', style: TextStyle(color: menuBlue, fontSize: 19, fontWeight: FontWeight.w800)),
+                child: Text(
+                  'Mes dossiers',
+                  style: TextStyle(color: menuBlue, fontSize: 19, fontWeight: FontWeight.w800),
+                ),
               ),
             ),
             IconButton(
@@ -240,114 +273,109 @@ class _VendorSupportScreenState extends State<VendorSupportScreen> {
             hint: 'Vos demandes et les réponses de l’équipe OVANIE apparaîtront ici.',
           ),
         for (final ticket in tickets) _ticketCard(ticket),
-        menuInfo(
-          'Pour une commande, un versement ou une livraison, ouvrez l’assistance depuis l’écran concerné : '
-          'OVANIE associera automatiquement le bon contexte à votre dossier.',
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEDF3FC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFDCE7F8)),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline_rounded, color: menuAzure, size: 28),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Pour une commande, un versement ou une livraison, ouvrez l’assistance depuis l’écran concerné : '
+                  'OVANIE associera automatiquement le bon contexte à votre dossier.',
+                  style: TextStyle(color: menuMuted, fontSize: 12.5, height: 1.45, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
+  /// Bandeau des maquettes : visuel net du conseiller, nom réel du compte et
+  /// bouton « Nouvelle demande » posés aux emplacements prévus.
   Widget _hero() {
     final account = _shopName.isNotEmpty ? _shopName : screenText(mapOf(_data['requester'])['name'], '');
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFF031945), Color(0xFF0A3A9A)],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Le conseiller occupe le tiers droit : le texte reste lisible à gauche.
-          Positioned.fill(
-            child: FractionallySizedBox(
-              widthFactor: .4,
-              heightFactor: 1,
-              alignment: Alignment.centerRight,
-              child: ShaderMask(
-              blendMode: BlendMode.dstIn,
-              shaderCallback: (rect) =>
-                  const LinearGradient(colors: [Colors.transparent, Colors.white], stops: [0, .35]).createShader(rect),
-              child: Image.asset(
-                'assets/images/mockups/support_agent.jpg',
-                fit: BoxFit.cover,
-                alignment: Alignment.topCenter,
-                excludeFromSemantics: true,
-              ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: .14), shape: BoxShape.circle),
-                  child: const Icon(Icons.headset_mic_rounded, color: Colors.white, size: 26),
-                ),
-                const SizedBox(height: 12),
-                const FractionallySizedBox(
-                  widthFactor: .6,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Support Vendeur OVANIE',
-                    style: TextStyle(color: Colors.white, fontSize: 18, height: 1.2, fontWeight: FontWeight.w800),
-                  ),
-                ),
-                if (account.isNotEmpty)
-                  FractionallySizedBox(
-                    widthFactor: .6,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Compte : $account',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Color(0xFFBFD3F6), fontSize: 13, height: 1.35, fontWeight: FontWeight.w500),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: AspectRatio(
+          aspectRatio: 810 / 392,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final w = box.maxWidth, h = box.maxHeight;
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: Image.asset(
+                      'assets/images/mockups/support_banner.jpg',
+                      fit: BoxFit.cover,
+                      semanticLabel: 'Support Vendeur OVANIE',
                     ),
                   ),
-                const SizedBox(height: 14),
-                FractionallySizedBox(
-                  widthFactor: .62,
-                  alignment: Alignment.centerLeft,
-                  child: Material(
-                    color: Mk.orange,
-                    borderRadius: BorderRadius.circular(12),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: _compose,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                'Nouvelle demande',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                  if (account.isNotEmpty)
+                    Positioned(
+                      left: w * .04,
+                      top: h * .515,
+                      width: w * .5,
+                      height: h * .1,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Compte : $account',
+                          maxLines: 1,
+                          style: const TextStyle(color: Color(0xFFA9C8FF), fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    left: w * .022,
+                    top: h * .735,
+                    width: w * .69,
+                    height: h * .215,
+                    child: Material(
+                      color: Mk.orange,
+                      borderRadius: BorderRadius.circular(14),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: _compose,
+                        child: const Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Nouvelle demande',
+                                    style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 22),
+                                ],
                               ),
                             ),
-                            SizedBox(width: 8),
-                            Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 20),
-                          ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              );
+            },
           ),
-        ],
+        ),
       ),
     );
   }
@@ -372,19 +400,38 @@ class _VendorSupportScreenState extends State<VendorSupportScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (screenText(ticket['reference'], '').isNotEmpty)
-                        Text(
-                          '${ticket['reference']}',
-                          style: const TextStyle(color: menuMuted, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            screenText(ticket['reference'], ''),
+                            style: const TextStyle(color: menuMuted, fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                                  decoration: BoxDecoration(color: color.withValues(alpha: .13), borderRadius: BorderRadius.circular(99)),
+                                  child: Text(
+                                    _statusLabel(ticket['status']),
+                                    style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
                       Text(
                         screenText(ticket['subject'], 'Demande d’assistance'),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: menuBlue, fontSize: 14.5, height: 1.25, fontWeight: FontWeight.w800),
                       ),
-                      const SizedBox(height: 6),
-                      menuPill(_statusLabel(ticket['status']), color: color),
                     ],
                   ),
                 ),
@@ -480,7 +527,10 @@ class _ComposeSheetState extends State<_ComposeSheet> {
                   children: [
                     _sheetHandle(),
                     const SizedBox(height: 14),
-                    const Text('Nouvelle demande', style: TextStyle(color: menuBlue, fontSize: 21, fontWeight: FontWeight.w800)),
+                    const Text(
+                      'Nouvelle demande',
+                      style: TextStyle(color: menuBlue, fontSize: 21, fontWeight: FontWeight.w800),
+                    ),
                     const SizedBox(height: 4),
                     const Text(
                       'Votre demande sera liée à votre compte vendeur et à votre boutique.',
@@ -515,7 +565,18 @@ class _ComposeSheetState extends State<_ComposeSheet> {
                     ],
                     const SizedBox(height: 14),
                     const MkLabel('Catégorie', required: true),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
+                    MenuSelect(
+                      value: _categories[_category],
+                      hint: 'Choisir une catégorie',
+                      onTap: _sending
+                          ? null
+                          : () async {
+                              final picked = await menuPick<String>(context, 'Catégorie', _categories, _category);
+                              if (picked != null && mounted) setState(() => _category = picked);
+                            },
+                    ),
+                    const SizedBox(height: 10),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -523,14 +584,9 @@ class _ComposeSheetState extends State<_ComposeSheet> {
                         for (final entry in _categories.entries)
                           SizedBox(
                             height: 38,
-                            child: menuChip(
-                              entry.value,
-                              _category == entry.key,
-                              () {
-                                if (!_sending) setState(() => _category = entry.key);
-                              },
-                              activeColor: Mk.orange,
-                            ),
+                            child: menuChip(entry.value, _category == entry.key, () {
+                              if (!_sending) setState(() => _category = entry.key);
+                            }, activeColor: Mk.orange),
                           ),
                       ],
                     ),
@@ -653,13 +709,19 @@ class _VendorTicketSheetState extends State<_VendorTicketSheet> {
                 _sheetHandle(),
                 const SizedBox(height: 12),
                 if (screenText(_ticket['reference'], '').isNotEmpty)
-                  Text('${_ticket['reference']}', style: const TextStyle(color: menuMuted, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  Text(
+                    '${_ticket['reference']}',
+                    style: const TextStyle(color: menuMuted, fontSize: 12.5, fontWeight: FontWeight.w600),
+                  ),
                 Text(
                   screenText(_ticket['subject'], 'Demande d’assistance'),
                   style: const TextStyle(color: menuBlue, fontSize: 19, height: 1.25, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
-                Align(alignment: Alignment.centerLeft, child: menuPill(_statusLabel(status), color: _statusColor(status))),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: menuPill(_statusLabel(status), color: _statusColor(status)),
+                ),
                 const SizedBox(height: 10),
                 Expanded(
                   child: ListView(
@@ -771,10 +833,7 @@ class _VendorTicketSheetState extends State<_VendorTicketSheet> {
     final bubble = Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
       constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .7),
-      decoration: BoxDecoration(
-        color: mine ? Mk.navy : const Color(0xFFEFF2F8),
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: BoxDecoration(color: mine ? Mk.navy : const Color(0xFFEFF2F8), borderRadius: BorderRadius.circular(14)),
       child: Text(
         screenText(m['body'], ''),
         style: TextStyle(color: mine ? Colors.white : menuBlue, fontSize: 14, height: 1.4, fontWeight: FontWeight.w500),
@@ -794,7 +853,10 @@ class _VendorTicketSheetState extends State<_VendorTicketSheet> {
               if (time.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 3, left: 4, right: 4),
-                  child: Text(time, style: const TextStyle(color: Mk.hint, fontSize: 11.5, fontWeight: FontWeight.w500)),
+                  child: Text(
+                    time,
+                    style: const TextStyle(color: Mk.hint, fontSize: 11.5, fontWeight: FontWeight.w500),
+                  ),
                 ),
             ],
           ),

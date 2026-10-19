@@ -22,6 +22,14 @@ class VendorShopStatusController extends Controller
                 ->with('error', 'Vous devez créer une boutique avant d’accéder à cette page.');
         }
 
+        return view('vendor.shop-status', $this->summary($shop, $logisticsValidator));
+    }
+
+    /**
+     * Données d'état partagées par le Web et l'application OVANIE Vendeur.
+     */
+    public function summary(Shop $shop, SellerLogisticsValidator $logisticsValidator): array
+    {
         $logisticsValidation = $logisticsValidator->validate($shop);
         if ($shop->logistics_status !== $logisticsValidation['status']) {
             $shop = $logisticsValidator->synchronizeShopStatus($shop);
@@ -86,7 +94,7 @@ class VendorShopStatusController extends Controller
             ],
         ];
 
-        return view('vendor.shop-status', compact(
+        return compact(
             'shop',
             'statusLabel',
             'statusDescription',
@@ -94,7 +102,8 @@ class VendorShopStatusController extends Controller
             'steps',
             'commercialOpen',
             'canPublish',
-            'logisticsValidation'
-        ));
+            'logisticsValidation',
+            'identityDocumentsComplete'
+        );
     }
 }

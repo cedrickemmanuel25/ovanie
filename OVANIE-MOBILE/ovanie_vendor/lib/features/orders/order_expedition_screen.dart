@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/reference_data/reference_data_store.dart';
 import '../../core/ui/vendor_mockup_ui.dart';
 import '../../core/ui/vendor_select.dart';
 import '../../data/vendor_repository.dart';
@@ -32,7 +33,6 @@ class _OrderExpeditionScreenState extends State<OrderExpeditionScreen> {
   static const _providers = <String, String>{'ovanie': 'OVANIE Logistics', 'seller': 'Livraison vendeur'};
 
   /// Numéro du support OVANIE Logistics (coordonnées officielles).
-  static const _logisticsPhone = '0161780000';
 
   Map<String, dynamic> _order = <String, dynamic>{};
   final List<bool> _confirmed = List<bool>.filled(_checks.length, false);
@@ -291,7 +291,7 @@ class _OrderExpeditionScreenState extends State<OrderExpeditionScreen> {
                     icon: Icons.headset_mic_rounded,
                     color: orderBlue,
                     height: 44,
-                    onTap: () => showOrderPhoneSheet(context, name: 'OVANIE Logistics', phone: _logisticsPhone),
+                    onTap: () => showOrderPhoneSheet(context, name: 'OVANIE Logistics', phone: OvanieReferenceDataStore.instance.contact.phone),
                   ),
                 ),
               ],
@@ -317,9 +317,22 @@ class _OrderExpeditionScreenState extends State<OrderExpeditionScreen> {
                 final picked = await showVendorSelect<String>(
                   context,
                   title: 'Groupe de livraison',
+                  subtitle: 'Sélectionnez le groupe de livraison',
+                  boxed: true,
+                  searchable: false,
                   items: _providers.keys.toList(),
                   label: (value) => _providers[value]!,
                   selected: _provider,
+                  leading: (value) => ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.asset(
+                      'assets/images/mockups/${value == 'ovanie' ? 'ship_ovanie' : 'ship_seller'}.jpg',
+                      width: 96,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      excludeFromSemantics: true,
+                    ),
+                  ),
                 );
                 if (picked != null && mounted) setState(() => _provider = picked);
               },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/push/push_notification_service.dart';
 import '../../core/ui/vendor_design.dart';
 import '../dashboard/vendor_dashboard_screen.dart';
 import '../finance/finance_screen.dart';
@@ -25,6 +26,8 @@ class _VendorShellState extends State<VendorShell> {
     super.initState();
     _tab = vendorTabNotifier.value;
     vendorTabNotifier.addListener(_syncExternalTab);
+    // Alertes instantanées sur ce téléphone (sans effet si Firebase est absent).
+    PushNotificationService.instance.initialize();
     _pages = [
       VendorDashboardScreen(onSelectTab: _selectTab),
       const ProductsScreen(),

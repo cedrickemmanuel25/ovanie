@@ -1,10 +1,20 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:open_filex/open_filex.dart';
 
-import '../../../core/network/api_client.dart';
 import '../../../app/theme.dart';
+import '../../../core/network/api_client.dart';
+import '../../payments/presentation/payment_ui.dart';
+import '../data/support_repository.dart';
+import '../domain/support_models.dart';
+
+const _navy = Color(0xFF0A1B3D);
+const _muted = Color(0xFF6B7890);
+const _agentPhoto = 'assets/images/checkout/support_agent.jpg';
 
 /// Conversation avec l'assistante OVANIE (IA), relayée à un conseiller
 /// humain du support quand la demande le nécessite.
@@ -19,15 +29,18 @@ class ClientAiChatScreen extends StatefulWidget {
 }
 
 class _ChatMessage {
-  _ChatMessage(this.sender, this.body, this.at);
+  _ChatMessage(this.sender, this.body, this.at, {this.attachments = const []});
+
   final String sender;
   final String body;
   final DateTime at;
+  final List<SupportAttachment> attachments;
+
   bool get mine => sender == 'customer';
+  bool get system => sender == 'system';
 }
 
 class _ClientAiChatScreenState extends State<ClientAiChatScreen> {
-  static const _navy = OvanieColors.navy;
   static const _suggestions = [
     'Où en est ma commande ?',
     'Ma livraison est en retard',
@@ -46,12 +59,14 @@ class _ClientAiChatScreenState extends State<ClientAiChatScreen> {
   bool _closed = false;
   bool _loading = true;
   bool _typing = false;
+  bool _uploading = false;
   Timer? _poll;
 
   @override
   void initState() {
     super.initState();
     if (widget.initialMessage != null) _input.text = widget.initialMessage!;
+    _input.addListener(() => setState(() {}));
     _resume();
   }
 
@@ -94,11 +109,25 @@ class _ClientAiChatScreenState extends State<ClientAiChatScreen> {
       _ticket = (data['ticket'] as Map?)?['reference']?.toString() ?? _ticket;
       _messages
         ..clear()
-        ..addAll(rows.map((m) => _ChatMessage(
+        ..addAll(
+          rows.map(
+            (m) => _ChatMessage(
               '${m['sender']}',
               '${m['body'] ?? ''}',
               DateTime.tryParse('${m['created_at']}')?.toLocal() ?? DateTime.now(),
-            )));
+              attachments: [
+                for (final file in (m['attachments'] as List? ?? const []).whereType<Map>())
+                  SupportAttachment(
+                    name: '${file['name'] ?? 'Fichier'}',
+                    mime: '${file['mime'] ?? ''}',
+                    size: int.tryParse('${file['size'] ?? ''}'),
+                    url: '',
+                    downloadEndpoint: '/${file['path'] ?? ''}',
+                  ),
+              ],
+            ),
+          ),
+        );
     });
     if (_messages.length != before) _toBottom();
     _schedulePoll();
@@ -121,12 +150,12 @@ class _ClientAiChatScreenState extends State<ClientAiChatScreen> {
     });
     _toBottom();
     try {
-      final payload = {
-        'message': text,
-        if (widget.orderReference != null) 'order_reference': widget.orderReference,
-      };
+      final payload = {'message': text, if (widget.orderReference != null) 'order_reference': widget.orderReference};
       final r = _token == null
-          ? await ApiClient.dio.post('/support/chat/start', data: {...payload, 'source_app': 'client_mobile', 'service': 'client', 'channel': 'chat'})
+          ? await ApiClient.dio.post(
+              '/support/chat/start',
+              data: {...payload, 'source_app': 'client_mobile', 'service': 'client', 'channel': 'chat'},
+            )
           : await ApiClient.dio.post('/support/chat/$_token/messages', data: payload);
       ApiClient.ensureSuccess(r);
       final data = Map<String, dynamic>.from(r.data as Map);
@@ -144,10 +173,43 @@ class _ClientAiChatScreenState extends State<ClientAiChatScreen> {
       if (!mounted) return;
       setState(() => _messages.removeLast());
       _input.text = text;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.friendlyError(e))));
+      showOvanieToast(context, ApiClient.friendlyError(e), error: true);
     } finally {
       if (mounted) setState(() => _typing = false);
       _toBottom();
+    }
+  }
+
+  /// Joint une photo ou un PDF (5 Mo max) à la conversation en cours.
+  Future<void> _attach() async {
+    if (_token == null || _uploading) return;
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+    );
+    final path = result?.files.single.path;
+    if (path == null || !mounted) return;
+    setState(() => _uploading = true);
+    try {
+      final r = await ApiClient.dio.post(
+        '/support/chat/$_token/attachments',
+        data: FormData.fromMap({'file': await MultipartFile.fromFile(path)}),
+      );
+      ApiClient.ensureSuccess(r);
+      await _refresh();
+    } catch (e) {
+      if (mounted) showOvanieToast(context, ApiClient.friendlyError(e), error: true);
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _openAttachment(SupportAttachment attachment) async {
+    try {
+      final file = await const SupportRepository().downloadAttachment(attachment);
+      await OpenFilex.open(file.path);
+    } catch (e) {
+      if (mounted) showOvanieToast(context, ApiClient.friendlyError(e), error: true);
     }
   }
 
@@ -165,33 +227,68 @@ class _ClientAiChatScreenState extends State<ClientAiChatScreen> {
   void _toBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
-        _scroll.animateTo(_scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
 
   String _time(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
+  /// Éléments de la conversation : messages, puis l'encart « relais » placé
+  /// juste après le premier message du client quand un conseiller est saisi.
+  List<Widget> _items() {
+    final items = <Widget>[];
+    var relayShown = false;
+    for (final message in _messages) {
+      items.add(message.system ? _SystemNotice(text: message.body, time: _time(message.at)) : _bubble(message));
+      if (_human && !relayShown && message.mine) {
+        relayShown = true;
+        items.add(
+          _RelayCard(
+            title: _ticket == null
+                ? 'Un conseiller OVANIE prend le relais.'
+                : 'Dossier ${_ticket!.replaceFirst('#', '')} transmis au support.',
+          ),
+        );
+      }
+    }
+    if (_typing && !_closed) items.add(const _TypingRow());
+    if (_closed) {
+      items.add(
+        Container(
+          margin: const EdgeInsets.only(top: 14),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: const Color(0xFFE9ECF1), borderRadius: BorderRadius.circular(12)),
+          child: const Text('Conversation clôturée', style: TextStyle(color: Color(0xFF5E6B80), fontSize: 14)),
+        ),
+      );
+    }
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
+      value: SystemUiOverlayStyle.dark,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF3F5F9),
+        backgroundColor: const Color(0xFFF6F8FB),
         body: Column(
           children: [
             _header(context),
-            if (_human) _banner(),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator(color: OvanieColors.orange))
                   : _messages.isEmpty
                   ? _welcome()
-                  : ListView.builder(
+                  : ListView(
                       controller: _scroll,
                       padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
-                      itemCount: _messages.length + (_typing ? 1 : 0),
-                      itemBuilder: (context, i) => i == _messages.length ? _typingBubble() : _bubble(_messages[i]),
+                      children: _items(),
                     ),
             ),
             _closed ? _closedBar() : _composer(),
@@ -204,45 +301,33 @@ class _ClientAiChatScreenState extends State<ClientAiChatScreen> {
   Widget _header(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
     return Container(
-      color: _navy,
-      padding: EdgeInsets.fromLTRB(4, top + 4, 4, 10),
+      padding: EdgeInsets.fromLTRB(4, top + 6, 8, 10),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Color(0x0F0A1B3D), blurRadius: 8, offset: Offset(0, 2))],
+      ),
       child: Row(
         children: [
           IconButton(
             onPressed: () => Navigator.maybePop(context),
-            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            tooltip: 'Retour',
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _navy, size: 22),
           ),
-          Stack(
-            children: [
-              const CircleAvatar(
-                radius: 19,
-                backgroundColor: OvanieColors.orange,
-                child: Icon(Icons.support_agent_rounded, color: Colors.white, size: 21),
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 11,
-                  height: 11,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF22C55E),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: _navy, width: 2),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          const _AgentAvatar(size: 44, dotSize: 12),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_agent, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                Text(
+                  _agent,
+                  style: const TextStyle(color: _navy, fontSize: 17, fontWeight: FontWeight.w800),
+                ),
                 Text(
                   _typing ? 'écrit…' : (_human ? 'Support OVANIE · conseiller notifié' : 'Assistante support OVANIE'),
-                  style: const TextStyle(color: Color(0xFFBFD0EA), fontSize: 12.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _muted, fontSize: 13),
                 ),
               ],
             ),
@@ -251,192 +336,393 @@ class _ClientAiChatScreenState extends State<ClientAiChatScreen> {
             IconButton(
               tooltip: 'Nouvelle conversation',
               onPressed: _newConversation,
-              icon: const Icon(Icons.add_comment_outlined, color: Colors.white),
+              icon: const Icon(Icons.edit_square, color: _navy, size: 26),
             ),
         ],
       ),
     );
   }
 
-  Widget _banner() => Container(
-        width: double.infinity,
-        color: const Color(0xFFFFF4E5),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            const Icon(Icons.headset_mic_rounded, color: Color(0xFFB45309), size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _ticket == null
-                    ? 'Un conseiller OVANIE prend le relais. Sa réponse s’affichera ici.'
-                    : 'Dossier $_ticket transmis au support. La réponse s’affichera ici.',
-                style: const TextStyle(color: Color(0xFF92400E), fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-      );
-
   Widget _welcome() => ListView(
-        padding: const EdgeInsets.fromLTRB(20, 36, 20, 20),
+    padding: const EdgeInsets.fromLTRB(12, 56, 12, 20),
+    children: [
+      const Center(child: _AgentAvatar(size: 128, dotSize: 26)),
+      const SizedBox(height: 18),
+      Text(
+        'Bonjour, je suis $_agent',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: _navy, fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -0.4),
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        'Posez votre question. Si besoin, je transmets votre dossier à l’équipe support OVANIE.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: _muted, fontSize: 14.5, height: 1.45),
+      ),
+      const SizedBox(height: 24),
+      Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 6,
+        runSpacing: 10,
         children: [
-          const Center(
-            child: CircleAvatar(
-              radius: 32,
-              backgroundColor: Color(0xFFFFEEDC),
-              child: Icon(Icons.support_agent_rounded, color: OvanieColors.orange, size: 34),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Bonjour, je suis $_agent',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: OvanieColors.navy, fontSize: 19, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Posez votre question. Si besoin, je transmets votre dossier à l’équipe support OVANIE.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: OvanieColors.muted, fontSize: 14, height: 1.4),
-          ),
-          const SizedBox(height: 24),
           for (final s in _suggestions)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Material(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => _send(s),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: OvanieColors.border),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(child: Text(s, style: const TextStyle(color: OvanieColors.navy, fontSize: 14.5))),
-                        const Icon(Icons.north_east_rounded, color: OvanieColors.muted, size: 17),
-                      ],
-                    ),
+            Material(
+              color: Colors.white,
+              shape: const StadiumBorder(side: BorderSide(color: OvanieColors.orange, width: 1.2)),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => _send(s),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                  child: Text(
+                    s,
+                    style: const TextStyle(color: _navy, fontSize: 12.5, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
             ),
         ],
-      );
+      ),
+    ],
+  );
 
   Widget _bubble(_ChatMessage m) {
     final human = m.sender == 'human';
-    return Align(
-      alignment: m.mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .78),
-        padding: const EdgeInsets.fromLTRB(13, 9, 13, 7),
-        decoration: BoxDecoration(
-          color: m.mine ? _navy : Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(m.mine ? 16 : 4),
-            bottomRight: Radius.circular(m.mine ? 4 : 16),
-          ),
-          border: m.mine ? null : Border.all(color: const Color(0xFFE3E8F0)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (human)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 3),
-                child: Text('Conseiller OVANIE', style: TextStyle(color: OvanieColors.orange, fontSize: 12, fontWeight: FontWeight.w700)),
-              ),
-            Text(m.body, style: TextStyle(color: m.mine ? Colors.white : OvanieColors.navy, fontSize: 14.5, height: 1.4)),
-            const SizedBox(height: 3),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Text(
-                _time(m.at),
-                style: TextStyle(color: m.mine ? const Color(0xFFBFD0EA) : OvanieColors.muted, fontSize: 11),
+    final width = MediaQuery.sizeOf(context).width;
+    final bubble = Container(
+      constraints: BoxConstraints(maxWidth: width * (m.mine ? .74 : .68)),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(
+        color: m.mine ? OvanieColors.navy : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: m.mine ? null : Border.all(color: const Color(0xFFE3E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (m.body.trim().isNotEmpty)
+            Text(m.body, style: TextStyle(color: m.mine ? Colors.white : _navy, fontSize: 14.5, height: 1.42)),
+          for (final file in m.attachments)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: InkWell(
+                onTap: () => _openAttachment(file),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      file.mime.contains('pdf') ? Icons.picture_as_pdf_outlined : Icons.image_outlined,
+                      color: m.mine ? Colors.white : OvanieColors.orange,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        file.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: m.mine ? Colors.white : _navy,
+                          fontSize: 13,
+                          decoration: TextDecoration.underline,
+                          decorationColor: m.mine ? Colors.white : _navy,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+        ],
+      ),
+    );
+    final time = Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(_time(m.at), style: const TextStyle(color: _muted, fontSize: 11.5)),
+    );
+    if (m.mine) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [bubble, time]),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          human ? const _AdvisorAvatar() : const _AgentAvatar(size: 40, dotSize: 0),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (human)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 2, bottom: 4),
+                    child: Text(
+                      'Conseiller OVANIE',
+                      style: TextStyle(color: Color(0xFF4A586E), fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                bubble,
+                time,
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _typingBubble() => Align(
-        alignment: Alignment.centerLeft,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE3E8F0)),
-          ),
-          child: const SizedBox(
-            width: 34,
-            child: LinearProgressIndicator(minHeight: 3, color: OvanieColors.orange, backgroundColor: Color(0xFFFFE3C7)),
-          ),
-        ),
-      );
-
   Widget _composer() => SafeArea(
-        top: false,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(top: BorderSide(color: Color(0xFFE3E8F0))),
+    top: false,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(6, 8, 10, 8),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Les pièces jointes s'ajoutent à une conversation déjà ouverte.
+          IconButton(
+            onPressed: _token == null || _uploading ? null : _attach,
+            tooltip: 'Joindre une photo ou un PDF',
+            icon: _uploading
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: OvanieColors.orange),
+                  )
+                : Icon(Icons.attach_file_rounded, color: _token == null ? const Color(0xFFC5CCD6) : _muted),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _input,
-                  minLines: 1,
-                  maxLines: 5,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: const TextStyle(fontSize: 15),
-                  decoration: InputDecoration(
-                    hintText: 'Écrire un message',
-                    filled: true,
-                    fillColor: const Color(0xFFF3F5F9),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
-                  ),
-                ),
+          Expanded(
+            child: TextField(
+              controller: _input,
+              minLines: 1,
+              maxLines: 5,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(fontSize: 15, color: _navy),
+              decoration: InputDecoration(
+                hintText: 'Écrire un message',
+                hintStyle: const TextStyle(color: Color(0xFF8A96A8)),
+                filled: true,
+                fillColor: const Color(0xFFF0F2F5),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
               ),
-              const SizedBox(width: 6),
-              IconButton.filled(
-                onPressed: _typing ? null : _send,
-                style: IconButton.styleFrom(backgroundColor: OvanieColors.orange, fixedSize: const Size(46, 46)),
-                icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-              ),
-            ],
+            ),
           ),
-        ),
-      );
+          const SizedBox(width: 8),
+          SizedBox.square(
+            dimension: 46,
+            child: IconButton.filled(
+              onPressed: _typing || _input.text.trim().isEmpty ? null : _send,
+              style: IconButton.styleFrom(
+                backgroundColor: OvanieColors.orange,
+                disabledBackgroundColor: const Color(0xFFFFC9A6),
+              ),
+              tooltip: 'Envoyer',
+              icon: const Icon(Icons.send_rounded, color: Colors.white, size: 21),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _closedBar() => SafeArea(
-        top: false,
-        child: Container(
-          color: Colors.white,
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-          child: Row(
-            children: [
-              const Expanded(child: Text('Conversation clôturée', style: TextStyle(color: OvanieColors.muted, fontSize: 14))),
-              TextButton(onPressed: _newConversation, child: const Text('Nouvelle conversation')),
-            ],
+    top: false,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+      child: SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: FilledButton(
+          onPressed: _newConversation,
+          style: FilledButton.styleFrom(
+            backgroundColor: OvanieColors.orange,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
+          child: const Text('Nouvelle conversation', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         ),
-      );
+      ),
+    ),
+  );
+}
+
+class _AgentAvatar extends StatelessWidget {
+  const _AgentAvatar({required this.size, required this.dotSize});
+
+  final double size;
+  final double dotSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: size,
+      child: Stack(
+        children: [
+          ClipOval(
+            child: Image.asset(_agentPhoto, width: size, height: size, fit: BoxFit.cover),
+          ),
+          if (dotSize > 0)
+            Positioned(
+              right: size * 0.02,
+              bottom: size * 0.04,
+              child: Container(
+                width: dotSize,
+                height: dotSize,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16A34A),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: dotSize > 16 ? 4 : 2),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdvisorAvatar extends StatelessWidget {
+  const _AdvisorAvatar();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 40,
+    height: 40,
+    decoration: const BoxDecoration(color: Color(0xFFE9EEF6), shape: BoxShape.circle),
+    child: const Icon(Icons.headset_mic_rounded, color: _navy, size: 22),
+  );
+}
+
+class _RelayCard extends StatelessWidget {
+  const _RelayCard({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(color: const Color(0xFFE9ECF1), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          const Icon(Icons.headset_mic_outlined, color: Color(0xFF4A586E), size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: Color(0xFF3B4A60), fontSize: 13.5)),
+                const Text('La réponse s’affichera ici.', style: TextStyle(color: Color(0xFF6B7890), fontSize: 13)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SystemNotice extends StatelessWidget {
+  const _SystemNotice({required this.text, required this.time});
+
+  final String text;
+  final String time;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(color: const Color(0xFFE9ECF1), borderRadius: BorderRadius.circular(12)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.headset_mic_outlined, color: Color(0xFF4A586E), size: 20),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(text, style: const TextStyle(color: Color(0xFF3B4A60), fontSize: 13.5)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(time, style: const TextStyle(color: _muted, fontSize: 11.5)),
+        ],
+      ),
+    );
+  }
+}
+
+/// « … » animé pendant que l'assistante rédige sa réponse.
+class _TypingRow extends StatefulWidget {
+  const _TypingRow();
+
+  @override
+  State<_TypingRow> createState() => _TypingRowState();
+}
+
+class _TypingRowState extends State<_TypingRow> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          const _AgentAvatar(size: 40, dotSize: 0),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(color: const Color(0xFFE9ECF1), borderRadius: BorderRadius.circular(18)),
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < 3; i++)
+                    Container(
+                      width: 8,
+                      height: 8,
+                      margin: EdgeInsets.only(right: i < 2 ? 5 : 0),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color.lerp(
+                          const Color(0xFFB7C0CC),
+                          const Color(0xFF5E6B80),
+                          ((_controller.value * 3 - i) % 3 < 1) ? 1 : 0,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

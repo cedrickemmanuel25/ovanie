@@ -197,10 +197,77 @@ class _ProductImagesScreenState extends State<ProductImagesScreen> {
     await _run(() => VendorRepository.instance.deleteProductImage(int.parse('${image['id']}')), 'Image supprimée.');
   }
 
+  /// « Avant » : la photo envoyée ; « Après » : la version carrée sur fond clair.
+  /// Sans photo d'origine conservée, seule la version recadrée est montrée.
+  Widget _cropComparison(Map<String, dynamic> image) {
+    final original = '${image['original_url'] ?? ''}'.trim();
+    final after = image['card_url'] ?? image['url'];
+    Widget frame(String tag, Color tagBackground, Color tagColor, Widget child, {bool plain = false}) => Expanded(
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: plain ? Colors.white : const Color(0xFFE2E5EA),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFDCE2EC)),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              child,
+              Positioned(
+                left: 0,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(10, 4, 12, 4),
+                  decoration: BoxDecoration(
+                    color: tagBackground,
+                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(99)),
+                  ),
+                  child: Text(
+                    tag,
+                    style: TextStyle(color: tagColor, fontSize: 12.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    final afterBox = frame(
+      'Après',
+      const Color(0xFFDDF3E4),
+      const Color(0xFF12894A),
+      ProductNetworkImage(url: after, fit: BoxFit.contain, borderRadius: 0),
+      plain: true,
+    );
+    if (original.isEmpty) {
+      return Row(children: [const Spacer(), Expanded(flex: 3, child: Row(children: [afterBox])), const Spacer()]);
+    }
+    return Row(
+      children: [
+        frame(
+          'Avant',
+          const Color(0xFF6B7280),
+          Colors.white,
+          ProductNetworkImage(url: original, fit: BoxFit.cover, borderRadius: 0),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8),
+          child: Icon(Icons.arrow_forward_rounded, color: Mk.orange, size: 30),
+        ),
+        afterBox,
+      ],
+    );
+  }
+
   /// Le recadrage est fait par OVANIE à l'import : cette feuille l'explique et propose de remplacer la photo.
   Future<void> _showCropInfo(Map<String, dynamic> image) async {
     final replace = await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => MkTheme(
         lightStatusBar: false,
@@ -225,12 +292,21 @@ class _ProductImagesScreenState extends State<ProductImagesScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Icon(Icons.crop_rounded, color: Mk.orange, size: 36),
-                  const SizedBox(height: 8),
+                  _cropComparison(image),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Container(
+                      width: 54,
+                      height: 54,
+                      decoration: const BoxDecoration(color: Color(0xFFE6F0FE), shape: BoxShape.circle),
+                      child: const Icon(Icons.crop_rounded, color: Mk.blue, size: 28),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   const Text(
                     'Recadrage automatique',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Mk.navy, fontSize: 19, fontWeight: FontWeight.w800),
+                    style: TextStyle(color: Mk.navy, fontSize: 21, fontWeight: FontWeight.w800, letterSpacing: -.3),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -244,10 +320,9 @@ class _ProductImagesScreenState extends State<ProductImagesScreen> {
                     label: 'Remplacer l’image',
                     icon: Icons.swap_horiz_rounded,
                     filled: true,
+                    height: 50,
                     onTap: () => Navigator.pop(sheetContext, true),
                   ),
-                  const SizedBox(height: 8),
-                  MkBarButton(label: 'Fermer', color: Mk.icon, onTap: () => Navigator.pop(sheetContext, false)),
                 ],
               ),
             ),

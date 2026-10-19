@@ -90,6 +90,26 @@ class OvanieReferenceDataStore {
     return result;
   }
 
+  /// Coordonnées officielles d'OVANIE envoyées par le serveur ; valeurs
+  /// connues en secours tant que les données de référence ne sont pas chargées.
+  OvanieContact get contact {
+    final raw = _data['support_contact'];
+    final map = raw is Map ? Map<String, dynamic>.from(raw) : const <String, dynamic>{};
+    String read(String key, String fallback) {
+      final value = '${map[key] ?? ''}'.trim();
+      return value.isEmpty ? fallback : value;
+    }
+
+    return OvanieContact(
+      phoneDisplay: read('phone_display', '01 61 78 00 00'),
+      phone: read('phone', '+2250161780000'),
+      whatsappNumber: read('whatsapp_number', '2250161781818'),
+      email: read('email', 'contact@ovanie.com'),
+      address: read('address', ''),
+      hours: read('hours', ''),
+    );
+  }
+
   List<Map<String, dynamic>> records(String key) {
     final raw = _data[key];
     if (raw is! List) return const <Map<String, dynamic>>[];
@@ -153,4 +173,34 @@ class OvanieReferenceDataStore {
     }
     return result;
   }
+}
+
+class OvanieContact {
+  const OvanieContact({
+    required this.phoneDisplay,
+    required this.phone,
+    required this.whatsappNumber,
+    required this.email,
+    this.address = '',
+    this.hours = '',
+  });
+
+  /// Adresse et horaires d'assistance publiés par OVANIE (vides si le serveur ne les fournit pas).
+  final String address;
+  final String hours;
+  final String phoneDisplay;
+  final String phone;
+  final String whatsappNumber;
+  final String email;
+
+  /// Numéro WhatsApp lisible : « 01 61 78 18 18 ».
+  String get whatsappDisplay {
+    final digits = whatsappNumber.replaceAll(RegExp(r'\D'), '');
+    final local = digits.length == 13 && digits.startsWith('225') ? digits.substring(3) : digits;
+    if (local.length != 10) return whatsappNumber;
+    return [for (var i = 0; i < 10; i += 2) local.substring(i, i + 2)].join(' ');
+  }
+
+  String get whatsappUrl => 'https://wa.me/${whatsappNumber.replaceAll(RegExp(r'\D'), '')}';
+  String get telUrl => 'tel:$phone';
 }

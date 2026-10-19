@@ -132,6 +132,8 @@ class ProductController extends Controller
                     'id' => $review->id,
                     'rating' => $review->rating,
                     'comment' => $review->comment,
+                    'vendor_reply' => $review->vendor_reply,
+                    'vendor_replied_at' => optional($review->vendor_replied_at)->toDateTimeString(),
                     'created_at' => optional($review->created_at)->toDateTimeString(),
                     'user' => $review->user ? ['name' => $review->user->name] : null,
                 ])->values()->all()

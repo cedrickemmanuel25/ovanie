@@ -103,7 +103,9 @@ void main() {
 
   testWidgets('liste : les onglets filtrent les commandes par état', (tester) async {
     await open(tester, const OrdersScreen(), const Size(412, 915), 1);
-    expect(find.text('#OVANIE-7EQBU664', skipOffstage: false), findsOneWidget);
+    // La liste est construite au fil du défilement : la dernière commande est cherchée en descendant.
+    await tester.scrollUntilVisible(find.text('#OVANIE-7EQBU664'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('#OVANIE-7EQBU664'), findsOneWidget);
     expect(find.textContaining('mobile_money'), findsNothing);
     await close(tester);
   });

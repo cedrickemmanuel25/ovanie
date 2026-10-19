@@ -151,6 +151,9 @@ Route::prefix('support/chat')->middleware(['auth:sanctum', 'throttle:30,1'])->na
     Route::get('/{token}', [PublicSupportChatController::class, 'show'])->name('show');
     Route::post('/{token}/messages', [PublicSupportChatController::class, 'message'])->name('message');
     Route::post('/{token}/callback', [PublicSupportChatController::class, 'callback'])->name('callback');
+    Route::post('/{token}/attachments', [PublicSupportChatController::class, 'attachment'])->name('attachment');
+    Route::get('/{token}/attachments/{message}/{index}', [PublicSupportChatController::class, 'downloadAttachment'])
+        ->whereNumber(['message', 'index'])->name('attachment.download');
 });
 
 
@@ -248,6 +251,26 @@ Route::prefix('auth')->group(function () {
 | Les routes open-shop et open-shop-v2 sont des alias vers la même logique
 | afin de rester compatibles avec les builds déjà installés.
 */
+// Pages légales : mêmes textes que le site Web (App\Support\LegalPages).
+Route::get('/mobile/v1/legal/{page}', function (string $page) {
+    $data = \App\Support\LegalPages::get($page);
+
+    return response()->json([
+        'key' => $page,
+        'title' => $data['title'],
+        'intro' => $data['intro'],
+        'sections' => collect($data['sections'])->values()->map(fn (array $section, int $index) => [
+            'number' => $index + 1,
+            'title' => $section[0],
+            'text' => $section[1],
+        ]),
+        'contact' => [
+            'phone_display' => (string) config('public_contact.phone_display'),
+            'email' => (string) config('public_contact.email'),
+        ],
+    ]);
+})->whereIn('page', ['terms', 'privacy', 'legal-notice'])->middleware('throttle:60,1');
+
 Route::prefix('mobile/v1/vendor')->middleware('throttle:120,1')->group(function () {
     Route::get('/status', function () {
         return response()->json([
@@ -297,9 +320,24 @@ Route::prefix('mobile/v1/vendor')
         Route::get('/shop/payment-settings', [VendorMobileController::class, 'paymentSettings']);
         Route::post('/shop/payment-settings', [VendorMobileController::class, 'savePaymentSettings']);
 
+        // État de la boutique, documents, sécurité du compte et notifications push.
+        Route::get('/shop/status', [VendorMobileController::class, 'shopStatus']);
+        Route::get('/shop/documents', [VendorMobileController::class, 'shopDocuments']);
+        Route::post('/shop/documents', [VendorMobileController::class, 'uploadShopDocument'])->middleware('throttle:12,1');
+        Route::get('/shop/documents/{type}/file', [VendorMobileController::class, 'shopDocumentFile']);
+        Route::get('/account/security', [VendorMobileController::class, 'accountSecurity']);
+        Route::put('/account/password', [VendorMobileController::class, 'changeAccountPassword'])->middleware('throttle:8,1,vendor-password:');
+        Route::delete('/account/sessions/{session}', [VendorMobileController::class, 'destroyAccountSession']);
+        Route::get('/push', [MobilePushDeviceController::class, 'status']);
+        Route::post('/push/devices', [MobilePushDeviceController::class, 'store'])->middleware('throttle:15,1,vendor-push-register:');
+        Route::delete('/push/devices', [MobilePushDeviceController::class, 'destroy'])->middleware('throttle:15,1,vendor-push-unregister:');
+        Route::get('/products/export', [VendorMobileController::class, 'exportProducts']);
+        Route::post('/products/suggest-category', \App\Http\Controllers\ProductCategorySuggestionController::class)->middleware('throttle:30,1');
+
         Route::get('/shop', [VendorMobileController::class, 'shop']);
         Route::match(['put', 'patch', 'post'], '/shop', [VendorMobileController::class, 'updateShop']);
         Route::get('/shop/delivery', [VendorMobileController::class, 'deliverySettings']);
+        Route::get('/shop/delivery/coverage-map', [VendorMobileController::class, 'communeCoverageMap']);
         Route::post('/shop/logistics-settings', [VendorMobileController::class, 'saveLogisticsSettings']);
         Route::post('/shop/logistics-location', [VendorMobileController::class, 'resolveLogisticsLocation'])->middleware('throttle:30,1');
         Route::post('/shop/delivery', [VendorMobileController::class, 'updateDeliverySettings']);
@@ -328,6 +366,7 @@ Route::prefix('mobile/v1/vendor')
         Route::post('/orders/{order}/delivery-status', [VendorMobileController::class, 'updateDeliveryStatus']);
         Route::post('/orders/{order}/verify-otp', [VendorMobileController::class, 'verifyDeliveryOtp'])->middleware('throttle:10,1');
         Route::post('/orders/{order}/confirm-payment', [VendorMobileController::class, 'reportCodPayment']);
+        Route::get('/orders/{order}/preparation-slip', [VendorMobileController::class, 'orderPreparationSlip']);
 
         Route::get('/finance', [VendorMobileController::class, 'finance']);
         Route::get('/payouts', [VendorMobileController::class, 'payouts']);
@@ -390,7 +429,9 @@ Route::middleware(['auth:sanctum', 'throttle:240,1,private-api:'])->group(functi
     Route::post('/wishlists', [ClientWishlistController::class, 'store']);
     Route::patch('/wishlists/{wishlist}', [ClientWishlistController::class, 'update']);
     Route::delete('/wishlists/{wishlist}', [ClientWishlistController::class, 'destroy']);
-    Route::put('/wishlists/{wishlist}/products/{product:id}', [ClientWishlistController::class, 'addProduct']);
+    // Le produit ajouté n'est pas encore dans la liste : pas de liaison imbriquée.
+    Route::put('/wishlists/{wishlist}/products/{product:id}', [ClientWishlistController::class, 'addProduct'])
+        ->withoutScopedBindings();
     Route::delete('/wishlists/{wishlist}/products/{product:id}', [ClientWishlistController::class, 'removeProduct']);
 
     // Commandes
@@ -456,7 +497,7 @@ Route::middleware(['auth:sanctum', 'throttle:240,1,private-api:'])->group(functi
     Route::post('/mobile/client/reviews/delivery', [MobileReviewController::class, 'storeDelivery']);
 
     Route::get('/mobile/client/recently-viewed', [MobileRecentlyViewedController::class, 'index']);
-    Route::post('/mobile/client/recently-viewed/{product}', [MobileRecentlyViewedController::class, 'store']);
+    Route::post('/mobile/client/recently-viewed/{product:id}', [MobileRecentlyViewedController::class, 'store']);
     Route::delete('/mobile/client/recently-viewed', [MobileRecentlyViewedController::class, 'destroy']);
 
     Route::get('/mobile/client/support', [UnifiedMobileSupportController::class, 'index'])->defaults('support_requester_type', 'client')->defaults('support_source_app', 'client_mobile');
@@ -775,3 +816,9 @@ Route::get('/vendor/returns/{return}/proof/{document}', [\App\Http\Controllers\S
     ->whereNumber('document')
     ->middleware(['signed', 'throttle:60,1'])
     ->name('api.vendor.returns.proof');
+
+// Preuves d'un retour affichées dans l'application client : lien signé à durée limitée.
+Route::get('/client/returns/{return}/proof/{document}', [\App\Http\Controllers\SensitiveDocumentController::class, 'signedClientReturn'])
+    ->whereNumber('document')
+    ->middleware(['signed', 'throttle:60,1'])
+    ->name('api.client.returns.proof');

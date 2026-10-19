@@ -65,9 +65,9 @@ trait VendorMenuEndpoints
     }
     public function reviews(Request $request) {
         $shop=$this->shopFor($request);
-        $items=Review::whereHas('product',fn($q)=>$q->where('shop_id',$shop->id))->with(['user:id,name','product:id,name'])->latest()->get();
+        $items=Review::whereHas('product',fn($q)=>$q->where('shop_id',$shop->id))->with(['user:id,name','product'])->latest()->get();
         $distribution=[];for($i=1;$i<=5;$i++)$distribution[$i]=$items->where('rating',$i)->count();
-        return response()->json(['data'=>$items->map(fn($r)=>['id'=>$r->id,'rating'=>$r->rating,'comment'=>$r->comment,'client_name'=>$r->user?->name,'product_name'=>$r->product?->name,'created_at'=>$r->created_at,'reply'=>$r->vendor_reply,'replied_at'=>$r->vendor_replied_at]),'summary'=>['count'=>$items->count(),'average'=>$items->avg('rating'),'distribution'=>$distribution,'replied'=>$items->filter(fn($r)=>filled($r->vendor_reply))->count(),'this_month'=>$items->filter(fn($r)=>$r->created_at?->isCurrentMonth())->count()]]);
+        return response()->json(['data'=>$items->map(fn($r)=>['id'=>$r->id,'rating'=>$r->rating,'comment'=>$r->comment,'client_name'=>$r->user?->name,'product_id'=>$r->product?->id,'product_name'=>$r->product?->name,'product_image_url'=>$r->product?->card_image_url,'created_at'=>$r->created_at,'reply'=>$r->vendor_reply,'replied_at'=>$r->vendor_replied_at]),'summary'=>['count'=>$items->count(),'average'=>$items->avg('rating'),'distribution'=>$distribution,'replied'=>$items->filter(fn($r)=>filled($r->vendor_reply))->count(),'this_month'=>$items->filter(fn($r)=>$r->created_at?->isCurrentMonth())->count()]]);
     }
     public function replyReview(Request $request, Review $review) {
         $shop=$this->shopFor($request);abort_unless((int)$review->product?->shop_id===(int)$shop->id,404);
@@ -85,7 +85,9 @@ trait VendorMenuEndpoints
         $items=$period($from,$to);$days=(int)$from->diffInDays($to)+1;
         $previous=$period($from->copy()->subDays($days),$from->copy()->subSecond());
         $paid=fn($rows)=>$rows->filter(fn($i)=>$i->vendor_status!=='cancelled' && (in_array($i->order?->payment_status,['paid','escrow_held','released_to_vendor']) || $i->order?->payments->whereIn('status',['paid','success','completed','escrow_held','released_to_vendor'])->isNotEmpty()));
-        $amount=fn($rows)=>round($rows->sum(fn($i)=>(float)($i->subtotal??($i->price*$i->quantity))),2);
+        // Montants au prix vendeur (commission OVANIE déduite), comme dans les Finances.
+        $commissions=app(\App\Services\CommissionService::class);
+        $amount=fn($rows)=>round($rows->sum(fn($i)=>(float)($commissions->breakdown((float)($i->subtotal??($i->price*$i->quantity)),$shop)['vendor_amount']??0)),2);
         $sales=$paid($items);$old=$paid($previous);$total=$amount($sales);$oldTotal=$amount($old);
         $count=$items->pluck('order_id')->unique()->count();$oldCount=$previous->pluck('order_id')->unique()->count();
         $avg=$sales->isEmpty()?0:$total/$sales->pluck('order_id')->unique()->count();$oldAvg=$old->isEmpty()?0:$oldTotal/$old->pluck('order_id')->unique()->count();
@@ -105,7 +107,9 @@ trait VendorMenuEndpoints
         $m=$this->menuCases($request,$dispute?Dispute::class:ReturnModel::class)->with(['order','orderItem.product','client'])->findOrFail($id);
         $item=$m->orderItem;$product=$item?->product;
         $data=$dispute?$this->disputePayload($m):$this->returnPayload($m);
-        $data['client']=['name'=>$m->client?->name??$m->client_name,'phone'=>$m->client?->phone,'city'=>$m->client?->city];
+        $viaOvanie = $item !== null && $item->delivery_provider !== \App\Services\OrderWorkflowService::PROVIDER_SELLER;
+        $data['client']=['name'=>$m->client?->name??$m->client_name,'phone'=>$viaOvanie ? null : $m->client?->phone,'city'=>$m->client?->city];
+        $data['handled_by_ovanie'] = $viaOvanie;
         $quantity=$m->quantity??$item?->quantity;
         $data['product']=['id'=>$product?->id,'name'=>$product?->name??$m->product_name,'image_url'=>$product?($this->productPayload($product)['image_url']??null):null,'quantity'=>$quantity,'price'=>$item?->price,'amount'=>$dispute?$item?->subtotal:($m->refund_amount??($item?->price!==null?(float)$item->price*max(1,(int)$quantity):null))];
         if(!$dispute){

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
@@ -8,7 +9,9 @@ import '../../../shared/widgets/auth_required_view.dart';
 import '../../../shared/widgets/ovanie_bottom_navigation.dart';
 import '../../shell/domain/main_navigation_store.dart';
 import '../../auth/domain/session_store.dart';
-import '../../cart/presentation/cart_screen.dart';
+import '../../payments/presentation/payment_ui.dart';
+import '../../payments/presentation/resume_payment_screen.dart';
+import '../../support/presentation/support_center_screen.dart';
 import '../../tracking/presentation/client_delivery_tracking_screen.dart';
 import '../data/orders_repository.dart';
 import '../domain/order_model.dart';
@@ -20,19 +23,13 @@ class OrdersScreen extends StatefulWidget {
   final VoidCallback? onOpenCart;
   final VoidCallback? onStartShopping;
 
-  const OrdersScreen({
-    super.key,
-    this.onOpenAccount,
-    this.onOpenCart,
-    this.onStartShopping,
-  });
+  const OrdersScreen({super.key, this.onOpenAccount, this.onOpenCart, this.onStartShopping});
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen>
-    with LiveSyncListener<OrdersScreen> {
+class _OrdersScreenState extends State<OrdersScreen> with LiveSyncListener<OrdersScreen> {
   static const _apiBuckets = ['in_progress', 'delivered', 'cancelled', 'returned'];
   static const _tabs = <_OrdersTabData>[
     _OrdersTabData('all', 'Toutes'),
@@ -203,15 +200,6 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   void _goBack() => Navigator.of(context).maybePop();
 
-  void _openCart() {
-    if (widget.onOpenCart == null) {
-      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CartScreen()));
-      return;
-    }
-    Navigator.of(context).maybePop();
-    WidgetsBinding.instance.addPostFrameCallback((_) => widget.onOpenCart?.call());
-  }
-
   void _openAccount() {
     Navigator.of(context).maybePop();
     WidgetsBinding.instance.addPostFrameCallback((_) => widget.onOpenAccount?.call());
@@ -234,110 +222,178 @@ class _OrdersScreenState extends State<OrdersScreen>
   void _openTracking(MobileOrder order) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ClientDeliveryTrackingScreen(
-          orderId: order.id,
-          initialOrderNumber: order.orderNumber,
-        ),
+        builder: (_) => ClientDeliveryTrackingScreen(orderId: order.id, initialOrderNumber: order.orderNumber),
       ),
     );
   }
 
   Future<void> _showSearch() async {
     _searchController.text = _query;
-    final value = await showDialog<String>(
+    final value = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rechercher une commande'),
-        content: TextField(
-          controller: _searchController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'N° de commande ou produit',
-            prefixIcon: Icon(Icons.search_rounded),
-          ),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 10, 20, 12 + MediaQuery.viewInsetsOf(sheetContext).bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SheetHandle(),
+            _SheetTitle(title: 'Rechercher une commande', onClose: () => Navigator.of(sheetContext).pop()),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _searchController,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (value) => Navigator.of(sheetContext).pop(value),
+              style: const TextStyle(color: payNavy, fontSize: 16),
+              decoration: InputDecoration(
+                hintText: 'N° de commande ou produit',
+                hintStyle: const TextStyle(color: Color(0xFF8A93A8), fontSize: 16),
+                prefixIcon: const Icon(Icons.search_rounded, color: payMuted, size: 26),
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFD5DCE6)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: OvanieColors.orange, width: 1.4),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            PaymentButton(label: 'Rechercher', onPressed: () => Navigator.of(sheetContext).pop(_searchController.text)),
+            Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(sheetContext).pop(''),
+                child: const Text(
+                  'Effacer',
+                  style: TextStyle(
+                    color: payMuted,
+                    fontSize: 15.5,
+                    decoration: TextDecoration.underline,
+                    decorationColor: payMuted,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(''), child: const Text('Effacer')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(_searchController.text), child: const Text('Rechercher')),
-        ],
       ),
     );
     if (value == null || !mounted) return;
-    setState(() => _query = value);
+    setState(() => _query = value.trim());
   }
 
   Future<void> _showFilters() async {
     final selected = await showModalBottomSheet<String>(
       context: context,
-      showDragHandle: true,
+      useSafeArea: true,
       backgroundColor: Colors.white,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Filtrer les commandes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: OvanieColors.navy)),
-              const SizedBox(height: 12),
-              ..._tabs.map(
-                (tab) => RadioListTile<String>(
-                  value: tab.key,
-                  groupValue: _selectedTab,
-                  activeColor: OvanieColors.orange,
-                  title: Text('${tab.label} (${_countFor(tab.key)})'),
-                  onChanged: (value) => Navigator.of(context).pop(value),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SheetHandle(),
+            _SheetTitle(title: 'Filtrer les commandes', onClose: () => Navigator.of(sheetContext).pop()),
+            const SizedBox(height: 6),
+            for (var i = 0; i < _tabs.length; i++)
+              InkWell(
+                onTap: () => Navigator.of(sheetContext).pop(_tabs[i].key),
+                child: Container(
+                  height: 62,
+                  decoration: BoxDecoration(
+                    border: i == _tabs.length - 1 ? null : const Border(bottom: BorderSide(color: payBorder)),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 8),
+                      _Radio(selected: _selectedTab == _tabs[i].key),
+                      const SizedBox(width: 22),
+                      Text(
+                        '${_tabs[i].label} (${_countFor(_tabs[i].key)})',
+                        style: TextStyle(
+                          color: payNavy,
+                          fontSize: 18,
+                          fontWeight: _selectedTab == _tabs[i].key ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );
     if (selected != null && mounted) setState(() => _selectedTab = selected);
   }
 
+  void _openSupport() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const SupportCenterScreen(initialCategory: 'orders')));
+  }
+
+  Future<void> _payOrder(MobileOrder order) async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ResumePaymentScreen(order: order)));
+    if (mounted) await _loadOrders(silent: true);
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!SessionStore.instance.isAuthenticated) {
-      return Scaffold(
-        backgroundColor: Colors.white,
-        bottomNavigationBar: const OvanieBottomNavigation(
-          selectedTab: OvanieMainTab.account,
-        ),
+    final authenticated = SessionStore.instance.isAuthenticated;
+    final hasOrders = authenticated && _orders.isNotEmpty;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
+      child: Scaffold(
+        backgroundColor: hasOrders || _loading ? Colors.white : const Color(0xFFF8F9FB),
+        bottomNavigationBar: const OvanieBottomNavigation(selectedTab: OvanieMainTab.account),
         body: SafeArea(
+          bottom: false,
           child: Column(
             children: [
-              _OrdersHeader(onBack: _goBack, onSearch: _showSearch, onFilter: _showFilters),
-              Expanded(
-                child: AuthRequiredView(
-                  padding: const EdgeInsets.fromLTRB(30, 20, 30, 70),
-                  onOpenAccount: _openAccount,
+              Container(
+                color: Colors.white,
+                child: Column(
+                  children: [
+                    _OrdersHeader(
+                      onBack: _goBack,
+                      onSearch: hasOrders ? _showSearch : null,
+                      onFilter: hasOrders ? _showFilters : null,
+                    ),
+                    // Compteurs et onglets seulement s'il y a des commandes :
+                    // un historique vide n'affiche jamais de chiffres.
+                    if (hasOrders) ...[
+                      _OrdersSummaryStrip(
+                        total: _orders.length,
+                        toPay: _countFor('to_pay'),
+                        inProgress: _countFor('preparing') + _countFor('shipping'),
+                        delivered: _countFor('delivered'),
+                      ),
+                      _OrdersTabs(
+                        selected: _selectedTab,
+                        countFor: _countFor,
+                        onSelected: (value) => setState(() => _selectedTab = value),
+                      ),
+                    ],
+                  ],
                 ),
+              ),
+              Expanded(
+                child: authenticated
+                    ? _buildBody()
+                    : AuthRequiredView(padding: const EdgeInsets.fromLTRB(30, 20, 30, 70), onOpenAccount: _openAccount),
               ),
             ],
           ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      bottomNavigationBar: const OvanieBottomNavigation(
-        selectedTab: OvanieMainTab.account,
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _OrdersHeader(onBack: _goBack, onSearch: _showSearch, onFilter: _showFilters),
-            _OrdersTabs(
-              selected: _selectedTab,
-              onSelected: (value) => setState(() => _selectedTab = value),
-            ),
-            Expanded(child: _buildBody()),
-          ],
         ),
       ),
     );
@@ -348,7 +404,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       return const Center(child: CircularProgressIndicator(color: OvanieColors.orange));
     }
 
-    if (_error != null) {
+    if (_error != null && _orders.isEmpty) {
       return RefreshIndicator(
         color: OvanieColors.orange,
         onRefresh: _loadOrders,
@@ -356,17 +412,22 @@ class _OrdersScreenState extends State<OrdersScreen>
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(24, 90, 24, 32),
           children: [
-            const Icon(Icons.cloud_off_outlined, size: 58, color: OvanieColors.muted),
-            const SizedBox(height: 18),
-            Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: OvanieColors.text, fontSize: 16)),
-            const SizedBox(height: 18),
             Center(
-              child: OutlinedButton.icon(
-                onPressed: _loadOrders,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Réessayer'),
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: const BoxDecoration(color: paySoft, shape: BoxShape.circle),
+                child: const Icon(Icons.cloud_off_rounded, color: Color(0xFF4A556E), size: 46),
               ),
             ),
+            const SizedBox(height: 20),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: payNavy, fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            PaymentButton(label: 'Réessayer', onPressed: _loadOrders),
           ],
         ),
       );
@@ -377,11 +438,14 @@ class _OrdersScreenState extends State<OrdersScreen>
       return RefreshIndicator(
         color: OvanieColors.orange,
         onRefresh: _loadOrders,
-        child: _OrdersEmptyState(
-          filtered: _orders.isNotEmpty,
-          onCategories: _startShopping,
-          onProducts: _startShopping,
-          onContact: _showSupportMessage,
+        child: ColoredBox(
+          color: const Color(0xFFF8F9FB),
+          child: _OrdersEmptyState(
+            filtered: _orders.isNotEmpty,
+            onCategories: _startShopping,
+            onProducts: _startShopping,
+            onSupport: _openSupport,
+          ),
         ),
       );
     }
@@ -391,26 +455,32 @@ class _OrdersScreenState extends State<OrdersScreen>
       onRefresh: _loadOrders,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 26),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
         children: [
           if (_query.isNotEmpty) ...[
-            _SearchResultChip(query: _query, onClear: () => setState(() => _query = '')),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _SearchResultChip(query: _query, onClear: () => setState(() => _query = '')),
+            ),
             const SizedBox(height: 12),
           ],
-          ...orders.map(
-            (order) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+          for (final order in orders)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
               child: _OrderCard(
                 order: order,
                 state: _stateOf(order),
                 onOpen: () => _openOrder(order),
-                onPrimary: () => _primaryAction(order),
+                onPay: () => _payOrder(order),
+                onTrack: () => _openTracking(order),
                 onInvoice: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => InvoiceScreen(orderId: order.id, initialOrder: order)),
+                  MaterialPageRoute<void>(
+                    builder: (_) => InvoiceScreen(orderId: order.id, initialOrder: order),
+                  ),
                 ),
               ),
             ),
-          ),
+          _SupportLine(onTap: _openSupport),
         ],
       ),
     );
@@ -428,20 +498,6 @@ class _OrdersScreenState extends State<OrdersScreen>
     if (_isShipping(order)) return _OrderVisualState.shipping;
     return _OrderVisualState.preparing;
   }
-
-  void _primaryAction(MobileOrder order) {
-    if (_isShipping(order) && order.canTrackDelivery) {
-      _openTracking(order);
-      return;
-    }
-    _openOrder(order);
-  }
-
-  void _showSupportMessage() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Support OVANIE : 01 61 78 18 18')),
-    );
-  }
 }
 
 class _OrdersTabData {
@@ -452,92 +508,52 @@ class _OrdersTabData {
 
 class _OrdersHeader extends StatelessWidget {
   final VoidCallback onBack;
-  final VoidCallback onSearch;
-  final VoidCallback onFilter;
+  final VoidCallback? onSearch;
+  final VoidCallback? onFilter;
 
   const _OrdersHeader({required this.onBack, required this.onSearch, required this.onFilter});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 72,
-      child: Stack(
-        alignment: Alignment.center,
+      height: 64,
+      child: Row(
         children: [
-          const Center(
+          const SizedBox(width: 4),
+          IconButton(
+            onPressed: onBack,
+            tooltip: 'Retour',
+            icon: const Icon(Icons.chevron_left_rounded, color: payNavy, size: 36),
+          ),
+          const Expanded(
             child: Text(
               'Mes commandes',
-              style: TextStyle(color: OvanieColors.navy, fontSize: 22, fontWeight: FontWeight.w900),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: payNavy, fontSize: 23, fontWeight: FontWeight.w800),
             ),
           ),
-          Positioned(
-            left: 10,
-            child: IconButton(
-              onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded, color: OvanieColors.navy, size: 30),
-            ),
-          ),
-          Positioned(
-            right: 10,
+          SizedBox(
+            width: 96,
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                IconButton(onPressed: onSearch, icon: const Icon(Icons.search_rounded, color: OvanieColors.navy, size: 30)),
-                IconButton(onPressed: onFilter, icon: const Icon(Icons.filter_alt_outlined, color: OvanieColors.navy, size: 30)),
+                if (onFilter != null)
+                  IconButton(
+                    onPressed: onFilter,
+                    tooltip: 'Filtrer',
+                    icon: const Icon(Icons.tune_rounded, color: payNavy, size: 26),
+                  ),
+                if (onSearch != null)
+                  IconButton(
+                    onPressed: onSearch,
+                    tooltip: 'Rechercher',
+                    icon: const Icon(Icons.search_rounded, color: payNavy, size: 30),
+                  ),
               ],
             ),
           ),
+          const SizedBox(width: 4),
         ],
-      ),
-    );
-  }
-}
-
-class _OrdersTabs extends StatelessWidget {
-  final String selected;
-  final ValueChanged<String> onSelected;
-
-  const _OrdersTabs({required this.selected, required this.onSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFE7EAF0))),
-      ),
-      child: SizedBox(
-        height: 55,
-        child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          scrollDirection: Axis.horizontal,
-          itemCount: _OrdersScreenState._tabs.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 24),
-          itemBuilder: (context, index) {
-            final tab = _OrdersScreenState._tabs[index];
-            final active = tab.key == selected;
-            return InkWell(
-              onTap: () => onSelected(tab.key),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    tab.label,
-                    style: TextStyle(
-                      color: active ? OvanieColors.orange : OvanieColors.navy,
-                      fontSize: 14.5,
-                      fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 13),
-                  Container(
-                    width: 64,
-                    height: 2.5,
-                    color: active ? OvanieColors.orange : Colors.transparent,
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
       ),
     );
   }
@@ -549,71 +565,98 @@ class _OrdersSummaryStrip extends StatelessWidget {
   final int inProgress;
   final int delivered;
 
-  const _OrdersSummaryStrip({required this.total, required this.toPay, required this.inProgress, required this.delivered});
+  const _OrdersSummaryStrip({
+    required this.total,
+    required this.toPay,
+    required this.inProgress,
+    required this.delivered,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final items = [
-      _SummaryItem(Icons.shopping_bag_outlined, total, 'Total\ncommandes', const Color(0xFF1664D9), const Color(0xFFEAF2FF)),
-      _SummaryItem(Icons.schedule_rounded, toPay, 'À payer', OvanieColors.orange, const Color(0xFFFFF0E7)),
-      _SummaryItem(Icons.inventory_2_outlined, inProgress, 'En cours', const Color(0xFFF0A000), const Color(0xFFFFF7DD)),
-      _SummaryItem(Icons.check_circle_outline_rounded, delivered, 'Livrées', const Color(0xFF2E9B54), const Color(0xFFE8F7EC)),
-    ];
-
-    return SizedBox(
-      height: 100,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, index) => SizedBox(width: 132, child: _SummaryCard(item: items[index])),
+    final items = [(total, 'Total commandes'), (toPay, 'À payer'), (inProgress, 'En cours'), (delivered, 'Livrées')];
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(color: paySoft, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    '${items[i].$1}',
+                    style: const TextStyle(color: payNavy, fontSize: 24, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(items[i].$2, maxLines: 1, style: const TextStyle(color: payMuted, fontSize: 13.5)),
+                  ),
+                ],
+              ),
+            ),
+            if (i != items.length - 1) Container(width: 1, height: 44, color: const Color(0xFFD9DFE8)),
+          ],
+        ],
       ),
     );
   }
 }
 
-class _SummaryItem {
-  final IconData icon;
-  final int value;
-  final String label;
-  final Color color;
-  final Color background;
-  const _SummaryItem(this.icon, this.value, this.label, this.color, this.background);
-}
+class _OrdersTabs extends StatelessWidget {
+  final String selected;
+  final int Function(String key) countFor;
+  final ValueChanged<String> onSelected;
 
-class _SummaryCard extends StatelessWidget {
-  final _SummaryItem item;
-  const _SummaryCard({required this.item});
+  const _OrdersTabs({required this.selected, required this.countFor, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFBFCFE),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF0F2F6)),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: payBorder)),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(color: item.background, borderRadius: BorderRadius.circular(10)),
-            child: Icon(item.icon, color: item.color, size: 22),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${item.value}', style: const TextStyle(color: OvanieColors.navy, fontSize: 18, fontWeight: FontWeight.w900)),
-                Text(item.label, style: const TextStyle(color: OvanieColors.navy, fontSize: 12, height: 1.15, fontWeight: FontWeight.w500)),
-              ],
-            ),
-          ),
-        ],
+      child: SizedBox(
+        height: 50,
+        child: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          scrollDirection: Axis.horizontal,
+          itemCount: _OrdersScreenState._tabs.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 22),
+          itemBuilder: (context, index) {
+            final tab = _OrdersScreenState._tabs[index];
+            final active = tab.key == selected;
+            return InkWell(
+              onTap: () => onSelected(tab.key),
+              child: IntrinsicWidth(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '${tab.label} (${countFor(tab.key)})',
+                      style: TextStyle(
+                        color: active ? payNavy : const Color(0xFF4A556E),
+                        fontSize: 15,
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: active ? OvanieColors.orange : Colors.transparent,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -625,498 +668,553 @@ class _OrderCard extends StatelessWidget {
   final MobileOrder order;
   final _OrderVisualState state;
   final VoidCallback onOpen;
-  final VoidCallback onPrimary;
+  final VoidCallback onPay;
+  final VoidCallback onTrack;
   final VoidCallback onInvoice;
 
   const _OrderCard({
     required this.order,
     required this.state,
     required this.onOpen,
-    required this.onPrimary,
+    required this.onPay,
+    required this.onTrack,
     required this.onInvoice,
   });
 
-  String get _number => 'N° ${order.orderNumber.isEmpty ? order.id : order.orderNumber}';
-
-  int get _articles => order.items.fold<int>(0, (sum, item) => sum + item.quantity);
-
-  String get _destination =>
-      [order.quartier, order.commune].where((e) => e.trim().isNotEmpty).join(', ');
+  int get _articles => order.items.length;
 
   @override
   Widget build(BuildContext context) {
-    return switch (state) {
-      _OrderVisualState.toPay => _toPay(),
-      _OrderVisualState.preparing => _preparing(),
-      _OrderVisualState.shipping => _shipping(),
-      _OrderVisualState.delivered => _delivered(),
-      _OrderVisualState.cancelled => _cancelled(),
-    };
-  }
-
-  Widget _frame({required Widget child, Color border = const Color(0xFFE4E7ED), Color color = Colors.white}) {
     return Material(
-      color: color,
+      color: Colors.white,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onOpen,
         borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: border),
+            border: Border.all(color: payBorder),
           ),
-          child: child,
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: paySoft,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'N° ${order.orderNumber.isEmpty ? order.id : order.orderNumber}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: payNavy, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      formatFcfa(order.total),
+                      style: const TextStyle(color: payNavy, fontSize: 16, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              for (var i = 0; i < 3; i++) ...[
+                                Expanded(
+                                  child: AspectRatio(
+                                    aspectRatio: 1,
+                                    child: i < order.items.length
+                                        ? OrderItemThumbnail(url: order.items[i].imageUrl, height: double.infinity)
+                                        : const SizedBox.shrink(),
+                                  ),
+                                ),
+                                if (i != 2) const SizedBox(width: 6),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            '$_articles article${_articles > 1 ? 's' : ''}  ·  commandé le ${paymentShortDate(order.createdAt)}',
+                            maxLines: 2,
+                            style: const TextStyle(color: payMuted, fontSize: 12.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: _statePanel()),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _title(String trailing, {Color trailingColor = OvanieColors.muted}) => Row(
-        children: [
-          Expanded(
-            child: Text(_number, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.navy, fontSize: 15, fontWeight: FontWeight.w700)),
-          ),
-          Text(trailing, style: TextStyle(color: trailingColor, fontSize: 13, fontWeight: FontWeight.w600)),
-        ],
-      );
-
-  Widget _button(String label, IconData icon, VoidCallback onPressed, {bool filled = true, Color color = OvanieColors.orange}) => SizedBox(
-        height: 44,
-        width: double.infinity,
-        child: filled
-            ? FilledButton.icon(
-                onPressed: onPressed,
-                style: FilledButton.styleFrom(backgroundColor: color, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                icon: Icon(icon, size: 18),
-                label: Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
-              )
-            : OutlinedButton.icon(
-                onPressed: onPressed,
-                style: OutlinedButton.styleFrom(foregroundColor: color, side: BorderSide(color: color.withValues(alpha: .5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                icon: Icon(icon, size: 18),
-                label: Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+  Widget _statePanel() {
+    switch (state) {
+      case _OrderVisualState.toPay:
+        final due = order.outstandingAmount > 0 ? order.outstandingAmount : order.total;
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF6EA),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF5C98B)),
               ),
-      );
-
-  /// À payer : le montant dû et l'action de paiement priment.
-  Widget _toPay() {
-    final due = order.outstandingAmount > 0 ? order.outstandingAmount : order.total;
-    return _frame(
-      border: const Color(0xFFFFD9B8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _title(_dateOrEmpty(order.createdAt)),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Montant à régler', style: TextStyle(color: OvanieColors.muted, fontSize: 13)),
-                    const SizedBox(height: 2),
-                    Text(formatFcfa(due), style: const TextStyle(color: OvanieColors.orange, fontSize: 22, fontWeight: FontWeight.w800)),
-                  ],
-                ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: const BoxDecoration(color: Color(0xFFFFE3C7), shape: BoxShape.circle),
+                    child: const Icon(Icons.priority_high_rounded, color: OvanieColors.orange, size: 22),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Montant à régler', style: TextStyle(color: Color(0xFFC2410C), fontSize: 13)),
+                        ),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            formatFcfa(due),
+                            style: const TextStyle(color: Color(0xFFC2410C), fontSize: 19, fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              _OrderThumbs(items: order.items, maxItems: 2, itemSize: 40),
+            ),
+            if (order.actions.canResumePayment) ...[
+              const SizedBox(height: 10),
+              PaymentButton(label: 'Payer maintenant', onPressed: onPay, height: 44),
             ],
-          ),
-          const SizedBox(height: 12),
-          _button('Payer maintenant', Icons.lock_outline_rounded, onPrimary),
-        ],
-      ),
-    );
-  }
-
-  /// À préparer : où en est la commande (confirmée, préparation, expédition).
-  Widget _preparing() {
-    const steps = ['Confirmée', 'Préparation', 'Expédition'];
-    const current = 1;
-    return _frame(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _title(formatFcfa(order.total), trailingColor: OvanieColors.navy),
-          const SizedBox(height: 4),
-          Text(
-            '$_articles article${_articles > 1 ? 's' : ''} · commandé le ${_dateOrEmpty(order.createdAt)}',
-            style: const TextStyle(color: OvanieColors.muted, fontSize: 13),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              for (var i = 0; i < steps.length; i++) ...[
+          ],
+        );
+      case _OrderVisualState.preparing:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _StateChip(label: 'En préparation'),
+            const SizedBox(height: 12),
+            const _MiniSteps(),
+          ],
+        );
+      case _OrderVisualState.shipping:
+        final date = order.estimatedMaxDate ?? order.estimatedMinDate;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _StateChip(label: 'En livraison'),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.local_shipping_outlined, color: payNavy, size: 30),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: i <= current ? const Color(0xFF288A45) : const Color(0xFFE4E7ED),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                      const Text(
+                        'En route vers vous',
+                        style: TextStyle(color: payNavy, fontSize: 14, fontWeight: FontWeight.w700),
                       ),
-                      const SizedBox(height: 6),
+                      if (date != null)
+                        Text(
+                          'Arrivée prévue le ${paymentShortDate(date)}',
+                          style: const TextStyle(color: payMuted, fontSize: 12),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (order.canTrackDelivery) ...[
+              const SizedBox(height: 10),
+              PaymentButton(label: 'Suivre la livraison', outlined: true, onPressed: onTrack, height: 42),
+            ],
+          ],
+        );
+      case _OrderVisualState.delivered:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(color: payGreenSoft, borderRadius: BorderRadius.circular(10)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: payGreenDark, size: 20),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        order.deliveredAt == null ? 'Livrée' : 'Livrée le ${paymentShortDate(order.deliveredAt)}',
+                        style: const TextStyle(color: payGreenDark, fontSize: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (order.actions.canDownloadInvoice) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: onInvoice,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.description_outlined, color: payBlue, size: 22),
+                      SizedBox(width: 6),
                       Text(
-                        steps[i],
+                        'Facture',
                         style: TextStyle(
-                          color: i <= current ? const Color(0xFF288A45) : OvanieColors.muted,
-                          fontSize: 12.5,
-                          fontWeight: i == current ? FontWeight.w700 : FontWeight.w500,
+                          color: payBlue,
+                          fontSize: 15,
+                          decoration: TextDecoration.underline,
+                          decorationColor: payBlue,
                         ),
                       ),
                     ],
                   ),
                 ),
-                if (i != steps.length - 1) const SizedBox(width: 6),
-              ],
+              ),
             ],
-          ),
-          if (order.deliveryStatusLabel.trim().isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(order.deliveryStatusLabel, style: const TextStyle(color: OvanieColors.navy, fontSize: 13.5)),
           ],
-        ],
-      ),
-    );
-  }
-
-  /// En livraison : date prévue, destination et suivi.
-  Widget _shipping() {
-    final date = order.estimatedMaxDate ?? order.estimatedMinDate;
-    return _frame(
-      border: const Color(0xFFC9DCFA),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _title(formatFcfa(order.total), trailingColor: OvanieColors.navy),
-          const SizedBox(height: 12),
-          Row(
+        );
+      case _OrderVisualState.cancelled:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(color: paySoft, borderRadius: BorderRadius.circular(10)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(color: Color(0xFFEAF2FF), shape: BoxShape.circle),
-                child: const Icon(Icons.local_shipping_outlined, color: Color(0xFF1664D9), size: 21),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      date == null ? 'En route vers vous' : 'Arrivée prévue le ${_dateOrEmpty(date)}',
-                      style: const TextStyle(color: OvanieColors.navy, fontSize: 14.5, fontWeight: FontWeight.w700),
-                    ),
-                    if (_destination.isNotEmpty)
-                      Text(_destination, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.muted, fontSize: 13)),
-                  ],
+              const Icon(Icons.cancel_outlined, color: payMuted, size: 20),
+              const SizedBox(width: 6),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    order.updatedAt == null ? 'Annulée' : 'Annulée le ${paymentShortDate(order.updatedAt)}',
+                    style: const TextStyle(color: Color(0xFF4A556E), fontSize: 14),
+                  ),
                 ),
               ),
             ],
           ),
-          if (order.canTrackDelivery) ...[
-            const SizedBox(height: 12),
-            _button('Suivre la livraison', Icons.near_me_outlined, onPrimary, color: const Color(0xFF1664D9)),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// Livrée : récapitulatif sobre avec accès à la facture.
-  Widget _delivered() {
-    return _frame(
-      child: Row(
-        children: [
-          if (order.items.isNotEmpty) _OrderThumb(item: order.items.first, size: 48),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_number, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: OvanieColors.navy, fontSize: 15, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    const Icon(Icons.check_circle_rounded, size: 15, color: Color(0xFF288A45)),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        order.deliveredAt == null ? 'Livrée' : 'Livrée le ${_dateOrEmpty(order.deliveredAt)}',
-                        style: const TextStyle(color: Color(0xFF288A45), fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(formatFcfa(order.total), style: const TextStyle(color: OvanieColors.navy, fontSize: 14, fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-          TextButton.icon(
-            onPressed: onInvoice,
-            icon: const Icon(Icons.description_outlined, size: 18),
-            label: const Text('Facture', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Annulée : ligne grisée, sans action.
-  Widget _cancelled() {
-    return _frame(
-      color: const Color(0xFFF8F9FB),
-      child: Row(
-        children: [
-          const Icon(Icons.block_rounded, color: Color(0xFF9AA3B2), size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_number, style: const TextStyle(color: Color(0xFF6E7480), fontSize: 15, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text(
-                  order.updatedAt == null ? 'Annulée' : 'Annulée le ${_dateOrEmpty(order.updatedAt)}',
-                  style: const TextStyle(color: Color(0xFF9AA3B2), fontSize: 13),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            formatFcfa(order.total),
-            style: const TextStyle(
-              color: Color(0xFF9AA3B2),
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.lineThrough,
-            ),
-          ),
-        ],
-      ),
-    );
+        );
+    }
   }
 }
 
-String _dateOrEmpty(DateTime? value) => value == null ? '' : _formatDate(value);
+class _StateChip extends StatelessWidget {
+  final String label;
 
-class _OrderThumbs extends StatelessWidget {
-  final List<MobileOrderItem> items;
-  final int maxItems;
-  final double itemSize;
-  const _OrderThumbs({
-    required this.items,
-    this.maxItems = 3,
-    this.itemSize = 58,
-  });
+  const _StateChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(color: const Color(0xFFE6F0FF), borderRadius: BorderRadius.circular(8)),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: payBlue, borderRadius: BorderRadius.circular(2)),
+        ),
+        const SizedBox(width: 7),
+        Text(
+          label,
+          style: const TextStyle(color: payBlue, fontSize: 13.5, fontWeight: FontWeight.w600),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Confirmée ✓ — Préparation (en cours) — Expédition.
+class _MiniSteps extends StatelessWidget {
+  const _MiniSteps();
 
   @override
   Widget build(BuildContext context) {
-    final visible = items.take(maxItems).toList(growable: false);
-    final extra = items.length - visible.length;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Column(
       children: [
-        for (var i = 0; i < visible.length; i++) ...[
-          _OrderThumb(item: visible[i], size: itemSize),
-          if (i < visible.length - 1 || extra > 0) const SizedBox(width: 4),
-        ],
-        if (extra > 0)
-          Container(
-            width: itemSize,
-            height: itemSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF7F8FA),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE3E6EC)),
+        Row(
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: const BoxDecoration(color: payGreenDark, shape: BoxShape.circle),
+              child: const Icon(Icons.check_rounded, color: Colors.white, size: 17),
             ),
-            child: Text('+$extra', style: const TextStyle(color: OvanieColors.navy, fontWeight: FontWeight.w700)),
-          ),
+            Expanded(child: Container(height: 2, color: payGreenDark)),
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: payNavy,
+                border: Border.all(color: const Color(0xFFC9D3E6), width: 3),
+              ),
+            ),
+            Expanded(child: Container(height: 2, color: const Color(0xFFDDE2EA))),
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFFC9D0DC), width: 1.5),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Row(
+          children: [
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text('Confirmée', style: TextStyle(color: payMuted, fontSize: 10.5)),
+              ),
+            ),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'Préparation',
+                  style: TextStyle(color: payNavy, fontSize: 10.5, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text('Expédition', style: TextStyle(color: payMuted, fontSize: 10.5)),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 }
 
-class _OrderThumb extends StatelessWidget {
-  final MobileOrderItem item;
-  final double size;
-  const _OrderThumb({required this.item, this.size = 58});
+class _SupportLine extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _SupportLine({required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE3E6EC)),
-      ),
-      child: item.imageUrl.isEmpty
-          ? const Icon(Icons.inventory_2_outlined, color: Color(0xFFADB5C5))
-          : Image.network(
-              item.imageUrl,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(Icons.inventory_2_outlined, color: Color(0xFFADB5C5)),
+  Widget build(BuildContext context) => Material(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(14),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: payBorder),
+        ),
+        child: const Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: paySoft,
+              child: Icon(Icons.headset_mic_outlined, color: payNavy, size: 26),
             ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final String label;
-  final Color color;
-  final Color background;
-  const _StatusChip({required this.label, required this.color, required this.background});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(7)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
-    );
-  }
+            SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'Support OVANIE : 01 61 78 00 00',
+                style: TextStyle(color: payNavy, fontSize: 15.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: payNavy, size: 26),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _OrdersEmptyState extends StatelessWidget {
   final bool filtered;
   final VoidCallback onCategories;
   final VoidCallback onProducts;
-  final VoidCallback onContact;
+  final VoidCallback onSupport;
 
-  const _OrdersEmptyState({required this.filtered, required this.onCategories, required this.onProducts, required this.onContact});
+  const _OrdersEmptyState({
+    required this.filtered,
+    required this.onCategories,
+    required this.onProducts,
+    required this.onSupport,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-      padding: const EdgeInsets.fromLTRB(26, 72, 26, 26),
+      padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
       children: [
         Center(
           child: SizedBox(
-            width: 330,
-            child: Image.asset('assets/images/orders_empty_illustration.png', fit: BoxFit.contain),
+            width: (width * .78).clamp(220.0, 340.0),
+            child: Image.asset('assets/images/checkout/orders_empty.png', fit: BoxFit.contain),
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 26),
         Text(
           filtered ? 'Aucune commande dans cette catégorie' : 'Aucune commande pour le moment',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: OvanieColors.navy, fontSize: 24, fontWeight: FontWeight.w900),
+          style: const TextStyle(color: payNavy, fontSize: 25, fontWeight: FontWeight.w900),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         Text(
           filtered
               ? 'Aucune commande ne correspond au filtre sélectionné.'
-              : 'Vous n’avez pas encore passé de commande.\nExplorez nos catégories et démarrez votre\nprochain chantier avec OVANIE.',
+              : 'Vous n’avez pas encore passé de commande. Explorez nos catégories et démarrez votre prochain chantier avec OVANIE.',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xFF33425F), fontSize: 15.5, height: 1.45, fontWeight: FontWeight.w500),
+          style: const TextStyle(color: payMuted, fontSize: 16, height: 1.45),
         ),
+        const SizedBox(height: 26),
+        PaymentButton(label: 'Voir les catégories', onPressed: onCategories),
+        const SizedBox(height: 12),
+        PaymentButton(label: 'Découvrir nos produits', outlined: true, onPressed: onProducts),
         const SizedBox(height: 30),
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 52,
-                child: OutlinedButton(
-                  onPressed: onCategories,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: OvanieColors.navy,
-                    side: const BorderSide(color: OvanieColors.navy, width: 1.2),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                  ),
-                  child: const Text('Voir les catégories', style: TextStyle(fontWeight: FontWeight.w800)),
-                ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: SizedBox(
-                height: 52,
-                child: FilledButton(
-                  onPressed: onProducts,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: OvanieColors.orange,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                  ),
-                  child: const FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      'Découvrir nos produits',
-                      maxLines: 1,
-                      softWrap: false,
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 38),
-        _OrdersHelpCard(onContact: onContact),
+        _SupportLine(onTap: onSupport),
       ],
     );
   }
 }
 
-class _OrdersHelpCard extends StatelessWidget {
-  final VoidCallback onContact;
-  const _OrdersHelpCard({required this.onContact});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}
-
 class _SearchResultChip extends StatelessWidget {
   final String query;
   final VoidCallback onClear;
+
   const _SearchResultChip({required this.query, required this.onClear});
 
   @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: InputChip(
-        label: Text('Recherche : $query'),
-        onDeleted: onClear,
-        deleteIcon: const Icon(Icons.close_rounded, size: 17),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+    decoration: BoxDecoration(color: const Color(0xFFE6EDF8), borderRadius: BorderRadius.circular(20)),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Recherche : $query',
+          style: const TextStyle(color: payNavy, fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(width: 6),
+        InkWell(
+          onTap: onClear,
+          customBorder: const CircleBorder(),
+          child: const Padding(
+            padding: EdgeInsets.all(2),
+            child: Icon(Icons.close_rounded, color: payNavy, size: 20),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
-String _formatDateTime(DateTime? value) {
-  if (value == null) return '';
-  return '${_formatDate(value)} à ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Container(
+      width: 46,
+      height: 5,
+      decoration: BoxDecoration(color: const Color(0xFFD0D6DF), borderRadius: BorderRadius.circular(3)),
+    ),
+  );
 }
 
-String _formatDate(DateTime value) {
-  const months = <String>[
-    'janvier',
-    'février',
-    'mars',
-    'avril',
-    'mai',
-    'juin',
-    'juillet',
-    'août',
-    'septembre',
-    'octobre',
-    'novembre',
-    'décembre',
-  ];
-  return '${value.day} ${months[value.month - 1]} ${value.year}';
+class _SheetTitle extends StatelessWidget {
+  final String title;
+  final VoidCallback onClose;
+
+  const _SheetTitle({required this.title, required this.onClose});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 14),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(color: payNavy, fontSize: 23, fontWeight: FontWeight.w800),
+          ),
+        ),
+        IconButton(
+          onPressed: onClose,
+          tooltip: 'Fermer',
+          icon: const Icon(Icons.close_rounded, color: payNavy, size: 28),
+        ),
+      ],
+    ),
+  );
+}
+
+class _Radio extends StatelessWidget {
+  final bool selected;
+
+  const _Radio({required this.selected});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 28,
+    height: 28,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(color: selected ? OvanieColors.orange : const Color(0xFF8A93A8), width: selected ? 2.2 : 1.6),
+    ),
+    child: selected
+        ? Container(
+            width: 16,
+            height: 16,
+            decoration: const BoxDecoration(color: OvanieColors.orange, shape: BoxShape.circle),
+          )
+        : null,
+  );
 }

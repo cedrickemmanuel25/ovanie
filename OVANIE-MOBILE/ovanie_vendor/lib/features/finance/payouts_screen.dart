@@ -33,12 +33,26 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
 
   static const _filters = {
     'all': 'Tous',
-    'approved': 'En attente',
-    'pending': 'Planifiés',
+    'waiting': 'En attente',
+    'scheduled': 'Planifiés',
     'paid': 'Effectués',
     'failed': 'Échoués',
   };
+
+  /// Statuts serveur regroupés derrière chaque onglet.
+  static const _groups = <String, List<String>>{
+    'waiting': ['blocked', 'waiting_payment', 'waiting_reception'],
+    'scheduled': ['pending', 'approved', 'processing'],
+    'paid': ['paid'],
+    'failed': ['failed', 'cancelled'],
+  };
+
+  bool _inFilter(Map<String, dynamic> p) {
+    if (_status == 'all') return true;
+    return (_groups[_status] ?? [_status]).contains('${p['status']}');
+  }
   static const _moreFilters = {
+    'approved': 'Disponibles',
     'processing': 'En traitement',
     'blocked': 'En attente de livraison',
     'waiting_payment': 'Attente paiement',
@@ -94,7 +108,7 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
     final rows = _items
         .where(
           (p) =>
-              (_status == 'all' || p['status'] == _status) &&
+              _inFilter(p) &&
               [p['reference'], p['payment_method_label'], p['amount'], p['beneficiary_name']].join(' ').toLowerCase().contains(q),
         )
         .toList();
@@ -145,7 +159,7 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
       children: [
         _stats([
           _stat(Icons.trending_up_rounded, financeGreen, 'Total reversé', amount: _summary['paid']),
-          _stat(Icons.schedule_rounded, Mk.orange, 'En attente', amount: _summary['scheduled']),
+          _stat(Icons.schedule_rounded, Mk.orange, 'En attente', amount: financePendingTotal(_summary)),
           _stat(
             Icons.calendar_today_outlined,
             const Color(0xFF1668E3),
@@ -153,7 +167,7 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
             value: '$paidCount',
             unit: paidCount > 1 ? 'versements' : 'versement',
           ),
-          _stat(Icons.event_available_outlined, financePurple, 'Prochain versement', value: next.isEmpty ? '—' : next, small: true),
+          _stat(Icons.event_available_outlined, financePurple, 'Prochain versement', value: next.isEmpty ? 'Aucun' : next, unit: next.isEmpty ? 'planifié' : '', small: true),
         ]),
         Row(
           children: [
@@ -291,33 +305,31 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
     );
   }
 
-  // ---- Indicateurs ------------------------------------------------------------
-  Widget _stats(List<Widget> cells) => LayoutBuilder(
-        builder: (context, box) {
-          // Quatre cartes côte à côte lorsque la largeur le permet, sinon deux par ligne.
-          final perRow = box.maxWidth >= 430 ? 4 : 2;
-          final width = (box.maxWidth - 8 * (perRow - 1)) / perRow;
-          return Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [for (final cell in cells) SizedBox(width: width, child: cell)],
-          );
-        },
-      );
+  // ---- Indicateurs : quatre cartes sur une ligne, comme la maquette -------------
+  Widget _stats(List<Widget> cells) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (var i = 0; i < cells.length; i++) ...[
+        if (i > 0) const SizedBox(width: 6),
+        Expanded(child: cells[i]),
+      ],
+    ],
+  );
 
   Widget _stat(IconData icon, Color color, String label, {Object? amount, String? value, String? unit, bool small = false}) {
-    return OrderCard(
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+    return Container(
+      height: 128,
+      padding: const EdgeInsets.fromLTRB(8, 10, 6, 10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          FinanceIconDisc(icon, color: color, size: 36),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Mk.muted, fontSize: 12, fontWeight: FontWeight.w500),
+          FinanceIconDisc(icon, color: color, size: 34),
+          const Spacer(),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(label, maxLines: 1, style: const TextStyle(color: Mk.muted, fontSize: 12, fontWeight: FontWeight.w500)),
           ),
           const SizedBox(height: 2),
           FittedBox(
@@ -326,11 +338,12 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
             child: Text(
               value ?? orderMoney(amount).replaceAll(RegExp(r'\s*FCFA$'), ''),
               maxLines: 1,
-              style: TextStyle(color: Mk.navy, fontSize: small ? 15.5 : 17, fontWeight: FontWeight.w800),
+              style: TextStyle(color: Mk.navy, fontSize: small ? 16 : 18, fontWeight: FontWeight.w800, letterSpacing: -.3),
             ),
           ),
           Text(
             value == null ? 'FCFA' : (unit ?? ''),
+            maxLines: 1,
             style: const TextStyle(color: Mk.muted, fontSize: 11.5, fontWeight: FontWeight.w500),
           ),
         ],
@@ -365,7 +378,7 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
         ),
       );
 
-  // ---- Carte d'un versement -----------------------------------------------------
+  // ---- Carte d'un versement : logo, référence et détails à gauche, montant et statut à droite ----
   Widget _payoutCard(Map<String, dynamic> p) {
     final holder = screenText(p['beneficiary_name'], '');
     return Material(
@@ -375,7 +388,7 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
       child: InkWell(
         onTap: () => _open(p),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+          padding: const EdgeInsets.fromLTRB(10, 12, 2, 12),
           child: Row(
             children: [
               PayoutOperatorLogo(operator: payoutOperatorKey(p), size: 48),
@@ -384,27 +397,17 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Les références réelles sont longues : elles tiennent sur une ligne en rétrécissant.
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
                       child: Text(
                         screenText(p['reference']),
                         maxLines: 1,
-                        style: const TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w800),
+                        style: const TextStyle(color: Mk.navy, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ),
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        Expanded(child: _iconLine(Icons.calendar_today_outlined, orderShortDate(_date(p)))),
-                        const SizedBox(width: 8),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 130),
-                          child: FinanceAmount(p['amount'], size: 16),
-                        ),
-                      ],
-                    ),
+                    const SizedBox(height: 4),
+                    _iconLine(Icons.calendar_today_outlined, orderShortDate(_date(p))),
                     const SizedBox(height: 3),
                     _iconLine(Icons.credit_card_outlined, screenText(p['payment_method_label'])),
                     if (holder.isNotEmpty) ...[
@@ -416,7 +419,17 @@ class _PayoutsScreenState extends State<PayoutsScreen> {
                         style: const TextStyle(color: Mk.muted, fontSize: 12.5, fontWeight: FontWeight.w500),
                       ),
                     ],
-                    const SizedBox(height: 7),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .36),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FinanceAmount(p['amount'], size: 16.5),
+                    const SizedBox(height: 6),
                     PayoutStatusPill(status: p['status']),
                   ],
                 ),

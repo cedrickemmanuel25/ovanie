@@ -77,6 +77,23 @@ class OvanieReferenceDataStore {
     }
   }
 
+  /// Numéro du support client publié par OVANIE (repli : numéro officiel).
+  String get _supportDigits {
+    final raw = _data['support_contact'];
+    final value = raw is Map ? '${raw['whatsapp_number'] ?? ''}'.replaceAll(RegExp(r'\D'), '') : '';
+    return value.isEmpty ? '2250161781818' : value;
+  }
+
+  String get supportNumberDisplay {
+    final digits = _supportDigits;
+    final local = digits.length == 13 && digits.startsWith('225') ? digits.substring(3) : digits;
+    if (local.length != 10) return digits;
+    return [for (var i = 0; i < 10; i += 2) local.substring(i, i + 2)].join(' ');
+  }
+
+  String get supportWhatsappUrl => 'https://wa.me/$_supportDigits';
+  String get supportTelUrl => 'tel:+$_supportDigits';
+
   List<OvanieReferenceOption> options(String key) {
     final raw = _data[key];
     if (raw is! List) return const <OvanieReferenceOption>[];

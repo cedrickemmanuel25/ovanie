@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/platform/app_deep_link.dart';
+import '../core/ui/offline_banner.dart';
 import '../features/auth/reset_password_screen.dart';
 import '../features/splash/splash_screen.dart';
 import 'theme.dart';
@@ -91,7 +92,7 @@ class _OvanieVendorAppState extends State<OvanieVendorApp> {
             .clamp(minScaleFactor: 0.9, maxScaleFactor: 1.15);
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: clamped),
-          child: child!,
+          child: OfflineBanner(child: child!),
         );
       },
       home: const SplashScreen(),

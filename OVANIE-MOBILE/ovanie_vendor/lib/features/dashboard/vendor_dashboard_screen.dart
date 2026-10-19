@@ -88,7 +88,9 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen>
 
   String _name() {
     final user = VendorSession.instance.user ?? const <String, dynamic>{};
-    final raw = '${user['name'] ?? user['first_name'] ?? ''}'.trim();
+    final shop = _data['shop'] is Map ? Map<String, dynamic>.from(_data['shop'] as Map) : const <String, dynamic>{};
+    // Titulaire de la boutique en secours tant que la session n'a pas fourni le profil.
+    final raw = '${user['name'] ?? user['first_name'] ?? shop['owner_name'] ?? ''}'.trim();
     if (raw.isEmpty) return 'Vendeur';
     final parts = raw.split(RegExp(r'\s+'));
     if (parts.length > 1) return parts.last;
@@ -218,7 +220,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen>
                               icon: Icons.bar_chart_rounded,
                               color: Mk.orange,
                               label: 'Ventes du jour',
-                              value: _shortMoney(stats['sales_today']),
+                              value: _shortMoney(stats['net_products_today'] ?? stats['sales_today']),
                               caption: 'FCFA',
                               captionOrange: true,
                               onTap: () => widget.onSelectTab(VendorTab.finance),

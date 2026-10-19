@@ -19,7 +19,8 @@ String payoutStatusLabel(Object? raw) {
     case 'processing':
       return 'En traitement';
     case 'approved':
-      return 'En attente';
+      // Libéré par l'échéancier : compté dans le solde disponible.
+      return 'Disponible';
     case 'pending':
       return 'Planifié';
     case 'waiting_payment':
@@ -47,6 +48,7 @@ Color payoutStatusColor(Object? raw) {
     case 'processing':
       return financePurple;
     case 'approved':
+      return const Color(0xFF1668E3);
     case 'waiting_payment':
     case 'waiting_reception':
     case 'blocked':
@@ -141,11 +143,14 @@ class PayoutStatusPill extends StatelessWidget {
           Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
           const SizedBox(width: 6),
           Flexible(
-            child: Text(
-              label ?? payoutStatusLabel(status),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: color, fontSize: 12.5, fontWeight: FontWeight.w700),
+            // Un libellé long rétrécit légèrement au lieu d'être coupé.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label ?? payoutStatusLabel(status),
+                maxLines: 1,
+                style: TextStyle(color: color, fontSize: 12.5, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
         ],
@@ -372,3 +377,92 @@ class FinanceRadio extends StatelessWidget {
             : null,
       );
 }
+
+/// Bandeau « Solde disponible » des maquettes : visuel net du portefeuille et
+/// montant réel posé à l'emplacement prévu. [badge] s'affiche en haut à droite,
+/// [bottom] (bouton de retrait) se place dans le prolongement bleu du bandeau.
+class BalanceBanner extends StatelessWidget {
+  const BalanceBanner({super.key, required this.amount, required this.onInfo, this.badge, this.bottom, this.onTap});
+  final Object? amount;
+  final VoidCallback onInfo;
+  final Widget? badge;
+  final Widget? bottom;
+  final VoidCallback? onTap;
+
+  static const _ratio = 758 / 262;
+
+  @override
+  Widget build(BuildContext context) {
+    final banner = AspectRatio(
+      aspectRatio: _ratio,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset('assets/images/mockups/fin_banner.jpg', fit: BoxFit.cover, excludeFromSemantics: true),
+          LayoutBuilder(
+            builder: (context, box) => Stack(
+              children: [
+                Positioned(
+                  left: box.maxWidth * .032,
+                  top: box.maxHeight * .33,
+                  width: box.maxWidth * .56,
+                  height: box.maxHeight * .37,
+                  child: Semantics(
+                    label: 'Solde disponible : ${orderMoney(amount)}',
+                    excludeSemantics: true,
+                    child: FinanceAmount(amount, size: 60, color: Colors.white, unitColor: Mk.orange),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Zone tactile posée sur le « i » du visuel.
+          Align(
+            alignment: const FractionalOffset(.30, .165),
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Material(
+                color: Colors.transparent,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(onTap: onInfo, child: const Tooltip(message: 'Comprendre mon solde', child: SizedBox.expand())),
+              ),
+            ),
+          ),
+          if (badge != null) Positioned(right: 10, top: 10, child: badge!),
+        ],
+      ),
+    );
+    return Material(
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      color: const Color(0xFF02286A),
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            banner,
+            if (bottom != null)
+              DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(colors: [Color(0xFF001841), Color(0xFF043280), Color(0xFF0E52C4), Color(0xFF0A4DC0)]),
+                ),
+                child: Padding(padding: const EdgeInsets.fromLTRB(14, 2, 14, 14), child: bottom),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Argent gagné mais pas encore disponible : planifié, en attente de livraison,
+/// de paiement ou de réception.
+double financePendingTotal(Map<String, dynamic> summary) => [
+  'scheduled',
+  'blocked',
+  'waiting_payment',
+  'waiting_reception',
+].fold<double>(0, (total, key) => total + (double.tryParse('${summary[key] ?? 0}') ?? 0));

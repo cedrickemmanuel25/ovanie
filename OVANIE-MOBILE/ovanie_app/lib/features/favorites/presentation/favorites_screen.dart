@@ -1,15 +1,21 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/auth_required_view.dart';
 import '../../auth/domain/session_store.dart';
+import '../../auth/presentation/login_screen.dart';
 import '../../cart/domain/cart_store.dart';
+import '../../checkout/presentation/checkout_screen.dart' show shortSaleUnit;
 import '../../home/data/marketplace_repository.dart';
+import '../../payments/presentation/payment_ui.dart';
 import '../../products/domain/product_model.dart';
 import '../../products/presentation/product_detail_screen.dart';
 import '../../search/presentation/search_screen.dart';
+import '../../wishlists/domain/wishlist_model.dart';
 import '../../wishlists/domain/wishlists_store.dart';
 import '../../wishlists/presentation/wishlists_screen.dart';
 import '../domain/favorites_store.dart';
@@ -18,13 +24,9 @@ class FavoritesScreen extends StatefulWidget {
   final VoidCallback? onOpenAccount;
   final VoidCallback? onOpenCart;
   final VoidCallback? onStartShopping;
+  final VoidCallback? onOpenCategories;
 
-  const FavoritesScreen({
-    super.key,
-    this.onOpenAccount,
-    this.onOpenCart,
-    this.onStartShopping,
-  });
+  const FavoritesScreen({super.key, this.onOpenAccount, this.onOpenCart, this.onStartShopping, this.onOpenCategories});
 
   @override
   State<FavoritesScreen> createState() => _FavoritesScreenState();
@@ -32,8 +34,9 @@ class FavoritesScreen extends StatefulWidget {
 
 class _FavoritesScreenState extends State<FavoritesScreen> {
   final MarketplaceRepository _marketplace = const MarketplaceRepository();
-  final Map<int, int> _quantities = <int, int>{};
+  // Produits retirés pendant la session, avec leur date de retrait.
   final List<ProductModel> _recentlyRemoved = <ProductModel>[];
+  final Map<int, DateTime> _removedAt = <int, DateTime>{};
   List<ProductModel> _recommendations = const <ProductModel>[];
   bool _wishlistMode = false;
   bool _loadingRecommendations = false;
@@ -56,13 +59,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     if (_loadingRecommendations) return;
     _loadingRecommendations = true;
     try {
-      var products = await _marketplace.safeProducts(
-        () => _marketplace.getRecommendations(limit: 12),
-      );
+      var products = await _marketplace.safeProducts(() => _marketplace.getRecommendations(limit: 12));
       if (products.isEmpty) {
-        products = await _marketplace.safeProducts(
-          () => _marketplace.getLatestProducts(limit: 12),
-        );
+        products = await _marketplace.safeProducts(() => _marketplace.getLatestProducts(limit: 12));
       }
       if (!mounted) return;
       setState(() => _recommendations = products);
@@ -79,188 +78,332 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     Navigator.of(context).maybePop();
   }
 
-  void _openCart() {
-    if (widget.onOpenCart != null) {
-      widget.onOpenCart!();
+  void _openCategories() {
+    if (widget.onOpenCategories != null) {
+      widget.onOpenCategories!();
+      return;
     }
+    _startShopping();
+  }
+
+  void _rememberRemoved(Iterable<ProductModel> products) {
+    final now = DateTime.now();
+    for (final product in products) {
+      _recentlyRemoved.removeWhere((item) => item.id == product.id);
+      _recentlyRemoved.insert(0, product);
+      _removedAt[product.id] = now;
+    }
+    if (_recentlyRemoved.length > 10) _recentlyRemoved.removeRange(10, _recentlyRemoved.length);
   }
 
   Future<void> _removeFavorite(ProductModel product) async {
-    final wasFavorite = FavoritesStore.instance.contains(product);
-    if (!wasFavorite) return;
-    setState(() {
-      _recentlyRemoved.removeWhere((item) => item.id == product.id);
-      _recentlyRemoved.insert(0, product);
-      if (_recentlyRemoved.length > 8) {
-        _recentlyRemoved.removeRange(8, _recentlyRemoved.length);
-      }
-    });
+    if (!FavoritesStore.instance.contains(product)) return;
+    setState(() => _rememberRemoved([product]));
     try {
       await FavoritesStore.instance.remove(product);
+      if (mounted) showOvanieToast(context, 'Produit retiré de vos favoris.');
     } catch (_) {
       if (!mounted) return;
       setState(() => _recentlyRemoved.removeWhere((item) => item.id == product.id));
-      _showMessage('Impossible de retirer ce produit des favoris.');
+      showOvanieToast(context, 'Impossible de retirer ce produit des favoris.', error: true);
     }
   }
 
   Future<void> _clearFavorites() async {
     final items = FavoritesStore.instance.items;
     if (items.isEmpty) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Supprimer tous les favoris ?'),
-        content: const Text(
-          'Tous les produits enregistrés dans vos favoris seront retirés.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: OvanieColors.orange),
-            child: const Text('Supprimer'),
-          ),
-        ],
-      ),
+    final confirmed = await showOvanieConfirmDialog(
+      context,
+      visual: const DangerCircle(icon: Icons.delete_outline_rounded),
+      title: 'Supprimer tous les favoris ?',
+      message: 'Tous les produits enregistrés dans vos favoris seront retirés.',
+      confirmLabel: 'Supprimer',
+      confirmColor: const Color(0xFFDC2626),
+      cancelLabel: 'Annuler',
     );
-    if (confirmed != true) return;
-
-    setState(() {
-      _recentlyRemoved
-        ..clear()
-        ..addAll(items.reversed.take(8));
-    });
+    if (!confirmed || !mounted) return;
+    setState(() => _rememberRemoved(items.reversed));
     try {
       await FavoritesStore.instance.clear();
+      if (mounted) showOvanieToast(context, 'Vos favoris ont été supprimés.');
     } catch (_) {
-      if (!mounted) return;
-      _showMessage('Impossible de supprimer vos favoris pour le moment.');
+      if (mounted) showOvanieToast(context, 'Impossible de supprimer vos favoris pour le moment.', error: true);
     }
   }
 
   void _restoreRemoved(ProductModel product) {
     if (!SessionStore.instance.isAuthenticated) return;
-    FavoritesStore.instance.toggle(product);
-    setState(() => _recentlyRemoved.removeWhere((item) => item.id == product.id));
+    if (!FavoritesStore.instance.contains(product)) FavoritesStore.instance.toggle(product);
+    setState(() {
+      _recentlyRemoved.removeWhere((item) => item.id == product.id);
+      _removedAt.remove(product.id);
+    });
+    showOvanieToast(context, 'Produit restauré dans vos favoris.');
   }
 
   void _showRemovedProducts() {
     if (_recentlyRemoved.isEmpty) return;
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: Colors.white,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Produits supprimés récemment',
-                style: TextStyle(
-                  color: OvanieColors.navy,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 14),
-              ..._recentlyRemoved.take(5).map(
-                    (product) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: _ProductImage(
-                        product: product,
-                        width: 52,
-                        height: 52,
-                      ),
-                      title: Text(
-                        product.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: TextButton(
-                        onPressed: () {
-                          _restoreRemoved(product);
-                          Navigator.of(sheetContext).pop();
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final items = _recentlyRemoved.toList(growable: false);
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .75),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 12, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const WishlistSheetHandle(),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Produits supprimés récemment',
+                            style: TextStyle(color: payNavy, fontSize: 22, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          tooltip: 'Fermer',
+                          icon: const Icon(Icons.close_rounded, color: payNavy, size: 30),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'Vous avez supprimé ${items.length} produit${items.length > 1 ? 's' : ''} de vos favoris.',
+                      style: const TextStyle(color: payMuted, fontSize: 15),
+                    ),
+                    const SizedBox(height: 10),
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.only(right: 8),
+                        itemCount: items.length,
+                        separatorBuilder: (_, __) => const Divider(height: 22, color: payBorder),
+                        itemBuilder: (_, index) {
+                          final product = items[index];
+                          return Row(
+                            children: [
+                              OrderItemThumbnail(url: product.imageUrl, width: 96, height: 76),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      product.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: payNavy, fontSize: 15),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    _PriceText(product: product, size: 16),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Supprimé le ${paymentShortDate(_removedAt[product.id])}',
+                                      style: const TextStyle(color: payMuted, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 112,
+                                height: 46,
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    _restoreRemoved(product);
+                                    if (_recentlyRemoved.isEmpty) {
+                                      Navigator.of(sheetContext).pop();
+                                    } else {
+                                      setSheetState(() {});
+                                    }
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: payNavy,
+                                    side: const BorderSide(color: payNavy, width: 1.4),
+                                    padding: EdgeInsets.zero,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  child: const Text(
+                                    'Restaurer',
+                                    style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
                         },
-                        child: const Text('Restaurer'),
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _openProductMenu(ProductModel product) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const WishlistSheetHandle(),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  OrderItemThumbnail(url: product.imageUrl, width: 128, height: 76),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: payNavy, fontSize: 19, fontWeight: FontWeight.w800),
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Divider(height: 1, color: payBorder),
+              WishlistSheetAction(
+                icon: Icons.playlist_add_rounded,
+                label: 'Ajouter à une liste d’envies',
+                chevron: true,
+                onTap: () => Navigator.of(sheetContext).pop('wishlist'),
+              ),
+              const Divider(height: 1, color: payBorder),
+              WishlistSheetAction(
+                icon: Icons.heart_broken_outlined,
+                label: 'Retirer des favoris',
+                danger: true,
+                chevron: true,
+                onTap: () => Navigator.of(sheetContext).pop('remove'),
+              ),
             ],
           ),
         ),
       ),
     );
+    if (!mounted || action == null) return;
+    if (action == 'remove') await _removeFavorite(product);
+    if (action == 'wishlist') await _addFavoriteToWishlist(product);
   }
 
   Future<void> _addFavoriteToWishlist(ProductModel product) async {
     if (!SessionStore.instance.isAuthenticated) {
-      _showMessage('Connectez-vous pour utiliser les listes d’envies.');
+      showOvanieToast(context, 'Connectez-vous pour utiliser les listes d’envies.', error: true);
       return;
     }
-
     if (WishlistsStore.instance.items.isEmpty && !WishlistsStore.instance.loading) {
       try {
         await WishlistsStore.instance.refresh();
       } catch (_) {}
     }
-
     if (!mounted) return;
-    final selected = await showModalBottomSheet<dynamic>(
+
+    final selected = await showModalBottomSheet<Object>(
       context: context,
-      showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
       builder: (sheetContext) {
         final lists = WishlistsStore.instance.items;
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 2, 18, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Ajouter à une liste d’envies',
-                  style: TextStyle(
-                    color: OvanieColors.navy,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ...lists.take(8).map(
-                      (wishlist) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFFFF2EA),
-                          child: Icon(
-                            Icons.favorite_border_rounded,
-                            color: OvanieColors.orange,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .8),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const WishlistSheetHandle(),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Ajouter à une liste d’envies',
+                          style: TextStyle(color: payNavy, fontSize: 22, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      Material(
+                        color: paySoft,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => Navigator.of(sheetContext).pop(),
+                          child: const SizedBox(
+                            width: 52,
+                            height: 52,
+                            child: Icon(Icons.close_rounded, color: payNavy, size: 28),
                           ),
                         ),
-                        title: Text(wishlist.name),
-                        subtitle: Text(
-                          '${wishlist.productsCount} produit${wishlist.productsCount > 1 ? 's' : ''}',
-                        ),
-                        onTap: () => Navigator.of(sheetContext).pop(wishlist),
                       ),
-                    ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xFFF3F6FD),
-                    child: Icon(Icons.add_rounded, color: OvanieColors.blue),
+                    ],
                   ),
-                  title: const Text('Créer une nouvelle liste'),
-                  onTap: () => Navigator.of(sheetContext).pop('create'),
-                ),
-              ],
+                  const SizedBox(height: 14),
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final wishlist in lists)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _WishlistChoice(
+                              wishlist: wishlist,
+                              alreadyIn: wishlist.products.any((item) => item.id == product.id),
+                              onTap: () => Navigator.of(sheetContext).pop(wishlist),
+                            ),
+                          ),
+                        InkWell(
+                          onTap: () => Navigator.of(sheetContext).pop('create'),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            height: 62,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: payBorder),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_rounded, color: OvanieColors.orange, size: 28),
+                                SizedBox(width: 10),
+                                Text(
+                                  'Créer une nouvelle liste',
+                                  style: TextStyle(
+                                    color: OvanieColors.orange,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -269,92 +412,56 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
     if (selected == null || !mounted) return;
     try {
-      dynamic target = selected;
+      WishlistModel target;
       if (selected == 'create') {
-        final controller = TextEditingController();
-        final name = await showDialog<String>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Créer une liste'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(hintText: 'Nom de la liste'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Annuler'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
-                style: FilledButton.styleFrom(backgroundColor: OvanieColors.orange),
-                child: const Text('Créer'),
-              ),
-            ],
-          ),
-        );
-        controller.dispose();
-        if (name == null || name.trim().isEmpty) return;
-        target = await WishlistsStore.instance.create(name.trim());
+        final name = await showCreateWishlistDialog(context);
+        if (name == null || !mounted) return;
+        target = await WishlistsStore.instance.create(name);
+      } else {
+        target = selected as WishlistModel;
+        if (target.products.any((item) => item.id == product.id)) {
+          showOvanieToast(context, 'Ce produit est déjà dans « ${target.name} ».');
+          return;
+        }
       }
       await WishlistsStore.instance.addProduct(target, product);
-      _showMessage('Produit ajouté à la liste d’envies.', success: true);
+      if (mounted) showOvanieToast(context, 'Produit ajouté à la liste d’envies.');
     } catch (_) {
-      _showMessage('Impossible d’ajouter ce produit à la liste.');
+      if (mounted) showOvanieToast(context, 'Impossible d’ajouter ce produit à la liste.', error: true);
     }
   }
 
   void _addToCart(ProductModel product) {
-    final quantity = _quantities[product.id] ?? 1;
-    final result = CartStore.instance.addQuantity(product, quantity);
-    _showMessage(result.message, success: result.success);
+    final result = CartStore.instance.add(product);
+    showOvanieToast(context, result.message, error: !result.success);
   }
 
-  void _changeQuantity(ProductModel product, int delta) {
-    final current = _quantities[product.id] ?? 1;
-    final next = (current + delta)
-        .clamp(1, product.stock > 0 ? product.stock : 99)
-        .toInt();
-    setState(() => _quantities[product.id] = next);
-  }
-
-  void _showMessage(String message, {bool success = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: success ? OvanieColors.success : OvanieColors.navy,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  void _toggleRecommendation(ProductModel product) {
+    if (!SessionStore.instance.isAuthenticated) return;
+    FavoritesStore.instance.toggle(product);
   }
 
   void _openProduct(ProductModel product) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProductDetailScreen(product: product),
-      ),
-    );
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductDetailScreen(product: product)));
+  }
+
+  /// Onglet Compte quand l'écran vit dans la barre d'onglets, sinon connexion directe.
+  void _openAccountOrLogin() {
+    if (widget.onOpenAccount != null) {
+      widget.onOpenAccount!();
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<bool>(builder: (_) => const LoginScreen()));
   }
 
   void _openSearch() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SearchScreen()),
-    );
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SearchScreen()));
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([
-        SessionStore.instance,
-        FavoritesStore.instance,
-        CartStore.instance,
-        WishlistsStore.instance,
-      ]),
+      animation: Listenable.merge([SessionStore.instance, FavoritesStore.instance, WishlistsStore.instance]),
       builder: (context, _) {
         if (_wishlistMode) {
           return WishlistsScreen(
@@ -364,105 +471,121 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           );
         }
 
+        // Les favoris sont liés au compte : sans connexion, on propose d'y accéder.
+        if (!SessionStore.instance.isAuthenticated) {
+          return AuthRequiredPage(onOpenAccount: _openAccountOrLogin);
+        }
+
         final favorites = FavoritesStore.instance.items;
-        return Scaffold(
-          backgroundColor: Colors.white,
-          body: SafeArea(
-            bottom: false,
-            child: RefreshIndicator(
-              color: OvanieColors.orange,
-              onRefresh: () async {
-                if (SessionStore.instance.isAuthenticated) {
+        final seen = <int>{};
+        final suggestions = _recommendations
+            .where((product) => !FavoritesStore.instance.contains(product) && seen.add(product.id))
+            .take(10)
+            .toList(growable: false);
+        final empty = favorites.isEmpty && !FavoritesStore.instance.loading;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: SafeArea(
+              bottom: false,
+              child: RefreshIndicator(
+                color: OvanieColors.orange,
+                onRefresh: () async {
                   await FavoritesStore.instance.refreshFromServer();
-                }
-                await _loadRecommendations();
-              },
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: _Header(
-                      onSearch: _openSearch,
-                      onDelete: _clearFavorites,
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: _Tabs(
-                      favoritesCount: favorites.length,
-                      onWishlists: () => setState(() => _wishlistMode = true),
-                    ),
-                  ),
-                  if (FavoritesStore.instance.loading && favorites.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: OvanieColors.orange,
-                        ),
-                      ),
-                    )
-                  else if (favorites.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _EmptyFavorites(
-                        onDiscover: _startShopping,
-                        onCategories: _startShopping,
-                      ),
-                    )
-                  else ...[
+                  await _loadRecommendations();
+                },
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                  slivers: [
                     SliverToBoxAdapter(
-                      child: _CountBanner(count: favorites.length),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(18, 2, 18, 0),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, rawIndex) {
-                            if (rawIndex.isOdd) {
-                              return const SizedBox(height: 10);
-                            }
-                            final index = rawIndex ~/ 2;
-                            final product = favorites[index];
-                            return _FavoriteProductCard(
-                              product: product,
-                              quantity: _quantities[product.id] ?? 1,
-                              onOpen: () => _openProduct(product),
-                              onRemove: () => _removeFavorite(product),
-                              onAddToWishlist: () => _addFavoriteToWishlist(product),
-                              onMinus: () => _changeQuantity(product, -1),
-                              onPlus: () => _changeQuantity(product, 1),
-                              onAddToCart: () => _addToCart(product),
-                            );
-                          },
-                          childCount: favorites.length * 2 - 1,
-                        ),
+                      child: FavoritesPageTitle(
+                        title: 'Favoris',
+                        trailing: favorites.isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: _clearFavorites,
+                                tooltip: 'Supprimer tous les favoris',
+                                icon: const Icon(Icons.delete_outline_rounded, color: payNavy, size: 32),
+                              ),
                       ),
                     ),
-                    if (_recentlyRemoved.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: _RemovedBanner(onTap: _showRemovedProducts),
+                    SliverToBoxAdapter(
+                      child: FavoritesSegmentedTabs(
+                        favoritesCount: favorites.length,
+                        wishlistsSelected: false,
+                        onFavorites: () {},
+                        onWishlists: () => setState(() => _wishlistMode = true),
                       ),
-                    if (_recommendations.isNotEmpty)
+                    ),
+                    if (FavoritesStore.instance.loading && favorites.isEmpty)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(child: CircularProgressIndicator(color: OvanieColors.orange)),
+                      )
+                    else if (empty) ...[
                       SliverToBoxAdapter(
-                        child: _Recommendations(
-                          products: _recommendations
-                              .where(
-                                (product) => !FavoritesStore.instance.contains(product),
-                              )
-                              .take(10)
-                              .toList(growable: false),
-                          onOpenProduct: _openProduct,
-                          onAddToCart: (product) {
-                            final result = CartStore.instance.add(product);
-                            _showMessage(result.message, success: result.success);
-                          },
+                        child: _EmptyFavorites(onDiscover: _startShopping, onCategories: _openCategories),
+                      ),
+                      if (_recentlyRemoved.isNotEmpty)
+                        SliverToBoxAdapter(child: _RemovedBanner(onTap: _showRemovedProducts)),
+                      if (suggestions.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: Container(
+                            color: const Color(0xFFF6F7F9),
+                            padding: const EdgeInsets.only(bottom: 18),
+                            child: _Recommendations(
+                              products: suggestions,
+                              onOpenProduct: _openProduct,
+                              onToggleFavorite: _toggleRecommendation,
+                            ),
+                          ),
+                        ),
+                    ] else ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+                          child: Text(
+                            'Vous avez ${favorites.length} produit${favorites.length > 1 ? 's' : ''} dans vos favoris',
+                            style: const TextStyle(color: payMuted, fontSize: 15.5),
+                          ),
                         ),
                       ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 22)),
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        sliver: SliverGrid(
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            mainAxisExtent: 352,
+                          ),
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) => _FavoriteProductCard(
+                              product: favorites[index],
+                              onOpen: () => _openProduct(favorites[index]),
+                              onRemove: () => _removeFavorite(favorites[index]),
+                              onMenu: () => _openProductMenu(favorites[index]),
+                              onAddToCart: () => _addToCart(favorites[index]),
+                            ),
+                            childCount: favorites.length,
+                          ),
+                        ),
+                      ),
+                      if (_recentlyRemoved.isNotEmpty)
+                        SliverToBoxAdapter(child: _RemovedBanner(onTap: _showRemovedProducts)),
+                      if (suggestions.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: _Recommendations(
+                            products: suggestions,
+                            onOpenProduct: _openProduct,
+                            onToggleFavorite: _toggleRecommendation,
+                          ),
+                        ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 22)),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -472,320 +595,179 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 }
 
-class _Header extends StatelessWidget {
-  final VoidCallback onSearch;
-  final VoidCallback onDelete;
-
-  const _Header({required this.onSearch, required this.onDelete});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 18, 12),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'Favoris',
-              style: TextStyle(
-                color: OvanieColors.navy,
-                fontSize: 30,
-                height: 1,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: onSearch,
-            icon: const Icon(Icons.search_rounded),
-            color: OvanieColors.navy,
-            iconSize: 31,
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded),
-            color: OvanieColors.navy,
-            iconSize: 28,
-          ),
-        ],
-      ),
-    );
+/// Libellé et couleur de la disponibilité, d'après le stock réel.
+(String, Color, Color) _stockOf(ProductModel product) {
+  final status = product.availabilityStatus.toLowerCase();
+  if (status == 'on_order' || status == 'preorder') {
+    return ('Sur commande', const Color(0xFF0B5ED7), const Color(0xFFE6F0FF));
   }
+  if (product.stock <= 0 || status == 'out_of_stock' || !product.canAddToCart) {
+    return ('Indisponible', const Color(0xFF6B7591), const Color(0xFFEFF2F6));
+  }
+  if (product.stock <= 5) return ('Stock limité', const Color(0xFFC2410C), const Color(0xFFFFF1E6));
+  return ('En stock', const Color(0xFF15803D), const Color(0xFFE6F6EC));
 }
 
-class _Tabs extends StatelessWidget {
-  final int favoritesCount;
-  final VoidCallback onWishlists;
+class _PriceText extends StatelessWidget {
+  final ProductModel product;
+  final double size;
 
-  const _Tabs({required this.favoritesCount, required this.onWishlists});
+  const _PriceText({required this.product, this.size = 18});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 4, 18, 0),
-      child: Row(
+  Widget build(BuildContext context) => FittedBox(
+    fit: BoxFit.scaleDown,
+    alignment: Alignment.centerLeft,
+    child: Text.rich(
+      TextSpan(
+        text: formatFcfa(product.finalPrice),
+        style: TextStyle(color: payNavy, fontSize: size, fontWeight: FontWeight.w800),
         children: [
-          Expanded(
-            child: Container(
-              height: 52,
-              decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: OvanieColors.orange, width: 2.4),
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                'Mes favoris ($favoritesCount)',
-                style: const TextStyle(
-                  color: OvanieColors.orange,
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: InkWell(
-              onTap: onWishlists,
-              child: Container(
-                height: 52,
-                decoration: const BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: OvanieColors.border, width: 1.2),
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: const Text(
-                  "Listes d'envies",
-                  style: TextStyle(
-                    color: OvanieColors.navy,
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
+          TextSpan(
+            text: ' / ${shortSaleUnit(product.unitLabel)}',
+            style: TextStyle(color: payMuted, fontSize: size * .8, fontWeight: FontWeight.w400),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _CountBanner extends StatelessWidget {
-  final int count;
-
-  const _CountBanner({required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 14, 18, 14),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF4EC),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.favorite_border_rounded, color: OvanieColors.orange),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Vous avez $count produit${count > 1 ? 's' : ''} dans vos favoris',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-              color: Color(0xFF6C2210),
-              fontSize: 14,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      maxLines: 1,
+    ),
+  );
 }
 
 class _FavoriteProductCard extends StatelessWidget {
   final ProductModel product;
-  final int quantity;
   final VoidCallback onOpen;
   final VoidCallback onRemove;
-  final VoidCallback onAddToWishlist;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
+  final VoidCallback onMenu;
   final VoidCallback onAddToCart;
 
   const _FavoriteProductCard({
     required this.product,
-    required this.quantity,
     required this.onOpen,
     required this.onRemove,
-    required this.onAddToWishlist,
-    required this.onMinus,
-    required this.onPlus,
+    required this.onMenu,
     required this.onAddToCart,
   });
 
   @override
   Widget build(BuildContext context) {
-    final inStock = product.stock > 0 && product.canAddToCart;
+    final (label, color, background) = _stockOf(product);
+    final available = product.canAddToCart && label != 'Indisponible';
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(13),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onOpen,
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          height: 144,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            border: Border.all(color: OvanieColors.border),
-            borderRadius: BorderRadius.circular(13),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0A001D4A),
-                blurRadius: 10,
-                offset: Offset(0, 3),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: payBorder),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _ProductImage(product: product, width: 82, height: 118),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      product.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: OvanieColors.navy,
-                        fontSize: 15,
-                        height: 1.1,
-                        fontWeight: FontWeight.w900,
-                      ),
+              Stack(
+                children: [
+                  Container(
+                    height: 162,
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: const Color(0xFFF4F5F7), borderRadius: BorderRadius.circular(10)),
+                    child: product.imageUrl.trim().isEmpty
+                        ? const Icon(Icons.inventory_2_outlined, color: Color(0xFFB5BFCE), size: 44)
+                        : Image.network(
+                            product.imageUrl,
+                            fit: BoxFit.contain,
+                            cacheWidth: 400,
+                            errorBuilder: (_, __, ___) =>
+                                const Icon(Icons.inventory_2_outlined, color: Color(0xFFB5BFCE), size: 44),
+                          ),
+                  ),
+                  Positioned(
+                    top: 2,
+                    right: 2,
+                    child: IconButton(
+                      onPressed: onRemove,
+                      tooltip: 'Retirer des favoris',
+                      icon: const Icon(Icons.favorite_rounded, color: OvanieColors.orange, size: 28),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      product.brand.isNotEmpty
-                          ? product.brand
-                          : (product.categoryName.isNotEmpty
-                              ? product.categoryName
-                              : 'OVANIE'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: OvanieColors.muted,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      formatFcfa(product.finalPrice),
-                      style: const TextStyle(
-                        color: OvanieColors.orange,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      inStock ? 'En stock' : 'Stock limité',
-                      style: TextStyle(
-                        color: inStock ? const Color(0xFF0C9A43) : OvanieColors.orange,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 130,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        IconButton(
-                          tooltip: 'Retirer des favoris',
-                          onPressed: onRemove,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints.tightFor(
-                            width: 38,
-                            height: 38,
-                          ),
-                          icon: const Icon(
-                            Icons.favorite_rounded,
-                            color: OvanieColors.orange,
-                            size: 27,
-                          ),
-                        ),
-                        PopupMenuButton<String>(
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(
-                            Icons.more_vert_rounded,
-                            color: OvanieColors.navy,
-                          ),
-                          onSelected: (value) {
-                            if (value == 'remove') onRemove();
-                            if (value == 'wishlist') onAddToWishlist();
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem<String>(
-                              value: 'wishlist',
-                              child: Text('Ajouter à une liste d’envies'),
-                            ),
-                            PopupMenuItem<String>(
-                              value: 'remove',
-                              child: Text('Retirer des favoris'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        _QuantityControl(
-                          quantity: quantity,
-                          onMinus: onMinus,
-                          onPlus: onPlus,
-                        ),
-                        const SizedBox(width: 9),
-                        SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: FilledButton(
-                            onPressed: inStock ? onAddToCart : null,
-                            style: FilledButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              backgroundColor: OvanieColors.orange,
-                              disabledBackgroundColor: const Color(0xFFE8EBF0),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
+              const SizedBox(height: 10),
+              Text(
+                product.brand.trim().isEmpty ? 'OVANIE' : product.brand.trim().toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: payMuted, fontSize: 12.5, letterSpacing: .3),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: payNavy, fontSize: 15.5, height: 1.2),
+              ),
+              const Spacer(),
+              _PriceText(product: product),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(16)),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                               ),
-                            ),
-                            child: const Icon(
-                              Icons.shopping_cart_outlined,
-                              color: Colors.white,
-                            ),
+                              const SizedBox(width: 5),
+                              Text(label, style: TextStyle(color: color, fontSize: 13)),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                  Tooltip(
+                    message: 'Options',
+                    child: InkWell(
+                      onTap: onMenu,
+                      customBorder: const CircleBorder(),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+                        child: Icon(Icons.more_vert_rounded, color: payNavy, size: 24),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  SizedBox(
+                    width: 42,
+                    height: 42,
+                    child: FilledButton(
+                      onPressed: available ? onAddToCart : null,
+                      style: FilledButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        elevation: 0,
+                        backgroundColor: OvanieColors.orange,
+                        disabledBackgroundColor: const Color(0xFFE5E8EE),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Icon(Icons.shopping_cart_outlined, color: Colors.white, size: 22),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -795,60 +777,60 @@ class _FavoriteProductCard extends StatelessWidget {
   }
 }
 
-class _QuantityControl extends StatelessWidget {
-  final int quantity;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
+class _WishlistChoice extends StatelessWidget {
+  final WishlistModel wishlist;
+  final bool alreadyIn;
+  final VoidCallback onTap;
 
-  const _QuantityControl({
-    required this.quantity,
-    required this.onMinus,
-    required this.onPlus,
-  });
+  const _WishlistChoice({required this.wishlist, required this.alreadyIn, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 72,
-      height: 44,
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(12),
+    child: Container(
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: OvanieColors.border),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: payBorder),
       ),
       child: Row(
         children: [
+          if (wishlist.products.isEmpty)
+            Container(
+              width: 82,
+              height: 82,
+              decoration: BoxDecoration(color: const Color(0xFFF4F6F9), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.inventory_2_outlined, color: Color(0xFF8A93A8), size: 32),
+            )
+          else
+            WishlistThumbGrid(products: wishlist.products, size: 82),
+          const SizedBox(width: 16),
           Expanded(
-            child: InkWell(
-              onTap: onMinus,
-              child: const Center(
-                child: Icon(Icons.remove_rounded, size: 18),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: Text(
-                '$quantity',
-                style: const TextStyle(
-                  color: OvanieColors.navy,
-                  fontWeight: FontWeight.w800,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  wishlist.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: payNavy, fontSize: 18, fontWeight: FontWeight.w700),
                 ),
-              ),
+                const SizedBox(height: 3),
+                Text(
+                  alreadyIn
+                      ? 'Déjà dans cette liste'
+                      : '${wishlist.productsCount} produit${wishlist.productsCount > 1 ? 's' : ''}',
+                  style: TextStyle(color: alreadyIn ? payGreenDark : payMuted, fontSize: 15),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            child: InkWell(
-              onTap: onPlus,
-              child: const Center(
-                child: Icon(Icons.add_rounded, size: 18),
-              ),
-            ),
-          ),
+          const Icon(Icons.chevron_right_rounded, color: payNavy, size: 28),
         ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _RemovedBanner extends StatelessWidget {
@@ -857,105 +839,146 @@ class _RemovedBanner extends StatelessWidget {
   const _RemovedBanner({required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+    child: Material(
+      color: const Color(0xFFF2F4F7),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF7FAFF),
-            border: Border.all(color: const Color(0xFFDDE7F6)),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Row(
+        borderRadius: BorderRadius.circular(12),
+        child: const Padding(
+          padding: EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
             children: [
-              CircleAvatar(
-                radius: 17,
-                backgroundColor: Colors.white,
-                child: Icon(
-                  Icons.delete_outline_rounded,
-                  color: OvanieColors.navy,
-                  size: 20,
-                ),
-              ),
-              SizedBox(width: 10),
+              Icon(Icons.history_rounded, color: payNavy, size: 34),
+              SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Vous avez supprimé un produit de vos favoris ?',
-                      style: TextStyle(
-                        color: OvanieColors.navy,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: TextStyle(color: payNavy, fontSize: 14.5),
                     ),
                     SizedBox(height: 2),
                     Text(
                       'Voir les produits supprimés',
                       style: TextStyle(
-                        color: Color(0xFF0759C7),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
+                        color: OvanieColors.orange,
+                        fontSize: 15,
+                        decoration: TextDecoration.underline,
+                        decorationColor: OvanieColors.orange,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, color: OvanieColors.navy),
+              Icon(Icons.chevron_right_rounded, color: payMuted, size: 26),
             ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _Recommendations extends StatelessWidget {
   final List<ProductModel> products;
   final ValueChanged<ProductModel> onOpenProduct;
-  final ValueChanged<ProductModel> onAddToCart;
+  final ValueChanged<ProductModel> onToggleFavorite;
 
-  const _Recommendations({
-    required this.products,
-    required this.onOpenProduct,
-    required this.onAddToCart,
-  });
+  const _Recommendations({required this.products, required this.onOpenProduct, required this.onToggleFavorite});
 
   @override
   Widget build(BuildContext context) {
-    if (products.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 14, 0, 0),
+      padding: const EdgeInsets.fromLTRB(16, 20, 0, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'Vous pourriez aussi aimer',
-            style: TextStyle(
-              color: OvanieColors.navy,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
+            style: TextStyle(color: payNavy, fontSize: 21, fontWeight: FontWeight.w800),
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 12),
           SizedBox(
-            height: 182,
+            height: 236,
             child: ListView.separated(
-              padding: const EdgeInsets.only(right: 18),
+              padding: const EdgeInsets.only(right: 16),
               scrollDirection: Axis.horizontal,
               itemCount: products.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 9),
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (context, index) {
                 final product = products[index];
-                return _RecommendationCard(
-                  product: product,
+                final favorite = FavoritesStore.instance.contains(product);
+                return InkWell(
                   onTap: () => onOpenProduct(product),
-                  onCart: () => onAddToCart(product),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 156,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: payBorder),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Stack(
+                          children: [
+                            Container(
+                              height: 116,
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF4F5F7),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: product.imageUrl.trim().isEmpty
+                                  ? const Icon(Icons.inventory_2_outlined, color: Color(0xFFB5BFCE))
+                                  : Image.network(
+                                      product.imageUrl,
+                                      fit: BoxFit.contain,
+                                      cacheWidth: 300,
+                                      errorBuilder: (_, __, ___) =>
+                                          const Icon(Icons.inventory_2_outlined, color: Color(0xFFB5BFCE)),
+                                    ),
+                            ),
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: IconButton(
+                                onPressed: () => onToggleFavorite(product),
+                                tooltip: favorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
+                                icon: Icon(
+                                  favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                  color: favorite ? OvanieColors.orange : payNavy,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          product.brand.trim().isEmpty ? 'OVANIE' : product.brand.trim().toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: payMuted, fontSize: 11.5),
+                        ),
+                        Text(
+                          product.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: payNavy, fontSize: 13.5, height: 1.2),
+                        ),
+                        const Spacer(),
+                        _PriceText(product: product, size: 15),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),
@@ -966,248 +989,42 @@ class _Recommendations extends StatelessWidget {
   }
 }
 
-class _RecommendationCard extends StatelessWidget {
-  final ProductModel product;
-  final VoidCallback onTap;
-  final VoidCallback onCart;
-
-  const _RecommendationCard({
-    required this.product,
-    required this.onTap,
-    required this.onCart,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: 146,
-        padding: const EdgeInsets.all(9),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: OvanieColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                _ProductImage(product: product, width: 128, height: 92),
-                const Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Icon(
-                    Icons.favorite_border_rounded,
-                    color: OvanieColors.navy,
-                    size: 21,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            Text(
-              product.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: OvanieColors.navy,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    formatFcfa(product.finalPrice),
-                    maxLines: 1,
-                    style: const TextStyle(
-                      color: OvanieColors.orange,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                InkWell(
-                  onTap: onCart,
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFF1F65FF)),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(
-                      Icons.shopping_cart_outlined,
-                      size: 17,
-                      color: Color(0xFF1F65FF),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _EmptyFavorites extends StatelessWidget {
   final VoidCallback onDiscover;
   final VoidCallback onCategories;
 
-  const _EmptyFavorites({
-    required this.onDiscover,
-    required this.onCategories,
-  });
+  const _EmptyFavorites({required this.onDiscover, required this.onCategories});
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 62, 24, 30),
-        child: Column(
-          children: [
-            Image.asset(
-              'assets/images/favorites_empty_illustration.png',
-              width: 330,
-              height: 280,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Aucun favori pour le moment',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: OvanieColors.navy,
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              "Vous n'avez encore ajouté aucun produit\n"
-              'à vos favoris.\n'
-              'Découvrez nos produits et ajoutez vos coups\n'
-              'de cœur pour les retrouver ici.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF576482),
-                fontSize: 16,
-                height: 1.55,
-              ),
-            ),
-            const SizedBox(height: 34),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 58,
-                    child: FilledButton.icon(
-                      onPressed: onDiscover,
-                      icon: const Icon(Icons.search_rounded),
-                      label: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Découvrir nos produits',
-                          maxLines: 1,
-                          softWrap: false,
-                        ),
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFFFF2EA),
-                        foregroundColor: OvanieColors.orange,
-                        elevation: 0,
-                        textStyle: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SizedBox(
-                    height: 58,
-                    child: FilledButton.icon(
-                      onPressed: onCategories,
-                      icon: const Icon(Icons.grid_view_rounded),
-                      label: const Text('Voir les catégories'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFF3F5F9),
-                        foregroundColor: OvanieColors.navy,
-                        elevation: 0,
-                        textStyle: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+    final width = MediaQuery.sizeOf(context).width;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 34, 16, 26),
+      child: Column(
+        children: [
+          Image.asset(
+            'assets/images/checkout/favorites_empty.png',
+            width: (width * .82).clamp(240.0, 360.0),
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(height: 26),
+          const Text(
+            'Aucun favori pour le moment',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: payNavy, fontSize: 26, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Vous n’avez encore ajouté aucun produit à vos favoris. Découvrez nos produits et ajoutez vos coups de cœur pour les retrouver ici.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: payMuted, fontSize: 16, height: 1.45),
+          ),
+          const SizedBox(height: 26),
+          PaymentButton(label: 'Découvrir nos produits', height: 56, onPressed: onDiscover),
+          const SizedBox(height: 12),
+          PaymentButton(label: 'Voir les catégories', outlined: true, height: 56, onPressed: onCategories),
+        ],
       ),
-    );
-  }
-}
-
-class _ProductImage extends StatelessWidget {
-  final ProductModel product;
-  final double width;
-  final double height;
-
-  const _ProductImage({
-    required this.product,
-    required this.width,
-    required this.height,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: product.imageUrl.trim().isEmpty
-          ? const Icon(
-              Icons.inventory_2_outlined,
-              color: Color(0xFFB5BFCE),
-              size: 40,
-            )
-          : Image.network(
-              product.imageUrl,
-              fit: BoxFit.contain,
-              width: width,
-              height: height,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.inventory_2_outlined,
-                color: Color(0xFFB5BFCE),
-                size: 40,
-              ),
-            ),
     );
   }
 }

@@ -708,6 +708,8 @@ Route::middleware(['auth:admin', 'internal', 'staff:support'])->prefix('support'
     Route::get('/conversations', [SupportConversationController::class, 'index'])->name('conversations.index');
     Route::post('/conversations', [SupportConversationController::class, 'store'])->name('conversations.store');
     Route::get('/conversations/{conversation}', [SupportConversationController::class, 'show'])->name('conversations.show');
+    Route::get('/conversations/{conversation}/pieces-jointes/{message}/{index}', [SupportConversationController::class, 'attachment'])
+        ->whereNumber(['message', 'index'])->name('conversations.attachment');
     Route::post('/conversations/{conversation}/reponse-humaine', [SupportConversationController::class, 'reply'])->name('conversations.reply');
     Route::post('/conversations/{conversation}/reponse-ia', [SupportConversationController::class, 'aiReply'])->name('conversations.ai-reply');
     Route::post('/conversations/{conversation}/prendre-en-charge', [SupportConversationController::class, 'takeover'])->name('conversations.takeover');

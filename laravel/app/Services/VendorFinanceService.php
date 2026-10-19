@@ -55,7 +55,8 @@ class VendorFinanceService
         // Le vendeur ne doit voir que ce qui lui revient réellement, jamais le
         // prix payé par le client (qui inclut la commission OVANIE).
         $monthNetSales = (float) (clone $monthQuery)->sum('payout_amount');
-        $next = (clone $query)->whereIn('status', [VendorPayout::STATUS_PENDING, VendorPayout::STATUS_APPROVED, VendorPayout::STATUS_PROCESSING])
+        // Seuls les reversements encore programmés sont « à venir » ; ceux déjà libérés forment le solde disponible.
+        $next = (clone $query)->where('status', VendorPayout::STATUS_PENDING)->where('scheduled_for', '>=', now()->startOfDay())
             ->whereNotNull('scheduled_for')->orderBy('scheduled_for')->first();
 
         return [
@@ -107,6 +108,8 @@ class VendorFinanceService
             'sales_count' => (clone $query)->count(),
             'scheduled_count' => (clone $query)->where('status', VendorPayout::STATUS_PENDING)->count(),
             'ready_count' => (clone $query)->where('status', VendorPayout::STATUS_APPROVED)->count(),
+            // Part du solde déjà demandée en retrait : le virement est en cours côté OVANIE.
+            'withdrawal_requested' => (float) (clone $query)->where('status', VendorPayout::STATUS_APPROVED)->get()->filter(fn ($p) => filled(data_get($p->meta, 'withdrawal_requested_at')))->sum('payout_amount'),
             'processing_count' => (clone $query)->where('status', VendorPayout::STATUS_PROCESSING)->count(),
             'paid_count' => (clone $query)->where('status', VendorPayout::STATUS_PAID)->count(),
             'next_payment_date' => $this->nextPaymentDate($shop, $vendorId),

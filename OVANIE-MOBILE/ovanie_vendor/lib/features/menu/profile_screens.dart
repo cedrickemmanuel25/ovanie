@@ -2,10 +2,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
+import '../../core/ui/mk_file_pick.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/reference_data/reference_data_store.dart';
+import '../../core/ui/mk_dialogs.dart';
 import 'delivery_screens.dart';
 import 'menu_ui.dart';
 
@@ -330,7 +331,13 @@ class _ShopEditState extends State<ShopEditScreen> {
 
   Future<void> pick(bool isLogo) async {
     try {
-      final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1800, imageQuality: 90);
+      final f = await pickMkFile(
+        context,
+        title: isLogo ? 'Logo de la boutique' : 'Image de couverture',
+        message: isLogo ? 'Image carrée et nette, JPG ou PNG.' : 'Photo nette de votre boutique, JPG ou PNG.',
+        maxWidth: 1800,
+        quality: 90,
+      );
       if (f != null && mounted) {
         setState(() {
           if (isLogo) {
@@ -346,7 +353,10 @@ class _ShopEditState extends State<ShopEditScreen> {
   }
 
   Future<void> pickCategory() async {
-    final picked = await menuPick<String>(context, 'Catégorie principale', shopCategories(), category);
+    final picked = await showMkSheet<String>(
+      context,
+      builder: (_) => _CategorySheet(categories: shopCategories(), selected: category),
+    );
     if (picked != null && mounted) setState(() => category = picked);
   }
 
@@ -523,23 +533,6 @@ class _ShopEditState extends State<ShopEditScreen> {
                       value: categories[category],
                       hint: 'Choisir une catégorie',
                       onTap: saving ? null : pickCategory,
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final entry in categories.entries.take(12))
-                          SizedBox(
-                            height: 36,
-                            child: menuChip(
-                              entry.value,
-                              category == entry.key,
-                              () => setState(() => category = entry.key),
-                              activeColor: Mk.orange,
-                            ),
-                          ),
-                      ],
                     ),
                     const SizedBox(height: 14),
                     const MkLabel('Description de la boutique'),
@@ -925,6 +918,151 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Photo réelle d'une catégorie, telle qu'affichée sur le site OVANIE.
+String shopCategoryImageUrl(String slug) {
+  for (final item in OvanieReferenceDataStore.instance.records('shop_categories')) {
+    if ('${item['slug'] ?? ''}'.trim() == slug) return '${item['image_url'] ?? ''}'.trim();
+  }
+  return '';
+}
+
+/// Illustration d'une catégorie de boutique, choisie d'après son nom ; null si
+/// aucune image ne correspond (un pictogramme est alors affiché).
+String? shopCategoryImage(String slug, String name) {
+  final text = '$slug $name'.toLowerCase();
+  const rules = <(String, String)>[
+    ('electri', 'electricite'),
+    ('plomb', 'plomberie'),
+    ('solaire', 'solaire'),
+    ('outil', 'outillage'),
+    ('ciment', 'ciment'),
+    ('gros', 'ciment'),
+    ('fer', 'fer'),
+    ('méta', 'fer'),
+    ('meta', 'fer'),
+    ('carrel', 'carrelage'),
+    ('peint', 'peinture'),
+    ('finition', 'peinture'),
+    ('isol', 'isolation'),
+    ('bois', 'bois'),
+    ('ecolog', 'bois'),
+    ('quincail', 'quincaillerie'),
+  ];
+  for (final rule in rules) {
+    if (text.contains(rule.$1)) return 'assets/images/categories/${rule.$2}.jpg';
+  }
+  return null;
+}
+
+/// Feuille « Catégorie principale » : grille illustrée et validation.
+class _CategorySheet extends StatefulWidget {
+  const _CategorySheet({required this.categories, required this.selected});
+  final Map<String, String> categories;
+  final String? selected;
+  @override
+  State<_CategorySheet> createState() => _CategorySheetState();
+}
+
+class _CategorySheetState extends State<_CategorySheet> {
+  late String? _value = widget.selected;
+
+  @override
+  Widget build(BuildContext context) => MkSheetFrame(
+    children: [
+      const Text('Catégorie principale', style: TextStyle(color: menuBlue, fontSize: 21, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 12),
+      LayoutBuilder(
+        builder: (context, box) {
+          final columns = box.maxWidth >= 330 ? 3 : 2;
+          final width = (box.maxWidth - 8 * (columns - 1)) / columns;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final entry in widget.categories.entries) SizedBox(width: width, child: _tile(entry.key, entry.value)),
+            ],
+          );
+        },
+      ),
+      const SizedBox(height: 16),
+      MkBarButton(label: 'Valider', filled: true, onTap: _value == null ? null : () => Navigator.pop(context, _value)),
+    ],
+  );
+
+  Widget _tile(String slug, String name) {
+    final selected = _value == slug;
+    final image = shopCategoryImage(slug, name);
+    return Semantics(
+      inMutuallyExclusiveGroup: true,
+      checked: selected,
+      button: true,
+      label: name,
+      child: Material(
+        color: selected ? Mk.softOrange : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: selected ? Mk.orange : orderBorder, width: selected ? 1.8 : 1.2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => setState(() => _value = slug),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 62,
+                      child: shopCategoryImageUrl(slug).isNotEmpty
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                shopCategoryImageUrl(slug),
+                                fit: BoxFit.contain,
+                                excludeFromSemantics: true,
+                                errorBuilder: (_, e, st) => image != null
+                                    ? Image.asset(image, fit: BoxFit.contain, excludeFromSemantics: true)
+                                    : const Icon(Icons.category_outlined, color: menuAzure, size: 40),
+                              ),
+                            )
+                          : image != null
+                          ? Image.asset(image, fit: BoxFit.contain, excludeFromSemantics: true)
+                          : Center(
+                              child: Icon(
+                                slug.contains('cadeau') ? Icons.card_giftcard_rounded : Icons.recycling_rounded,
+                                color: menuAzure,
+                                size: 40,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: 6),
+                    ExcludeSemantics(
+                      child: Text(
+                        name,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: selected ? const Color(0xFFE85400) : menuBlue,
+                          fontSize: 12.5,
+                          height: 1.2,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Positioned(right: 6, top: 6, child: Icon(Icons.check_circle_rounded, color: Mk.orange, size: 22)),
+            ],
           ),
         ),
       ),

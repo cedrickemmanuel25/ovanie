@@ -28,9 +28,7 @@ class CategoryModel {
 
     final rawChildren = json['children'];
     final slug = json['slug']?.toString() ?? '';
-    final rawName = json['public_name']?.toString() ??
-        json['name']?.toString() ??
-        'Catégorie';
+    final rawName = json['public_name']?.toString() ?? json['name']?.toString() ?? 'Catégorie';
 
     final parentValue = json['parent_id'];
     final parsedParentId = parentValue == null ? null : toInt(parentValue);
@@ -38,17 +36,17 @@ class CategoryModel {
     return CategoryModel(
       id: toInt(json['id']),
       parentId: parsedParentId == 0 ? null : parsedParentId,
-      name: canonicalCategoryName(slug: slug, rawName: rawName),
+      // Le nom officiel ne s'applique qu'aux catégories principales : une
+      // sous-catégorie garde le nom saisi par l'administrateur, même si son
+      // identifiant reprend un mot de sa catégorie mère.
+      name: parsedParentId == null || parsedParentId == 0
+          ? canonicalCategoryName(slug: slug, rawName: rawName)
+          : cleanOvanieText(rawName, fallbackSlug: slug),
       slug: slug,
       icon: json['icon']?.toString() ?? '',
-      imageUrl: AppConfig.normalizeMediaUrl(
-        json['image_url']?.toString() ?? json['image']?.toString() ?? '',
-      ),
+      imageUrl: AppConfig.normalizeMediaUrl(json['image_url']?.toString() ?? json['image']?.toString() ?? ''),
       children: rawChildren is List
-          ? rawChildren
-              .whereType<Map>()
-              .map((item) => CategoryModel.fromJson(Map<String, dynamic>.from(item)))
-              .toList()
+          ? rawChildren.whereType<Map>().map((item) => CategoryModel.fromJson(Map<String, dynamic>.from(item))).toList()
           : const [],
     );
   }

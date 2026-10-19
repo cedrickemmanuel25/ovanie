@@ -396,7 +396,7 @@
                     <div class="ov-review-summary-inline"><strong>{{ number_format((float) $rating, 1, ',', ' ') }}</strong><span class="ov-stars">★★★★★</span><span>{{ $reviewsCount }} avis</span></div>
                     <div class="ov-reviews-list">
                         @foreach(collect($sheet->get('reviews', []))->take(4) as $review)
-                            <article><div><span class="ov-stars">{{ str_repeat('★', (int) data_get($review, 'rating', 0)) }}{{ str_repeat('☆', max(0, 5 - (int) data_get($review, 'rating', 0))) }}</span><strong>Achat vérifié</strong></div><p>{{ data_get($review, 'comment') ?: 'Avis client sans commentaire.' }}</p><small>{{ data_get($review, 'user.name', 'Client OVANIE') }}</small></article>
+                            <article><div><span class="ov-stars">{{ str_repeat('★', (int) data_get($review, 'rating', 0)) }}{{ str_repeat('☆', max(0, 5 - (int) data_get($review, 'rating', 0))) }}</span><strong>Achat vérifié</strong></div><p>{{ data_get($review, 'comment') ?: 'Avis client sans commentaire.' }}</p><small>{{ data_get($review, 'user.name', 'Client OVANIE') }}</small>@if(filled(data_get($review, 'vendor_reply')))<blockquote style="margin:8px 0 0;padding:8px 12px;border-left:3px solid #1668e3;background:#eef4ff;border-radius:0 8px 8px 0"><strong style="display:block;font-size:.85em;color:#1668e3">Réponse de la boutique</strong>{{ data_get($review, 'vendor_reply') }}</blockquote>@endif</article>
                         @endforeach
                     </div>
                 @else

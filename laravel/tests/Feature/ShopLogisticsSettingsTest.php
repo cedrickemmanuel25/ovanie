@@ -107,6 +107,25 @@ class ShopLogisticsSettingsTest extends TestCase
         $this->assertSame(OrderWorkflowService::PROVIDER_OVANIE, $quote['provider_type']);
     }
 
+    public function test_mode_cannot_change_while_an_order_is_in_progress_under_the_current_mode(): void
+    {
+        $shop = $this->shop('seller');
+        $this->configure($shop);
+        $shop->forceFill(['logistics_confirmed_at' => now()])->save();
+        $item = $this->item($shop, 'seller', 'pending');
+        $item->forceFill(['vendor_visible_at' => now(), 'vendor_status' => 'ready'])->save();
+
+        $this->getJson('/api/mobile/v1/vendor/shop/delivery')->assertOk()
+            ->assertJsonPath('mode_switch.allowed', false)->assertJsonPath('mode_switch.open_orders', 1);
+        $this->postJson(self::ENDPOINT, $this->switchData('ovanie'))->assertStatus(422)->assertJsonValidationErrors('logistics_type');
+        $this->assertSame('seller', $shop->fresh()->logistics_type);
+
+        // Commande livrée : plus rien n'est en cours, le changement redevient possible.
+        $item->forceFill(['vendor_status' => 'delivered'])->save();
+        $this->getJson('/api/mobile/v1/vendor/shop/delivery')->assertOk()->assertJsonPath('mode_switch.allowed', true);
+        $this->postJson(self::ENDPOINT, $this->switchData('ovanie'))->assertOk()->assertJsonPath('shop.logistics_type', 'ovanie');
+    }
+
     public function test_each_location_field_and_explicit_confirmation_are_required(): void
     {
         $shop = $this->shop('seller');

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
+import '../../core/ui/mk_dialogs.dart';
 import '../after_sales/after_sales_screen.dart';
 import '../auth/vendor_journey_screen.dart';
 import '../auth/vendor_session.dart';
+import '../menu/account_screens.dart';
 import '../menu/delivery_screens.dart';
+import '../menu/info_screens.dart';
 import '../menu/menu_ui.dart';
 import '../menu/profile_screens.dart';
 import '../menu/reviews_screen.dart';
@@ -59,24 +61,16 @@ class _MenuState extends State<VendorMenuScreen> {
   }
 
   Future<void> logout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Se déconnecter ?', style: TextStyle(color: menuBlue, fontSize: 19, fontWeight: FontWeight.w800)),
-        content: const Text(
-          'Vous devrez saisir à nouveau vos identifiants pour accéder à votre boutique.',
-          style: TextStyle(color: menuMuted, fontSize: 14, height: 1.4),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Annuler')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: menuRed),
-            onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Se déconnecter'),
-          ),
-        ],
-      ),
+    final confirmed = await showMkDialog<bool>(
+      context,
+      icon: Icons.logout_rounded,
+      iconColor: menuRed,
+      title: 'Se déconnecter ?',
+      message: 'Vous devrez saisir à nouveau votre email ou numéro de téléphone et votre mot de passe pour accéder à votre espace vendeur.',
+      actions: const [
+        MkDialogAction('Se déconnecter', true, color: menuRed),
+        MkDialogAction('Annuler', false, color: Mk.icon, style: MkDialogActionStyle.text),
+      ],
     );
     if (confirmed != true || !mounted) return;
     try {
@@ -87,14 +81,6 @@ class _MenuState extends State<VendorMenuScreen> {
           (_) => false,
         );
       }
-    } catch (e) {
-      if (mounted) menuError(context, e);
-    }
-  }
-
-  Future<void> web(String path) async {
-    try {
-      await launchUrl(Uri.parse('${AppConfig.backendOrigin}$path'));
     } catch (e) {
       if (mounted) menuError(context, e);
     }
@@ -183,18 +169,24 @@ class _MenuState extends State<VendorMenuScreen> {
                     ]),
                     _settingsCard(),
                     _group([
+                      _tile('État de la boutique', 'Statut, contrôles et activation', Icons.storefront_outlined, menuGreen,
+                          () => open(const ShopStatusScreen())),
+                      _tile('Documents de la boutique', 'Identité, RCCM et document fiscal', Icons.folder_shared_outlined,
+                          menuPurple, () => open(const ShopDocumentsScreen())),
+                    ]),
+                    _group([
                       _tile('Mon profil', 'Vos informations personnelles', Icons.person_outline_rounded, menuAzure,
                           () => open(const PersonalProfileScreen())),
-                      _tile('Sécurité du compte', 'Mot de passe, authentification, sécurité', Icons.shield_outlined,
-                          menuGreen, () => web('/profile'), external: true),
+                      _tile('Sécurité du compte', 'Mot de passe, appareils connectés, alertes', Icons.shield_outlined,
+                          menuGreen, () => open(const AccountSecurityScreen())),
                     ]),
                     _group([
                       _tile('Centre d’aide', 'FAQ et support', Icons.help_outline_rounded, menuAzure,
                           () => open(const VendorSupportScreen())),
                       _tile('Conditions d’utilisation', 'Nos règles et engagements', Icons.description_outlined, Mk.icon,
-                          () => web('/conditions-generales'), external: true),
+                          () => open(const TermsScreen())),
                       _tile('À propos d’OVANIE', 'Notre mission, notre vision', Icons.info_outline_rounded, menuOrange,
-                          () => web('/qui-sommes-nous'), external: true),
+                          () => open(const AboutScreen(version: version))),
                     ]),
                     Material(
                       color: const Color(0xFFFDECEC),
@@ -456,18 +448,21 @@ class _MenuState extends State<VendorMenuScreen> {
                     child: const Icon(Icons.storefront_outlined, color: menuAzure, size: 23),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Paramètres Boutique & livraison',
                           style: TextStyle(color: menuBlue, fontSize: 14.5, height: 1.2, fontWeight: FontWeight.w700),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          'Mode logistique, délais et zones',
-                          style: TextStyle(color: menuMuted, fontSize: 12.5, height: 1.3, fontWeight: FontWeight.w500),
+                          // Les zones et tarifs ne concernent que la boutique qui livre elle-même.
+                          '${mapOf(data['shop'])['logistics_type']}' == 'seller'
+                              ? 'Ma propre logistique : délais, zones et tarifs'
+                              : 'OVANIE Logistics : collecte et délais de préparation',
+                          style: const TextStyle(color: menuMuted, fontSize: 12.5, height: 1.3, fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),

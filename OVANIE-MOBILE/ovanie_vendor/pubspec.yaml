@@ -16,6 +16,8 @@ dependencies:
   geolocator: 14.0.2
   image_picker: ^1.2.0
   file_picker: 11.0.3
+  firebase_core: ^4.12.1
+  firebase_messaging: ^16.4.3
 
 dev_dependencies:
   flutter_test:
@@ -29,6 +31,7 @@ flutter:
     - assets/images/operators/
     - assets/images/mockups/
     - assets/images/vehicles/
+    - assets/images/categories/
   fonts:
     - family: PlusJakartaSans
       fonts:

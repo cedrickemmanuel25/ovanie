@@ -578,6 +578,15 @@ class DriverMissionService
             }
         });
 
+        // La remise vendeur → livreur est l'enlèvement réel : les articles sont
+        // horodatés pour que l'espace vendeur et le client voient la commande partie.
+        if ($action === 'loaded') {
+            \App\Models\OrderItem::query()
+                ->whereIn('id', $items->pluck('id'))
+                ->whereNull('picked_up_at')
+                ->update(['picked_up_at' => now()]);
+        }
+
         $shop = data_get($target, 'shop');
         $vendor = $shop?->user;
         $order = $items->first()?->order;

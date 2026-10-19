@@ -15,20 +15,18 @@ class ReviewsRepository {
   }
 
   Future<void> saveProduct({required int orderItemId, required int rating, required String comment}) async {
-    final response = await ApiClient.dio.post<dynamic>('/mobile/client/reviews/product', data: {
-      'order_item_id': orderItemId,
-      'rating': rating,
-      'comment': comment.trim(),
-    });
+    final response = await ApiClient.dio.post<dynamic>(
+      '/mobile/client/reviews/product',
+      data: {'order_item_id': orderItemId, 'rating': rating, 'comment': comment.trim()},
+    );
     ApiClient.ensureSuccess(response);
   }
 
   Future<void> saveDelivery({required int orderId, required int rating, required String comment}) async {
-    final response = await ApiClient.dio.post<dynamic>('/mobile/client/reviews/delivery', data: {
-      'order_id': orderId,
-      'rating': rating,
-      'comment': comment.trim(),
-    });
+    final response = await ApiClient.dio.post<dynamic>(
+      '/mobile/client/reviews/delivery',
+      data: {'order_id': orderId, 'rating': rating, 'comment': comment.trim()},
+    );
     ApiClient.ensureSuccess(response);
   }
 }

@@ -8,7 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ovanie_vendor/app/theme.dart';
 import 'package:ovanie_vendor/core/network/api_client.dart';
 import 'package:ovanie_vendor/features/after_sales/after_sales_screen.dart';
+import 'package:ovanie_vendor/features/menu/account_screens.dart';
 import 'package:ovanie_vendor/features/menu/delivery_screens.dart';
+import 'package:ovanie_vendor/features/menu/info_screens.dart';
 import 'package:ovanie_vendor/features/menu/logistics_settings_screen.dart';
 import 'package:ovanie_vendor/features/menu/profile_screens.dart';
 import 'package:ovanie_vendor/features/menu/reviews_screen.dart';
@@ -21,6 +23,7 @@ import 'package:ovanie_vendor/features/support/vendor_support_screen.dart';
 /// tablette, et comportements clés (filtres, validations, confirmations).
 void main() {
   late Object referenceData;
+  late Map<String, dynamic> account;
   final requests = <String>[];
 
   setUpAll(() async {
@@ -31,6 +34,7 @@ void main() {
     }
     await loader.load();
     referenceData = jsonDecode(File('test/fixtures/reference_data.json').readAsStringSync()) as Object;
+    account = jsonDecode(File('test/fixtures/account.json').readAsStringSync()) as Map<String, dynamic>;
   });
 
   final shop = <String, dynamic>{
@@ -155,6 +159,22 @@ void main() {
 
   Object payloadFor(String path) {
     if (path.contains('reference-data')) return referenceData;
+    if (path.endsWith('/legal/terms')) {
+      return {
+        'title': 'Conditions générales d’utilisation',
+        'intro': 'Les présentes CGU encadrent l’accès et l’utilisation de la plateforme OVANIE.',
+        'contact': {'phone_display': '01 61 78 00 00', 'email': 'contact@ovanie.com'},
+        'sections': [
+          {'number': 1, 'title': 'Objet', 'text': 'Les présentes conditions encadrent l’accès au site OVANIE.'},
+          {'number': 2, 'title': 'Rôle d’OVANIE', 'text': 'OVANIE exploite une place de marché dédiée au BTP.'},
+          {'number': 3, 'title': 'Vendeurs', 'text': 'Les vendeurs référencés publient des informations exactes.'},
+          {'number': 4, 'title': 'Litiges et assistance', 'text': 'Réclamation par téléphone au 01 61 78 00 00 ou par e-mail à contact@ovanie.com.'},
+        ],
+      };
+    }
+    for (final key in ['shop/status', 'shop/documents', 'account/security', 'push']) {
+      if (path.endsWith('/$key')) return account[key] as Object;
+    }
     if (path.endsWith('/menu')) return {'shop': shop, 'user': user, 'counts': {'orders': 6, 'notifications': 5, 'returns': 2, 'disputes': 1}};
     if (path.contains('/shop/delivery')) return {'uses_seller_logistics': true, 'zones': zones, 'profile': {'default_delay': '24 h', 'max_weight_kg': 1500, 'max_volume_m3': 4, 'conditions': 'Livraison au pied du chantier'}, 'area_map_url': null};
     if (path.endsWith('/shop')) return {'shop': shop};
@@ -221,6 +241,12 @@ void main() {
     'assistance': (() => const VendorSupportScreen(), 'SUP-2026-019'),
     'statistiques': (() => const StatisticsScreen(), 'Top produits'),
     'avis': (() => const ReviewsScreen(), 'Avis'),
+    'état boutique': (() => const ShopStatusScreen(), 'Parcours d’activation'),
+    'documents boutique': (() => const ShopDocumentsScreen(), 'Document fiscal'),
+    'sécurité du compte': (() => const AccountSecurityScreen(), 'APPAREILS CONNECTÉS'),
+    'modifier mot de passe': (() => const ChangePasswordScreen(), 'Déconnecter les autres appareils'),
+    'conditions d’utilisation': (() => const TermsScreen(), 'Besoin d’aide ?'),
+    'à propos': (() => const AboutScreen(version: '0.1.11'), 'Contacter OVANIE'),
   };
   const sizes = <String, Size>{
     'petit téléphone': Size(320, 568),
@@ -312,8 +338,11 @@ void main() {
     await open(tester, const CaseDetailScreen(id: 5), const Size(412, 915), 1);
     await tester.scrollUntilVisible(find.text('Refuser le retour'), 300, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Refuser le retour'));
+    await tester.pumpAndSettle();
+    expect(find.text('Refuser le retour ?'), findsOneWidget);
+    await tester.tap(find.text('Refuser le retour').last);
     await tester.pump();
-    expect(find.text('Expliquez le refus en au moins 10 caractères.'), findsOneWidget);
+    expect(find.text('Expliquez le refus au client en au moins 10 caractères.'), findsOneWidget);
     expect(requests.where((r) => r.startsWith('POST')), isEmpty);
     await close(tester);
   });
@@ -360,6 +389,99 @@ void main() {
     expect(find.text('Non mesuré'), findsOneWidget);
     expect(find.text('+12 %'), findsOneWidget);
     expect(find.text('-8,5 %'), findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets('mot de passe : règles vérifiées avant tout envoi au serveur', (tester) async {
+    await open(tester, const ChangePasswordScreen(), const Size(412, 915), 1);
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'OvanieLocal2026');
+    await tester.enterText(fields.at(1), 'motdepasse');
+    await tester.enterText(fields.at(2), 'motdepasse');
+    await tester.pump();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Le mot de passe ne respecte pas les règles ci-dessous.'), findsOneWidget);
+    expect(requests.where((r) => r.contains('account/password')), isEmpty);
+    await close(tester);
+  });
+
+  testWidgets('état boutique : documents et logistique complets, aucun bouton à compléter', (tester) async {
+    await open(tester, const ShopStatusScreen(), const Size(412, 915), 1);
+    expect(find.text('Boutique opérationnelle'), findsOneWidget);
+    expect(find.text('4/4 étapes'), findsOneWidget);
+    expect(find.text('Compléter mes documents'), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('conditions : un article du sommaire se déplie avec ses coordonnées actives', (tester) async {
+    await open(tester, const TermsScreen(), const Size(412, 915), 1);
+    expect(find.textContaining('Réclamation par téléphone', findRichText: true), findsNothing);
+    await tester.tap(find.text('Litiges et assistance'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('Réclamation par téléphone', findRichText: true), findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets('livraison : changement de mode refusé tant que des commandes sont en cours', (tester) async {
+    await open(tester, const DeliverySettingsScreen(), const Size(412, 915), 1);
+    ApiClient.dio.interceptors.insert(
+      0,
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (!options.path.endsWith('/shop/delivery')) return handler.next(options);
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'mode_switch': {
+                  'allowed': false,
+                  'open_orders': 2,
+                  'message': 'Vous avez 2 commandes en cours en livraison par votre boutique. Terminez-les avant de changer de mode logistique.',
+                },
+              },
+            ),
+          );
+        },
+      ),
+    );
+    await tester.tap(find.text('Changer de mode logistique'));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(find.text('Changement impossible pour le moment'), findsOneWidget);
+    expect(find.textContaining('Vous avez 2 commandes en cours'), findsOneWidget);
+    // L'écran de changement de mode ne s'est pas ouvert.
+    expect(find.text('Point de repère'), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('documents : une fenêtre de l’app précède toujours le téléphone', (tester) async {
+    await open(tester, const ShopDocumentsScreen(), const Size(412, 915), 1);
+    // Ajouter un document d'entreprise : choix de la source dans l'app.
+    await tester.dragUntilVisible(find.text('Ajouter'), find.byType(Scrollable).first, const Offset(0, -200));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Ajouter').first);
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(find.text('Prendre une photo'), findsOneWidget);
+    expect(find.text('Choisir dans la galerie'), findsOneWidget);
+    expect(find.text('Choisir un fichier PDF'), findsOneWidget);
+    await tester.tap(find.text('Annuler'));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    // Télécharger un document : confirmation dans l'app avant l'explorateur.
+    await tester.dragUntilVisible(find.text('Télécharger').first, find.byType(Scrollable).first, const Offset(0, 200));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Télécharger').first);
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(find.text('Enregistrer ce fichier ?'), findsOneWidget);
+    expect(requests.where((r) => r.contains('/file')), isEmpty);
     await close(tester);
   });
 }

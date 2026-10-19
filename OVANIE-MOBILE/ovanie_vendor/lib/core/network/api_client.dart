@@ -7,7 +7,14 @@ import '../compatibility/schema_compatibility.dart';
 class ApiClient {
   ApiClient._();
 
-  static final Dio dio = Dio(
+  /// Vrai quand la dernière requête n'a pas pu joindre le serveur OVANIE
+  /// (pas de réseau, serveur injoignable). Repasse à faux dès qu'une réponse
+  /// arrive : le bandeau « Hors connexion » s'affiche et disparaît seul.
+  static final ValueNotifier<bool> offline = ValueNotifier<bool>(false);
+
+  static final Dio dio = _build();
+
+  static Dio _build() => Dio(
     BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
       connectTimeout: const Duration(seconds: 15),
@@ -23,7 +30,36 @@ class ApiClient {
       // doit pas être transformée en erreur Dio opaque avant lecture du JSON.
       validateStatus: (status) => status != null && status >= 200 && status < 600,
     ),
-  );
+  )..interceptors.add(
+      InterceptorsWrapper(
+        onResponse: (response, handler) {
+          offline.value = false;
+          handler.next(response);
+        },
+        onError: (error, handler) {
+          if (error.response == null &&
+              const {
+                DioExceptionType.connectionError,
+                DioExceptionType.connectionTimeout,
+                DioExceptionType.receiveTimeout,
+                DioExceptionType.sendTimeout,
+              }.contains(error.type)) {
+            offline.value = true;
+          } else if (error.response != null) {
+            offline.value = false;
+          }
+          handler.next(error);
+        },
+      ),
+    );
+
+  /// Vérifie que le serveur répond de nouveau (bouton « Réessayer »).
+  static Future<bool> ping() async {
+    try {
+      await dio.get<dynamic>('/mobile/v1/vendor/status');
+    } catch (_) {/* l'intercepteur met à jour [offline]. */}
+    return !offline.value;
+  }
 
   static void setToken(String? token) {
     final value = token?.trim() ?? '';
@@ -130,7 +166,7 @@ class ApiClient {
         case DioExceptionType.receiveTimeout:
           return 'Le serveur OVANIE ne répond pas assez rapidement. Réessayez.';
         case DioExceptionType.connectionError:
-          return 'Impossible de joindre OVANIE. Vérifiez que le serveur Laravel est démarré et accessible depuis cet appareil.';
+          return 'Impossible de joindre OVANIE. Vérifiez votre connexion Internet puis réessayez.';
         default:
           return 'Impossible de joindre OVANIE. Vérifiez votre connexion réseau.';
       }

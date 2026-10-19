@@ -28,6 +28,7 @@ class ProductVariantModel {
       if (value == null || '$value'.trim().isEmpty) return null;
       return value is num ? value.toDouble() : double.tryParse('$value');
     }
+
     final type = cleanOvanieText('${json['type'] ?? 'Couleur'}');
     final value = cleanOvanieText('${json['value'] ?? ''}');
     return ProductVariantModel(
@@ -43,15 +44,15 @@ class ProductVariantModel {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'type': type,
-        'value': value,
-        'label': label,
-        'color_hex': colorHex,
-        'stock': stock,
-        'price_override': priceOverride,
-        'image_url': imageUrl,
-      };
+    'id': id,
+    'type': type,
+    'value': value,
+    'label': label,
+    'color_hex': colorHex,
+    'stock': stock,
+    'price_override': priceOverride,
+    'image_url': imageUrl,
+  };
 }
 
 class ProductModel {
@@ -110,6 +111,10 @@ class ProductModel {
   final List<String> tags;
   final List<ProductVariantModel> variants;
 
+  /// Note (1 à 5) de chaque avis client reçu avec la fiche détaillée ; vide
+  /// dans les listes de produits.
+  final List<int> reviewRatings;
+
   const ProductModel({
     required this.id,
     required this.slug,
@@ -165,6 +170,7 @@ class ProductModel {
     required this.galleryUrls,
     required this.tags,
     required this.variants,
+    this.reviewRatings = const <int>[],
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -180,20 +186,12 @@ class ProductModel {
 
     String clean(dynamic value) => cleanOvanieText(value?.toString() ?? '');
 
-    final rawImage = json['main_image_url'] ??
-        json['card_image_url'] ??
-        json['image'] ??
-        _firstImage(json['images']);
+    final rawImage = json['main_image_url'] ?? json['card_image_url'] ?? json['image'] ?? _firstImage(json['images']);
 
     final rawTags = json['tags'];
-    final categoryMap =
-        json['category'] is Map ? Map<String, dynamic>.from(json['category']) : null;
-    final categorySlug = json['category_slug']?.toString() ??
-        categoryMap?['slug']?.toString() ??
-        '';
-    final rawCategoryName = json['category_name']?.toString() ??
-        categoryMap?['name']?.toString() ??
-        '';
+    final categoryMap = json['category'] is Map ? Map<String, dynamic>.from(json['category']) : null;
+    final categorySlug = json['category_slug']?.toString() ?? categoryMap?['slug']?.toString() ?? '';
+    final rawCategoryName = json['category_name']?.toString() ?? categoryMap?['name']?.toString() ?? '';
 
     final rawAttributes = json['product_attributes'];
     final attributes = <String, String>{};
@@ -239,23 +237,20 @@ class ProductModel {
 
     final price = toDouble(json['price']);
     final finalPrice = toDouble(json['final_price'] ?? json['price']);
-    final promoPrice = json['promo_price'] == null
-        ? null
-        : toDouble(json['promo_price']);
-    final originalPublicPrice = toDouble(
-      json['original_public_price'] ?? json['base_price'] ?? json['price'],
-    );
+    final promoPrice = json['promo_price'] == null ? null : toDouble(json['promo_price']);
+    final originalPublicPrice = toDouble(json['original_public_price'] ?? json['base_price'] ?? json['price']);
 
     final rawVariants = json['variants'];
     final variants = rawVariants is List
-        ? rawVariants.whereType<Map>().map((item) => ProductVariantModel.fromJson(Map<String, dynamic>.from(item))).where((item) => item.id > 0 && item.value.isNotEmpty).toList(growable: false)
+        ? rawVariants
+              .whereType<Map>()
+              .map((item) => ProductVariantModel.fromJson(Map<String, dynamic>.from(item)))
+              .where((item) => item.id > 0 && item.value.isNotEmpty)
+              .toList(growable: false)
         : const <ProductVariantModel>[];
 
     final apiDiscount = toInt(json['discount_percent']);
-    final computedDiscount = price > 0 &&
-            promoPrice != null &&
-            promoPrice > 0 &&
-            promoPrice < price
+    final computedDiscount = price > 0 && promoPrice != null && promoPrice > 0 && promoPrice < price
         ? (((price - promoPrice) / price) * 100).round()
         : 0;
 
@@ -263,9 +258,7 @@ class ProductModel {
       id: toInt(json['id']),
       slug: json['slug']?.toString() ?? '',
       name: cleanOvanieText(
-        json['name']?.toString().trim().isNotEmpty == true
-            ? json['name'].toString()
-            : 'Produit OVANIE',
+        json['name']?.toString().trim().isNotEmpty == true ? json['name'].toString() : 'Produit OVANIE',
         fallbackSlug: json['slug']?.toString() ?? '',
       ),
       shortDescription: clean(json['short_description']),
@@ -278,14 +271,10 @@ class ProductModel {
       supplyDelay: clean(json['supply_delay']),
       returnPolicy: clean(json['return_policy']),
       availabilityStatus: clean(json['availability_status']),
-      categoryName:
-          canonicalCategoryName(slug: categorySlug, rawName: rawCategoryName),
+      categoryName: canonicalCategoryName(slug: categorySlug, rawName: rawCategoryName),
       categorySlug: categorySlug,
       categoryId: toInt(json['category_id'] ?? categoryMap?['id']),
-      unitLabel: clean(json['unit_label'] ??
-          json['display_unit'] ??
-          json['unit'] ??
-          'unité'),
+      unitLabel: clean(json['unit_label'] ?? json['display_unit'] ?? json['unit'] ?? 'unité'),
       packaging: clean(json['packaging']),
       brand: clean(json['brand']),
       usageArea: clean(json['usage_area']),
@@ -304,22 +293,18 @@ class ProductModel {
       heightCm: toDouble(json['height_cm']),
       volumeM3: toDouble(json['volume_m3']),
       fragile: json['fragile'] == true || json['fragile'] == 1,
-      requiresUnloading:
-          json['requires_unloading'] == true || json['requires_unloading'] == 1,
+      requiresUnloading: json['requires_unloading'] == true || json['requires_unloading'] == 1,
       price: price,
       finalPrice: finalPrice,
       promoPrice: promoPrice,
       originalPublicPrice: originalPublicPrice > 0 ? originalPublicPrice : price,
       discountPercent: apiDiscount > 0 ? apiDiscount : computedDiscount,
       stock: toInt(json['stock']),
-      minOrderQuantity: toInt(json['min_order_quantity']) <= 0
-          ? 1
-          : toInt(json['min_order_quantity']),
+      minOrderQuantity: toInt(json['min_order_quantity']) <= 0 ? 1 : toInt(json['min_order_quantity']),
       canAddToCart: json['can_add_to_cart'] == true,
       isNegotiable: json['is_negotiable'] == true,
       isOrderable: json['is_orderable'] == true,
-      availabilityLabel: clean(json['availability_label'] ??
-          (toInt(json['stock']) > 0 ? 'En stock' : 'Indisponible')),
+      availabilityLabel: clean(json['availability_label'] ?? (toInt(json['stock']) > 0 ? 'En stock' : 'Indisponible')),
       rating: json['rating'] == null && json['average_rating'] == null
           ? null
           : toDouble(json['rating'] ?? json['average_rating']),
@@ -327,10 +312,15 @@ class ProductModel {
       sales: toInt(json['sales']),
       imageUrl: AppConfig.normalizeMediaUrl(rawImage?.toString()),
       galleryUrls: List<String>.unmodifiable(gallery),
-      tags: rawTags is List
-          ? rawTags.map((e) => clean(e)).where((e) => e.isNotEmpty).toList()
-          : const [],
+      tags: rawTags is List ? rawTags.map((e) => clean(e)).where((e) => e.isNotEmpty).toList() : const [],
       variants: List<ProductVariantModel>.unmodifiable(variants),
+      reviewRatings: json['reviews'] is List
+          ? (json['reviews'] as List)
+                .whereType<Map>()
+                .map((review) => toInt(review['rating']))
+                .where((value) => value >= 1 && value <= 5)
+                .toList(growable: false)
+          : const <int>[],
     );
   }
 
@@ -343,8 +333,7 @@ class ProductModel {
     return first?.toString() ?? '';
   }
 
-  bool get hasDiscount => discountPercent > 0 ||
-      (promoPrice != null && promoPrice! > 0 && promoPrice! < price);
+  bool get hasDiscount => discountPercent > 0 || (promoPrice != null && promoPrice! > 0 && promoPrice! < price);
 
   /// Prix affiché sur l'accueil mobile. Pour une promotion active, Laravel
   /// fournit le même `promo_price` que la page Web.
@@ -387,59 +376,59 @@ class ProductModel {
   }
 
   Map<String, dynamic> toCacheJson() => <String, dynamic>{
-        'id': id,
-        'slug': slug,
-        'name': name,
-        'short_description': shortDescription,
-        'description': description,
-        'technical_details': technicalDetails,
-        'product_attributes': attributes,
-        'technical_specs': technicalSpecs,
-        'reference': reference,
-        'product_state_label': productStateLabel,
-        'supply_delay': supplyDelay,
-        'return_policy': returnPolicy,
-        'availability_status': availabilityStatus,
-        'category_name': categoryName,
-        'category_slug': categorySlug,
-        'category_id': categoryId,
-        'unit_label': unitLabel,
-        'packaging': packaging,
-        'brand': brand,
-        'usage_area': usageArea,
-        'material_grade': materialGrade,
-        'color': color,
-        'standard': standard,
-        'warranty': warranty,
-        'origin_country': originCountry,
-        'content_per_unit': contentPerUnit,
-        'content_unit': contentUnit,
-        'units_per_package': unitsPerPackage,
-        'coverage_per_unit_m2': coveragePerUnitM2,
-        'weight_kg': weightKg,
-        'length_cm': lengthCm,
-        'width_cm': widthCm,
-        'height_cm': heightCm,
-        'volume_m3': volumeM3,
-        'fragile': fragile,
-        'requires_unloading': requiresUnloading,
-        'price': price,
-        'final_price': finalPrice,
-        'promo_price': promoPrice,
-        'original_public_price': originalPublicPrice,
-        'discount_percent': discountPercent,
-        'stock': stock,
-        'min_order_quantity': minOrderQuantity,
-        'can_add_to_cart': canAddToCart,
-        'is_negotiable': isNegotiable,
-        'is_orderable': isOrderable,
-        'availability_label': availabilityLabel,
-        'rating': rating,
-        'reviews_count': reviewsCount,
-        'sales': sales,
-        'main_image_url': imageUrl,
-        'gallery': galleryUrls,
-        'tags': tags,
-        'variants': variants.map((variant) => variant.toJson()).toList(growable: false),
-      };
+    'id': id,
+    'slug': slug,
+    'name': name,
+    'short_description': shortDescription,
+    'description': description,
+    'technical_details': technicalDetails,
+    'product_attributes': attributes,
+    'technical_specs': technicalSpecs,
+    'reference': reference,
+    'product_state_label': productStateLabel,
+    'supply_delay': supplyDelay,
+    'return_policy': returnPolicy,
+    'availability_status': availabilityStatus,
+    'category_name': categoryName,
+    'category_slug': categorySlug,
+    'category_id': categoryId,
+    'unit_label': unitLabel,
+    'packaging': packaging,
+    'brand': brand,
+    'usage_area': usageArea,
+    'material_grade': materialGrade,
+    'color': color,
+    'standard': standard,
+    'warranty': warranty,
+    'origin_country': originCountry,
+    'content_per_unit': contentPerUnit,
+    'content_unit': contentUnit,
+    'units_per_package': unitsPerPackage,
+    'coverage_per_unit_m2': coveragePerUnitM2,
+    'weight_kg': weightKg,
+    'length_cm': lengthCm,
+    'width_cm': widthCm,
+    'height_cm': heightCm,
+    'volume_m3': volumeM3,
+    'fragile': fragile,
+    'requires_unloading': requiresUnloading,
+    'price': price,
+    'final_price': finalPrice,
+    'promo_price': promoPrice,
+    'original_public_price': originalPublicPrice,
+    'discount_percent': discountPercent,
+    'stock': stock,
+    'min_order_quantity': minOrderQuantity,
+    'can_add_to_cart': canAddToCart,
+    'is_negotiable': isNegotiable,
+    'is_orderable': isOrderable,
+    'availability_label': availabilityLabel,
+    'rating': rating,
+    'reviews_count': reviewsCount,
+    'sales': sales,
+    'main_image_url': imageUrl,
+    'gallery': galleryUrls,
+    'tags': tags,
+    'variants': variants.map((variant) => variant.toJson()).toList(growable: false),
+  };
 }

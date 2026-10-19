@@ -5,6 +5,7 @@ import '../../core/network/api_client.dart';
 import '../../core/ui/vendor_design.dart';
 import '../../core/ui/vendor_mockup_ui.dart';
 import '../../data/vendor_repository.dart';
+import '../finance/data_ui.dart' show downloadVendorFile;
 import '../notifications/vendor_notifications_screen.dart';
 import 'product_archive_screen.dart';
 import 'product_detail_screen.dart';
@@ -387,6 +388,22 @@ class _ProductsScreenState extends State<ProductsScreen>
     if (mounted) _loadNotifications();
   }
 
+  bool _exporting = false;
+
+  /// Export du catalogue au format CSV (Excel), identique à l'espace Web.
+  Future<void> _export() async {
+    setState(() => _exporting = true);
+    final now = DateTime.now();
+    final day = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    await downloadVendorFile(
+      context,
+      '/mobile/v1/vendor/products/export',
+      'catalogue-ovanie-$day.csv',
+      done: 'Catalogue exporté.',
+    );
+    if (mounted) setState(() => _exporting = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
@@ -422,11 +439,50 @@ class _ProductsScreenState extends State<ProductsScreen>
                     ),
                   ),
                   const Divider(height: 1, color: _line),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 14, 16, 0),
-                    child: Text(
-                      'Mes produits',
-                      style: TextStyle(color: Mk.navy, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -.4),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 10, 0),
+                    child: Row(
+                      children: <Widget>[
+                        const Expanded(
+                          child: Text(
+                            'Mes produits',
+                            style: TextStyle(color: Mk.navy, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -.4),
+                          ),
+                        ),
+                        Semantics(
+                          button: true,
+                          label: 'Exporter le catalogue',
+                          excludeSemantics: true,
+                          child: Material(
+                            color: Colors.white,
+                            shape: const StadiumBorder(side: BorderSide(color: Mk.navy, width: 1.4)),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: _exporting ? null : _export,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    if (_exporting)
+                                      const SizedBox.square(
+                                        dimension: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2.2, color: Mk.orange),
+                                      )
+                                    else
+                                      const Icon(Icons.file_download_outlined, color: Mk.navy, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Exporter',
+                                      style: TextStyle(color: Mk.navy, fontSize: 14, fontWeight: FontWeight.w700),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const Padding(

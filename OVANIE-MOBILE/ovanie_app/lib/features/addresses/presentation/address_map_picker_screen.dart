@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
@@ -11,11 +12,7 @@ class AddressMapPickerScreen extends StatefulWidget {
   final double? initialLatitude;
   final double? initialLongitude;
 
-  const AddressMapPickerScreen({
-    super.key,
-    this.initialLatitude,
-    this.initialLongitude,
-  });
+  const AddressMapPickerScreen({super.key, this.initialLatitude, this.initialLongitude});
 
   @override
   State<AddressMapPickerScreen> createState() => _AddressMapPickerScreenState();
@@ -29,10 +26,7 @@ class _AddressMapPickerScreenState extends State<AddressMapPickerScreen> {
   bool _loading = false;
   String? _error;
 
-  LatLng get _initial => LatLng(
-        widget.initialLatitude ?? 5.359952,
-        widget.initialLongitude ?? -4.008256,
-      );
+  LatLng get _initial => LatLng(widget.initialLatitude ?? 5.359952, widget.initialLongitude ?? -4.008256);
 
   @override
   void initState() {
@@ -75,39 +69,13 @@ class _AddressMapPickerScreenState extends State<AddressMapPickerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
+    final top = MediaQuery.paddingOf(context).top;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.maybePop(context),
-                    icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF061A56), size: 30),
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Choisir sur la carte',
-                          style: TextStyle(color: Color(0xFF061A56), fontSize: 24, fontWeight: FontWeight.w900),
-                        ),
-                        SizedBox(height: 3),
-                        Text(
-                          'Touchez la carte pour placer le point de livraison.',
-                          style: TextStyle(color: Color(0xFF53658F), fontSize: 12.5),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
             Expanded(
               child: Stack(
                 children: [
@@ -115,7 +83,7 @@ class _AddressMapPickerScreenState extends State<AddressMapPickerScreen> {
                     mapController: _mapController,
                     options: MapOptions(
                       initialCenter: _initial,
-                      initialZoom: widget.initialLatitude != null ? 16 : 12.5,
+                      initialZoom: widget.initialLatitude != null ? 16 : 13,
                       minZoom: 4,
                       maxZoom: 19,
                       onTap: (_, point) => _resolve(point),
@@ -130,23 +98,62 @@ class _AddressMapPickerScreenState extends State<AddressMapPickerScreen> {
                           markers: [
                             Marker(
                               point: _selected!,
-                              width: 56,
-                              height: 56,
-                              child: const Icon(Icons.location_on_rounded, color: Color(0xFF0A50EB), size: 52),
+                              width: 60,
+                              height: 64,
+                              alignment: Alignment.topCenter,
+                              child: const _Pin(),
                             ),
                           ],
                         ),
                     ],
                   ),
+                  if (_selected == null)
+                    const Align(
+                      alignment: Alignment(0, -0.25),
+                      child: _HintBubble(text: 'Touchez la carte pour placer\nle point de livraison.'),
+                    ),
                   Positioned(
-                    right: 18,
-                    top: 18,
+                    left: 14,
+                    top: top + 10,
+                    child: Row(
+                      children: [
+                        Material(
+                          color: Colors.white,
+                          shape: const CircleBorder(),
+                          elevation: 3,
+                          shadowColor: const Color(0x33000000),
+                          child: IconButton(
+                            onPressed: () => Navigator.maybePop(context),
+                            tooltip: 'Retour',
+                            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _navy, size: 20),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(99),
+                            boxShadow: const [BoxShadow(color: Color(0x26000000), blurRadius: 8, offset: Offset(0, 2))],
+                          ),
+                          child: const Text(
+                            'Choisir sur la carte',
+                            style: TextStyle(color: _navy, fontSize: 16, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    right: 14,
+                    bottom: 18,
                     child: FloatingActionButton.small(
                       heroTag: 'address-map-my-position',
                       onPressed: _myPosition,
+                      tooltip: 'Ma position',
                       backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF0A50EB),
-                      child: const Icon(Icons.my_location_rounded),
+                      foregroundColor: _navy,
+                      child: const Icon(Icons.gps_fixed_rounded),
                     ),
                   ),
                 ],
@@ -154,44 +161,53 @@ class _AddressMapPickerScreenState extends State<AddressMapPickerScreen> {
             ),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(22, 16, 22, 20),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 12 + MediaQuery.paddingOf(context).bottom),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                boxShadow: [BoxShadow(color: Color(0x17061A56), blurRadius: 16, offset: Offset(0, -4))],
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                boxShadow: [BoxShadow(color: Color(0x1A0A1B3D), blurRadius: 16, offset: Offset(0, -4))],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text('Adresse sélectionnée', style: TextStyle(color: Color(0xFF5E6B80), fontSize: 13)),
+                  const SizedBox(height: 4),
                   if (_loading)
-                    const LinearProgressIndicator(color: Color(0xFF0A50EB))
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 9),
+                      child: LinearProgressIndicator(color: OvanieColors.orange, backgroundColor: Color(0xFFFFE6D5)),
+                    )
                   else if (_error != null)
-                    Text(_error!, style: const TextStyle(color: OvanieColors.danger, fontWeight: FontWeight.w700))
-                  else if (_resolved != null) ...[
-                    const Text('Adresse sélectionnée', style: TextStyle(color: Color(0xFF061A56), fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 5),
+                    Text(_error!, style: const TextStyle(color: OvanieColors.danger, fontSize: 14, height: 1.35))
+                  else
                     Text(
-                      _resolved!.displayName,
+                      _resolved?.displayName ?? 'Aucun point choisi pour le moment.',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Color(0xFF53658F), height: 1.35),
-                    ),
-                  ] else
-                    const Text(
-                      'Sélectionnez un point sur la carte.',
-                      style: TextStyle(color: Color(0xFF53658F)),
+                      style: TextStyle(
+                        color: _resolved == null ? const Color(0xFF9AA5B5) : _navy,
+                        fontSize: _resolved == null ? 15 : 17,
+                        fontWeight: _resolved == null ? FontWeight.w500 : FontWeight.w800,
+                        height: 1.3,
+                      ),
                     ),
                   const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
-                    height: 54,
+                    height: 50,
                     child: FilledButton(
                       onPressed: _resolved == null || _loading ? null : () => Navigator.of(context).pop(_resolved),
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0A50EB),
+                        backgroundColor: OvanieColors.orange,
+                        disabledBackgroundColor: const Color(0xFFFFC9A6),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                        disabledForegroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: const Text('Utiliser cette adresse', style: TextStyle(fontWeight: FontWeight.w900)),
+                      child: const Text(
+                        'Utiliser cette adresse',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ),
                 ],
@@ -202,4 +218,72 @@ class _AddressMapPickerScreenState extends State<AddressMapPickerScreen> {
       ),
     );
   }
+}
+
+const _navy = Color(0xFF0A1B3D);
+
+class _Pin extends StatelessWidget {
+  const _Pin();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      children: [
+        Container(
+          width: 40,
+          height: 14,
+          decoration: BoxDecoration(
+            color: OvanieColors.orange.withValues(alpha: 0.25),
+            borderRadius: const BorderRadius.all(Radius.elliptical(40, 14)),
+          ),
+        ),
+        const Positioned(top: 0, child: Icon(Icons.location_on_rounded, color: OvanieColors.orange, size: 54)),
+      ],
+    );
+  }
+}
+
+class _HintBubble extends StatelessWidget {
+  const _HintBubble({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: const [BoxShadow(color: Color(0x26000000), blurRadius: 10, offset: Offset(0, 3))],
+          ),
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _navy, fontSize: 14, fontWeight: FontWeight.w600, height: 1.35),
+          ),
+        ),
+        CustomPaint(size: const Size(16, 8), painter: _ArrowPainter()),
+      ],
+    );
+  }
+}
+
+class _ArrowPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(path, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

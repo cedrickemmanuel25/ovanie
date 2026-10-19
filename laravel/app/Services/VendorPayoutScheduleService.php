@@ -118,7 +118,11 @@ class VendorPayoutScheduleService
         ];
 
         $payout->forceFill([
-            'status' => VendorPayout::STATUS_PENDING,
+            // Un reversement déjà libéré par l'échéancier reste disponible : une
+            // simple resynchronisation (ouverture des finances) ne le replanifie pas.
+            'status' => $payout->status === VendorPayout::STATUS_APPROVED
+                ? VendorPayout::STATUS_APPROVED
+                : VendorPayout::STATUS_PENDING,
             'payment_mode_snapshot' => $mode,
             'processing_fee_amount' => $processingFee,
             'payout_amount' => $net,

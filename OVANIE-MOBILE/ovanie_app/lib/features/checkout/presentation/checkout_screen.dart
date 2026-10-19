@@ -13,23 +13,22 @@ import '../../../core/reference_data/reference_data_store.dart';
 import '../../../core/platform/device_location.dart';
 import '../../../core/widgets/in_app_payment_screen.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../core/utils/text_cleaner.dart';
 import '../../auth/domain/session_store.dart';
 import '../../cart/data/cart_api_repository.dart';
 import '../../cart/domain/cart_store.dart';
 import '../../orders/data/orders_repository.dart';
+import '../data/abidjan_localities.dart';
 import '../data/checkout_repository.dart';
 import '../data/geo_repository.dart';
 import '../domain/checkout_models.dart';
+import '../../payments/presentation/payment_ui.dart';
+import '../../payments/presentation/payment_waiting_screen.dart';
 import 'order_confirmation_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final List<int> selectedProductIds;
 
-  const CheckoutScreen({
-    super.key,
-    this.selectedProductIds = const <int>[],
-  });
+  const CheckoutScreen({super.key, this.selectedProductIds = const <int>[]});
 
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
@@ -47,7 +46,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   late final TextEditingController _quartierController;
   late final TextEditingController _notesController;
   late final TextEditingController _addressController;
-  final GlobalKey _manualAddressFormKey = GlobalKey();
 
   String _zone = 'abidjan';
   String _commune = '';
@@ -83,87 +81,29 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   int _stage = 1;
   bool _customCommune = false;
   bool _customQuartier = false;
+  bool _summaryExpanded = false;
+  bool _paymentSubmitted = false;
+  // Avertissement « position trop imprécise » affiché sous l'adresse.
+  String? _locationWarning;
 
-  Set<int> get _selectedProductIds => widget.selectedProductIds
-      .where((id) => id > 0)
-      .toSet();
+  Set<int> get _selectedProductIds => widget.selectedProductIds.where((id) => id > 0).toSet();
 
   Iterable<CartLine> get _selectedCartLines {
     final selected = _selectedProductIds;
     if (selected.isEmpty) return CartStore.instance.lines;
-    return CartStore.instance.lines.where(
-      (line) => selected.contains(line.product.id),
-    );
+    return CartStore.instance.lines.where((line) => selected.contains(line.product.id));
   }
 
-  double get _selectedSubtotal => _selectedCartLines.fold<double>(
-        0,
-        (sum, line) => sum + line.subtotal,
-      );
-
-  int get _selectedItemsCount => _selectedCartLines.fold<int>(
-        0,
-        (sum, line) => sum + line.quantity,
-      );
-
-  static const String _customCommuneOption = 'Autre commune / ville';
-  static const String _customQuartierOption = 'Autre quartier / zone';
-
-  List<String> get _abidjanCommunes =>
-      OvanieReferenceDataStore.instance.communeNames;
-
-  Map<String, List<String>> get _quartiersByCommune =>
-      OvanieReferenceDataStore.instance.quartersByCommuneName;
-
-  List<String> get _communeOptions {
-    final values = <String>{..._abidjanCommunes};
-    if (_commune.trim().isNotEmpty) values.add(_commune.trim());
-    for (final item in _savedAddresses) {
-      if (item.commune.trim().isNotEmpty) values.add(item.commune.trim());
-    }
-    final list = values.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    list.add(_customCommuneOption);
-    return list;
-  }
-
-  List<String> get _quartierOptions {
-    final values = <String>{};
-    final commune = _commune.trim();
-    if (commune.isNotEmpty) {
-      values.addAll(_quartiersByCommune[commune] ?? const <String>[]);
-      for (final item in _savedAddresses) {
-        if (item.commune.trim().toLowerCase() == commune.toLowerCase()) {
-          final value = item.sousQuartier.trim().isNotEmpty
-              ? item.sousQuartier.trim()
-              : item.quartier.trim();
-          if (value.isNotEmpty) values.add(value);
-        }
-      }
-    }
-    if (_quartier.trim().isNotEmpty) values.add(_quartier.trim());
-    final list = values.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    list.add(_customQuartierOption);
-    return list;
-  }
+  double get _selectedSubtotal => _selectedCartLines.fold<double>(0, (sum, line) => sum + line.subtotal);
 
   List<CheckoutPaymentOperatorOption> get _availableOnlineOperators {
-    final apiOperators =
-        _onlinePaymentOption?.operators ??
-        const <CheckoutPaymentOperatorOption>[];
+    final apiOperators = _onlinePaymentOption?.operators ?? const <CheckoutPaymentOperatorOption>[];
     if (apiOperators.isNotEmpty) return apiOperators;
 
-    final references =
-        OvanieReferenceDataStore.instance.options('checkout_operators');
+    final references = OvanieReferenceDataStore.instance.options('checkout_operators');
     if (references.isNotEmpty) {
       return references
-          .map(
-            (item) => CheckoutPaymentOperatorOption(
-              code: item.code,
-              label: item.label,
-            ),
-          )
+          .map((item) => CheckoutPaymentOperatorOption(code: item.code, label: item.label))
           .toList(growable: false);
     }
 
@@ -174,16 +114,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void initState() {
     super.initState();
     _name = TextEditingController(text: SessionStore.instance.name ?? '');
-    _phone = TextEditingController(
-      text: formatCiPhoneDisplay(SessionStore.instance.phone ?? ''),
-    );
+    _phone = TextEditingController(text: formatCiPhoneDisplay(SessionStore.instance.phone ?? ''));
     _communeController = TextEditingController();
     _quartierController = TextEditingController();
     _notesController = TextEditingController();
     _addressController = TextEditingController();
-    final sync = const CartApiRepository().mergeLocalCartIntoServer(
-      refreshLocal: false,
-    );
+    final sync = const CartApiRepository().mergeLocalCartIntoServer(refreshLocal: false);
     _cartSyncSettled = sync.then<void>(
       (_) {},
       onError: (Object error, StackTrace stackTrace) {
@@ -215,124 +151,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (_addressController.text != _address) _addressController.text = _address;
   }
 
-  Future<void> _beginNewAddressEntry() async {
-    FocusManager.instance.primaryFocus?.unfocus();
-
-    if (_savedAddressId != null) {
-      setState(() {
-        _savedAddressId = null;
-        _addressConfirmed = false;
-        _zone = 'abidjan';
-        _commune = '';
-        _quartier = '';
-        _city = '';
-        _address = '';
-        _notes = '';
-        _latitude = null;
-        _longitude = null;
-        _geoAccuracyMeters = null;
-        _geoSource = 'mobile_manual';
-        _localityType = '';
-        _customCommune = false;
-        _customQuartier = false;
-        _preview = null;
-        _error = null;
-      });
-      _communeController.clear();
-      _quartierController.clear();
-      _notesController.clear();
-      _addressController.clear();
-    } else if (mounted) {
-      // Ce bouton sert uniquement à préparer le formulaire. Il ne déclenche
-      // jamais la localisation et ne doit pas réafficher une ancienne erreur GPS.
-      setState(() => _error = null);
-    }
-
-    await _scrollToManualAddressForm();
-  }
-
-  void _selectCommune(String? value) {
-    if (value == null) return;
-
-    if (value == _customCommuneOption) {
-      setState(() {
-        _customCommune = true;
-        _commune = '';
-        _quartier = '';
-        _customQuartier = false;
-        _savedAddressId = null;
-        _addressConfirmed = false;
-        _preview = null;
-        _geoSource = 'mobile_manual';
-      });
-      _communeController.clear();
-      _quartierController.clear();
-      return;
-    }
-
-    final communeChanged =
-        _commune.trim().toLowerCase() != value.trim().toLowerCase();
-    setState(() {
-      _customCommune = false;
-      _commune = value;
-      _city = 'Abidjan';
-      _zone = 'abidjan';
-      _savedAddressId = null;
-      _preview = null;
-      _geoSource = 'mobile_manual';
-      if (communeChanged) {
-        _quartier = '';
-        _customQuartier = false;
-        _quartierController.clear();
-      }
-    });
-    _communeController.text = value;
-    _markManualAddress();
-  }
-
-  void _selectQuartier(String? value) {
-    if (value == null) return;
-
-    if (value == _customQuartierOption) {
-      setState(() {
-        _customQuartier = true;
-        _quartier = '';
-        _savedAddressId = null;
-        _addressConfirmed = false;
-        _preview = null;
-        _geoSource = 'mobile_manual';
-      });
-      _quartierController.clear();
-      return;
-    }
-
-    setState(() {
-      _customQuartier = false;
-      _quartier = value;
-      _savedAddressId = null;
-      _preview = null;
-      _geoSource = 'mobile_manual';
-    });
-    _quartierController.text = value;
-    _markManualAddress();
-  }
-
-  Future<void> _scrollToManualAddressForm() async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    if (mounted && _error != null) {
-      setState(() => _error = null);
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 40));
-    final context = _manualAddressFormKey.currentContext;
-    if (context == null) return;
-    await Scrollable.ensureVisible(
-      context,
-      duration: const Duration(milliseconds: 360),
-      curve: Curves.easeOutCubic,
-      alignment: 0.06,
-    );
-  }
-
   Future<void> _loadSavedAddresses() async {
     try {
       final addresses = await _repository.savedAddresses();
@@ -343,6 +161,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         // Aucune adresse enregistrée : il n'y a rien à choisir.
         if (addresses.isEmpty && _addressChoice == null) _addressChoice = 'new';
       });
+      // La maquette présente directement l'adresse par défaut du client ;
+      // il peut la changer avec « Changer ».
+      final initial = _defaultAddress;
+      if (initial != null && !_addressConfirmed && _savedAddressId == null) {
+        _addressChoice = 'default';
+        _applySavedAddress(initial);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -359,18 +184,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (address.isDefault) return address;
     }
     return _savedAddresses.isEmpty ? null : _savedAddresses.first;
-  }
-
-  void _chooseDefaultAddress() {
-    final address = _defaultAddress;
-    if (address == null) return;
-    setState(() => _addressChoice = 'default');
-    _applySavedAddress(address);
-  }
-
-  Future<void> _chooseNewAddress() async {
-    setState(() => _addressChoice = 'new');
-    await _beginNewAddressEntry();
   }
 
   CheckoutAddress _payload({String? paymentMethod}) {
@@ -407,32 +220,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   void _applySavedAddress(CheckoutSavedAddress item, {bool refresh = true}) {
-    _name.text = item.recipientName.trim().isNotEmpty
-        ? item.recipientName.trim()
-        : _name.text;
-    _phone.text = formatCiPhoneDisplay(
-      item.phone.trim().isNotEmpty ? item.phone : _phone.text,
-    );
-    final isAbidjan =
-        item.city.toLowerCase().contains('abidjan') ||
-        item.commune.trim().isNotEmpty;
+    _name.text = item.recipientName.trim().isNotEmpty ? item.recipientName.trim() : _name.text;
+    _phone.text = formatCiPhoneDisplay(item.phone.trim().isNotEmpty ? item.phone : _phone.text);
+    final isAbidjan = item.city.toLowerCase().contains('abidjan') || item.commune.trim().isNotEmpty;
     setState(() {
       _savedAddressId = item.id;
       _zone = isAbidjan ? 'abidjan' : 'interieur';
       _city = item.city;
       _commune = item.commune;
-      _quartier = item.sousQuartier.trim().isNotEmpty
-          ? item.sousQuartier
-          : item.quartier;
+      _quartier = item.sousQuartier.trim().isNotEmpty ? item.sousQuartier : item.quartier;
       _address = item.address;
       _latitude = item.latitude;
       _longitude = item.longitude;
       _localityType = item.localityType;
       _customCommune = false;
       _customQuartier = false;
-      _geoSource = item.latitude != null && item.longitude != null
-          ? 'saved_address'
-          : 'mobile_manual';
+      _geoSource = item.latitude != null && item.longitude != null ? 'saved_address' : 'mobile_manual';
       _geoAccuracyMeters = null;
       _addressConfirmed = true;
       _preview = null;
@@ -490,137 +293,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _geoSource = result.geoSource;
       _localityType = result.localityType;
       _addressConfirmed = true;
+      _addressChoice = 'sheet';
+      _locationWarning = null;
       _preview = null;
       _error = null;
     });
     _syncManualAddressControllers();
     unawaited(_refreshDeliveryPreview());
-  }
-
-  bool _isLocationPermissionProblem(String message) {
-    final value = message.toLowerCase();
-    return value.contains('autorisation') ||
-        value.contains('localisation refusée') ||
-        value.contains('localisation refusee') ||
-        value.contains('position précise') ||
-        value.contains('position precise') ||
-        value.contains('bloquée') ||
-        value.contains('bloquee');
-  }
-
-  Future<bool> _showLocationPermissionHelp(
-    DeviceLocationException error,
-  ) async {
-    if (!mounted) return false;
-    final openDeviceSettings =
-        error.reason == DeviceLocationFailureReason.serviceDisabled;
-    final openAppSettings =
-        error.reason == DeviceLocationFailureReason.permissionDeniedForever;
-    final retry = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Row(
-          children: [
-            Icon(Icons.location_on_outlined, color: OvanieColors.orange),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Autoriser la localisation',
-                style: TextStyle(
-                  color: OvanieColors.navy,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 18,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          openDeviceSettings
-              ? 'La localisation du téléphone est désactivée. Activez-la puis revenez dans OVANIE.'
-              : 'OVANIE a besoin de votre position uniquement pour renseigner votre adresse de livraison. Activez « Localisation » et « Position précise », puis revenez dans l’application.',
-          style: const TextStyle(
-            color: Color(0xFF53617B),
-            height: 1.45,
-            fontSize: 13,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Plus tard'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(
-                dialogContext,
-              ).pop(!openDeviceSettings && !openAppSettings);
-              if (openDeviceSettings) {
-                await DeviceLocation.openDeviceLocationSettings();
-              } else if (openAppSettings) {
-                await DeviceLocation.openAppLocationSettings();
-              }
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: OvanieColors.orange,
-              foregroundColor: Colors.white,
-            ),
-            child: Text(
-              openDeviceSettings || openAppSettings
-                  ? 'Ouvrir les paramètres'
-                  : 'Réessayer',
-            ),
-          ),
-        ],
-      ),
-    );
-    return retry == true;
-  }
-
-  Future<void> _editDeliveryPhone() async {
-    final value = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _DeliveryEditSheet(
-        title: 'Téléphone de livraison',
-        label: 'Numéro de téléphone',
-        initialValue: _phone.text,
-        hint: '07 00 00 00 00',
-        phone: true,
-      ),
-    );
-    if (!mounted || value == null) return;
-    _phone.text = formatCiPhoneDisplay(value);
-    if (_paymentPhone.trim().isEmpty) {
-      _paymentPhone = _phone.text;
-    }
-    setState(() => _error = null);
-  }
-
-  Future<void> _editDeliveryNote() async {
-    final value = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _DeliveryEditSheet(
-        title: 'Consigne au livreur',
-        label: 'Indication de livraison',
-        initialValue: _notes,
-        hint: 'Ex. Appeler avant d’arriver, portail bleu…',
-        phone: false,
-        allowEmpty: true,
-      ),
-    );
-    if (!mounted || value == null) return;
-    setState(() {
-      _notes = value.trim();
-      _error = null;
-    });
-    _notesController.text = _notes;
   }
 
   Future<void> _useCurrentPosition() async {
@@ -629,6 +308,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() {
       _locating = true;
       _error = null;
+      _locationWarning = null;
     });
     try {
       var position = await DeviceLocation.currentPosition();
@@ -639,17 +319,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // ce meilleur point au lieu de bloquer complètement le checkout.
       if (!position.isEmulator && !position.hasGoodDeliveryAccuracy) {
         try {
-          final precise =
-              await DeviceLocation.positionStream(distanceFilterMeters: 0)
-                  .firstWhere((candidate) => candidate.hasGoodDeliveryAccuracy)
-                  .timeout(const Duration(seconds: 8));
+          final precise = await DeviceLocation.positionStream(
+            distanceFilterMeters: 0,
+          ).firstWhere((candidate) => candidate.hasGoodDeliveryAccuracy).timeout(const Duration(seconds: 8));
           position = precise;
         } catch (_) {
           final accuracy = position.accuracy;
-          if (accuracy == null ||
-              !accuracy.isFinite ||
-              accuracy <= 0 ||
-              accuracy > 250) {
+          if (accuracy == null || !accuracy.isFinite || accuracy <= 0 || accuracy > 250) {
             throw const DeviceLocationException(
               'La position est encore trop imprécise. Activez « Position précise », placez-vous près d’une fenêtre ou à l’extérieur, puis réessayez.',
             );
@@ -683,17 +359,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       });
       _syncManualAddressControllers();
       await _refreshDeliveryPreview();
-      if (mounted) {
-        await _scrollToManualAddressForm();
-      }
     } on DeviceLocationException catch (error) {
       if (!mounted) return;
-      if (_isLocationPermissionProblem(error.message) ||
-          error.message.toLowerCase().contains(
-            'activez la localisation du téléphone',
-          )) {
+      if (isLocationPermissionProblem(error.message)) {
         setState(() => _error = null);
-        final retry = await _showLocationPermissionHelp(error);
+        final retry = await showLocationPermissionDialog(context, error);
         if (retry && mounted) {
           // Laisse le dialogue se fermer avant de relancer la demande Android.
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -701,7 +371,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           });
         }
       } else {
-        setState(() => _error = error.message);
+        setState(() => _locationWarning = error.message);
       }
     } catch (error) {
       if (!mounted) return;
@@ -726,32 +396,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       var preview = await _repository.preview(payload);
       if (request != _previewRequest) return;
       final serverSaysEmpty =
-          preview.subtotal <= 0 &&
-          preview.deliveryMessage.toLowerCase().contains('panier est vide');
+          preview.subtotal <= 0 && preview.deliveryMessage.toLowerCase().contains('panier est vide');
       if (serverSaysEmpty && CartStore.instance.lines.isNotEmpty) {
-        await const CartApiRepository().mergeLocalCartIntoServer(
-          refreshLocal: false,
-        );
+        await const CartApiRepository().mergeLocalCartIntoServer(refreshLocal: false);
         preview = await _repository.preview(payload);
         if (request != _previewRequest) return;
       }
       if (preview.subtotal <= 0 &&
           preview.deliveryMessage.toLowerCase().contains('panier est vide') &&
           CartStore.instance.lines.isNotEmpty) {
-        throw const OvanieApiException(
-          'Votre panier est en cours de mise à jour. Réessayez dans quelques secondes.',
-        );
+        throw const OvanieApiException('Votre panier est en cours de mise à jour. Réessayez dans quelques secondes.');
       }
       if (!mounted) return;
       setState(() {
         if (preview.deliveryZone.isNotEmpty) _zone = preview.deliveryZone;
-        if (preview.deliveryCommune.isNotEmpty)
-          _commune = preview.deliveryCommune;
-        if (preview.deliveryQuartier.isNotEmpty)
-          _quartier = preview.deliveryQuartier;
+        if (preview.deliveryCommune.isNotEmpty) _commune = preview.deliveryCommune;
+        if (preview.deliveryQuartier.isNotEmpty) _quartier = preview.deliveryQuartier;
         if (preview.deliveryCity.isNotEmpty) _city = preview.deliveryCity;
-        if (preview.deliveryAddress.isNotEmpty)
-          _address = preview.deliveryAddress;
+        if (preview.deliveryAddress.isNotEmpty) _address = preview.deliveryAddress;
         if (preview.deliveryLocalityType.isNotEmpty) {
           _localityType = preview.deliveryLocalityType;
         }
@@ -762,23 +424,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           _onlineOperator = '';
           _paymentPhone = '';
           _orangeOtp = '';
-        } else if (_paymentMethod == 'paydunya' &&
-            online != null &&
-            !online.enabled) {
+        } else if (_paymentMethod == 'paydunya' && online != null && !online.enabled) {
           _paymentMethod = '';
           _onlineOperator = '';
-        } else if (_paymentMethod == 'cash_on_delivery' &&
-            cod != null &&
-            !cod.enabled) {
+        } else if (_paymentMethod == 'cash_on_delivery' && cod != null && !cod.enabled) {
           _paymentMethod = '';
         }
         _preview = preview;
-        if (_stage == 1 &&
-            preview.validationState.addressValid &&
-            preview.validationState.contactValid &&
-            preview.validationState.deliveryValid) {
-          _stage = 2;
-        }
       });
       _syncManualAddressControllers();
     } catch (error) {
@@ -796,16 +448,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   bool get _deliveryReady {
     final preview = _preview;
-    return preview != null &&
-        preview.deliveryCalculated &&
-        preview.deliveryAvailable &&
-        !preview.deliveryQuoteRequired;
+    return preview != null && preview.deliveryCalculated && preview.deliveryAvailable && !preview.deliveryQuoteRequired;
   }
 
-  CheckoutPaymentMethodOption? get _onlinePaymentOption =>
-      _preview?.paymentOptions.byCode('paydunya');
-  CheckoutPaymentMethodOption? get _cashOnDeliveryOption =>
-      _preview?.paymentOptions.byCode('cash_on_delivery');
+  CheckoutPaymentMethodOption? get _onlinePaymentOption => _preview?.paymentOptions.byCode('paydunya');
+  CheckoutPaymentMethodOption? get _cashOnDeliveryOption => _preview?.paymentOptions.byCode('cash_on_delivery');
   bool get _onlinePaymentEnabled => _onlinePaymentOption?.enabled ?? true;
   bool get _cashOnDeliveryEnabled => _cashOnDeliveryOption?.enabled ?? true;
 
@@ -822,46 +469,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _continueFromAddress() async {
-    if (_addressChoice == null) {
-      setState(() {
-        _error =
-            'Choisissez votre adresse par défaut ou ajoutez une nouvelle adresse.';
-      });
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (!_addressConfirmed) {
+      await _openAddressSheet();
       return;
     }
-    if (!_addressConfirmed) {
-      if (_address.trim().isNotEmpty &&
-          _commune.trim().isNotEmpty &&
-          _quartier.trim().isNotEmpty &&
-          _name.text.trim().isNotEmpty &&
-          _phone.text.trim().isNotEmpty) {
-        setState(() => _addressConfirmed = true);
-      } else {
-        setState(() {
-          _error = 'Renseignez votre adresse de livraison avant de continuer.';
-        });
-        await _scrollToManualAddressForm();
-        return;
-      }
-    }
-
     if (!_deliveryReady) await _refreshDeliveryPreview();
     if (!mounted || !_deliveryReady) return;
 
-    setState(() {
-      _stage = 2;
-      _error = null;
-    });
-  }
-
-  Future<void> _continueFromContact() async {
-    if (!_deliveryReady) {
-      await _refreshDeliveryPreview();
-      if (!mounted || !_deliveryReady) return;
-    }
-
-    // Le système valide automatiquement adresse, contact et livraison.
-    // Le moyen de paiement reste toujours un choix explicite du client.
     setState(() {
       _stage = 2;
       _error = null;
@@ -885,13 +500,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final operators = _availableOnlineOperators;
     if (operators.isEmpty) {
       setState(() {
-        _error =
-            'Les moyens de paiement OVANIE sont momentanément indisponibles. Réessayez après actualisation.';
+        _error = 'Les moyens de paiement OVANIE sont momentanément indisponibles. Réessayez après actualisation.';
       });
       return;
     }
-    final currentOperatorIsValid = _onlineOperator.isNotEmpty &&
-        operators.any((item) => item.code == _onlineOperator);
+    final currentOperatorIsValid = _onlineOperator.isNotEmpty && operators.any((item) => item.code == _onlineOperator);
 
     setState(() {
       _paymentMethod = 'paydunya';
@@ -910,9 +523,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() {
       _paymentMethod = 'paydunya';
       _onlineOperator = operator.code;
-      _paymentPhone = operator.code == 'card'
-          ? ''
-          : normalizeCiPhoneForApi(_phone.text);
+      _paymentPhone = operator.code == 'card' ? '' : normalizeCiPhoneForApi(_phone.text);
       _orangeOtp = '';
       _error = null;
     });
@@ -921,10 +532,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _placeOrder() async {
     if (_placing) return;
     if (!SessionStore.instance.isAuthenticated) {
-      setState(
-        () => _error =
-            'Votre session a expiré. Reconnectez-vous avant de commander.',
-      );
+      setState(() => _error = 'Votre session a expiré. Reconnectez-vous avant de commander.');
       return;
     }
     if (!_addressConfirmed) {
@@ -945,8 +553,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (_paymentMethod == 'paydunya' && _onlineOperator.isEmpty) {
       setState(() {
         _stage = 2;
-        _error =
-            'Choisissez Wave, Orange Money, MTN MoMo, Moov Money ou carte bancaire.';
+        _error = 'Choisissez Wave, Orange Money, MTN MoMo, Moov Money ou carte bancaire.';
       });
       return;
     }
@@ -955,8 +562,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (paymentDigits.length != 10) {
         setState(() {
           _stage = 2;
-          _error =
-              'Saisissez le numéro Mobile Money ivoirien à 10 chiffres qui sera débité.';
+          _error = 'Saisissez le numéro Mobile Money ivoirien à 10 chiffres qui sera débité.';
         });
         return;
       }
@@ -1024,7 +630,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => _PaymentWaitingScreen(
+          builder: (_) => PaymentWaitingScreen(
             orderId: result.orderId,
             orderNumber: result.orderNumber,
             amount: result.paymentAmount,
@@ -1062,8 +668,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String get _addressTitle {
     if (_savedAddressId != null) {
       for (final item in _savedAddresses) {
-        if (item.id == _savedAddressId && item.label.trim().isNotEmpty)
-          return item.label.trim();
+        if (item.id == _savedAddressId && item.label.trim().isNotEmpty) return item.label.trim();
       }
     }
     if (_quartier.trim().isNotEmpty) return _quartier.trim();
@@ -1072,1007 +677,1898 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return 'Adresse de livraison';
   }
 
+  void _goBack() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_stage > 1) {
+      setState(() {
+        _stage -= 1;
+        _error = null;
+        _paymentSubmitted = false;
+      });
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
+  double get _amountToPay => _preview?.total ?? _selectedSubtotal;
+
+  CheckoutSavedAddress? get _currentSavedAddress {
+    for (final item in _savedAddresses) {
+      if (item.id == _savedAddressId) return item;
+    }
+    return null;
+  }
+
+  bool get _paymentMethodMissing => _paymentMethod.isEmpty || (_paymentMethod == 'paydunya' && _onlineOperator.isEmpty);
+
+  bool get _paymentPhoneInvalid =>
+      _paymentMethod == 'paydunya' &&
+      _onlineOperator.isNotEmpty &&
+      _onlineOperator != 'card' &&
+      ciLocalPhoneDigits(_paymentPhone).length != 10;
+
+  void _continueFromPayment() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _paymentSubmitted = true;
+      _error = null;
+    });
+    if (_paymentMethodMissing || _paymentPhoneInvalid) return;
+    if (!_paymentSelectionReady) {
+      final reason = _paymentMethod == 'cash_on_delivery'
+          ? _cashOnDeliveryOption?.reason ?? ''
+          : _onlinePaymentOption?.reason ?? '';
+      setState(() {
+        _error = reason.trim().isNotEmpty ? reason : 'Ce mode de paiement n’est pas disponible pour cette commande.';
+      });
+      return;
+    }
+    setState(() {
+      _stage = 3;
+      _paymentSubmitted = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final amount =
-        _preview?.total ?? _preview?.subtotal ?? _selectedSubtotal;
-
-    final body = _stage == 1 ? _buildAddressStage() : _buildPaymentStage();
-
+    final Widget body;
     final Widget bottomBar;
-    if (_stage == 1) {
-      bottomBar = _CheckoutBottomBar(
-        amount: amount,
-        loading: _calculating,
-        label: 'Vérifier la livraison',
-        onPressed: _continueFromAddress,
-      );
-    } else {
-      bottomBar = _PaymentStageBottomBar(
-        loading: _placing,
-        label: _paymentMethod == 'cash_on_delivery'
-            ? 'Confirmer la commande'
-            : (_paymentMethod == 'paydunya' && _onlineOperator.isNotEmpty
-                ? 'Payer maintenant'
-                : 'Choisir un mode de paiement'),
-        onPressed: _paymentSelectionReady ? _placeOrder : null,
-      );
+    final cashOnDelivery = _paymentMethod == 'cash_on_delivery';
+    switch (_stage) {
+      case 1:
+        body = _buildDeliveryStage();
+        bottomBar = _CheckoutTotalBar(
+          amountLabel: _deliveryReady ? formatFcfa(_preview!.total) : 'À confirmer',
+          buttonLabel: 'Vérifier la livraison',
+          loading: false,
+          onPressed: _continueFromAddress,
+        );
+      case 2:
+        body = _buildPaymentStage();
+        bottomBar = _CheckoutTotalBar(
+          amountLabel: formatFcfa(_amountToPay),
+          buttonLabel: cashOnDelivery ? 'Confirmer la commande' : 'Payer maintenant',
+          loading: false,
+          onPressed: _continueFromPayment,
+        );
+      default:
+        body = _buildConfirmationStage();
+        bottomBar = _CheckoutWideBar(
+          label: cashOnDelivery ? 'Confirmer la commande' : 'Payer maintenant',
+          loading: _placing,
+          onPressed: _placeOrder,
+        );
     }
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(child: body),
-      bottomNavigationBar: SafeArea(top: false, child: bottomBar),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
+      child: PopScope(
+        canPop: _stage == 1,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _goBack();
+        },
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: KeyedSubtree(key: ValueKey<int>(_stage), child: body),
+          ),
+          bottomNavigationBar: SafeArea(top: false, child: bottomBar),
+        ),
+      ),
     );
   }
 
-  Widget _buildAddressStage() {
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: _CheckoutPageHeader(
-            current: 1,
-            onBack: () => Navigator.of(context).maybePop(),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 22),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              _CheckoutPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Adresse de livraison',
-                      style: _CheckoutStyles.panelTitle,
-                    ),
-                    const SizedBox(height: 10),
-                    if (_loadingAddresses)
-                      const LinearProgressIndicator(minHeight: 2)
-                    else if (_defaultAddress != null) ...[
-                      _AddressChoiceTile(
-                        icon: Icons.home_rounded,
-                        title: _defaultAddress!.isDefault
-                            ? 'Livrer à mon adresse par défaut'
-                            : 'Livrer à mon adresse enregistrée',
-                        subtitle: [
-                          _defaultAddress!.commune,
-                          _defaultAddress!.quartier,
-                          _defaultAddress!.address,
-                        ].where((part) => part.trim().isNotEmpty).join(' • '),
-                        selected: _addressChoice == 'default',
-                        onTap: _chooseDefaultAddress,
-                      ),
-                      const SizedBox(height: 7),
-                      _AddressChoiceTile(
-                        icon: Icons.add_location_alt_rounded,
-                        title: 'Ajouter une nouvelle adresse',
-                        subtitle: 'Rechercher, utiliser ma position ou saisir l’adresse',
-                        selected: _addressChoice == 'new',
-                        onTap: _chooseNewAddress,
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    if (_addressChoice == 'new') ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _SearchLikeField(
-                            label:
-                                'Rechercher une adresse ou choisir une adresse enregistrée',
-                            onTap: _openAddressSheet,
-                          ),
-                        ),
-                        const SizedBox(width: 9),
-                        SizedBox(
-                          height: 45,
-                          child: OutlinedButton.icon(
-                            onPressed: _locating ? null : _useCurrentPosition,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: OvanieColors.navy,
-                              side: const BorderSide(color: Color(0xFFD7DEE9)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            icon: _locating
-                                ? const SizedBox.square(
-                                    dimension: 17,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.my_location_rounded,
-                                    size: 20,
-                                  ),
-                            label: const Text(
-                              'Ma position',
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                      const SizedBox(height: 10),
-                    ],
-                    if (_addressChoice != null)
-                      _CheckoutMapPreview(
-                        latitude: _latitude,
-                        longitude: _longitude,
-                      ),
-                    if (_addressChoice == 'default' && _savedAddresses.length > 1) ...[
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Autres adresses enregistrées',
-                        style: _CheckoutStyles.subTitle,
-                      ),
-                      const SizedBox(height: 7),
-                      ..._savedAddresses
-                          .where((item) => item.id != _defaultAddress?.id)
-                          .take(3)
-                          .map(
-                            (item) => Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: _SavedAddressTile(
-                                item: item,
-                                selected: item.id == _savedAddressId,
-                                onTap: () => _applySavedAddress(item),
-                              ),
-                            ),
-                          ),
-                    ],
-                  ],
-                ),
-              ),
-              if (_addressChoice == 'new') ...[
-              const SizedBox(height: 8),
-              _CheckoutPanel(
-                key: _manualAddressFormKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Ajouter une nouvelle adresse',
-                      style: _CheckoutStyles.subTitle,
-                    ),
-                    const SizedBox(height: 8),
-                    _CompactTextField(
-                      controller: _name,
-                      label: 'Nom du destinataire',
-                      onChanged: (_) => _markManualAddress(),
-                    ),
-                    const SizedBox(height: 7),
-                    _CompactTextField(
-                      controller: _phone,
-                      label: 'Téléphone',
-                      keyboardType: TextInputType.phone,
-                      prefixIcon: Icons.phone_outlined,
-                      inputFormatters: const [CiPhoneInputFormatter()],
-                      onChanged: (_) => _markManualAddress(),
-                    ),
-                    const SizedBox(height: 7),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _CompactLocationDropdown(
-                            label: 'Commune',
-                            hint: 'Choisir',
-                            value: _customCommune || _commune.trim().isEmpty
-                                ? null
-                                : _commune,
-                            items: _communeOptions,
-                            onChanged: _selectCommune,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _CompactLocationDropdown(
-                            label: 'Quartier',
-                            hint: _commune.trim().isEmpty
-                                ? 'Commune d’abord'
-                                : 'Choisir',
-                            value: _customQuartier || _quartier.trim().isEmpty
-                                ? null
-                                : _quartier,
-                            items: _quartierOptions,
-                            onChanged: _commune.trim().isEmpty
-                                ? null
-                                : _selectQuartier,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_customCommune) ...[
-                      const SizedBox(height: 7),
-                      _CompactEditableLocation(
-                        controller: _communeController,
-                        label: 'Commune / ville',
-                        hint: 'Saisir la commune ou la ville',
-                        onChanged: (value) {
-                          setState(() {
-                            _commune = value;
-                            final isAbidjanCommune = _abidjanCommunes.any(
-                              (item) =>
-                                  item.toLowerCase() ==
-                                  value.trim().toLowerCase(),
-                            );
-                            _zone = isAbidjanCommune ? 'abidjan' : 'interieur';
-                            _city = isAbidjanCommune ? 'Abidjan' : value.trim();
-                          });
-                          _markManualAddress();
-                        },
-                      ),
-                    ],
-                    if (_customQuartier) ...[
-                      const SizedBox(height: 7),
-                      _CompactEditableLocation(
-                        controller: _quartierController,
-                        label: 'Quartier / zone',
-                        hint: 'Saisir le quartier ou la zone',
-                        onChanged: (value) {
-                          _quartier = value;
-                          _markManualAddress();
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 7),
-                    _CompactEditableLocation(
-                      controller: _notesController,
-                      label: 'Repère / point de repère',
-                      hint: 'Ex. Immeuble Orange Money, près du carrefour',
-                      onChanged: (value) => _notes = value,
-                    ),
-                    const SizedBox(height: 7),
-                    _CompactEditableLocation(
-                      controller: _addressController,
-                      label: 'Adresse complète',
-                      hint: 'Rue, quartier, commune, ville',
-                      onChanged: (value) {
-                        _address = value;
-                        _markManualAddress();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              ],
-              const SizedBox(height: 7),
-              const _InfoStrip(
-                text:
-                    'Les frais de livraison seront calculés après confirmation de l’adresse.',
-              ),
-              const SizedBox(height: 7),
-              _DeliveryQuickStats(preview: _preview, calculating: _calculating),
-              const SizedBox(height: 7),
-              _OrderSummaryCompact(
-                subtotal: _preview?.subtotal ?? _selectedSubtotal,
-                deliveryFee: _deliveryReady ? _preview!.deliveryFee : null,
-                total: _deliveryReady ? _preview!.total : null,
-                itemCount: _selectedItemsCount,
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                _CheckoutError(message: _error!),
-              ],
-            ]),
-          ),
-        ),
-      ],
+  Widget _summaryCard({required bool cartIcon, required String subtitle}) {
+    final ready = _stage > 1 || _deliveryReady;
+    return _CheckoutSummaryCard(
+      cartIcon: cartIcon,
+      subtitle: subtitle,
+      amountLabel: ready ? formatFcfa(_amountToPay) : 'À confirmer',
+      expanded: _summaryExpanded,
+      onToggle: () => setState(() => _summaryExpanded = !_summaryExpanded),
+      lines: _selectedCartLines.toList(growable: false),
+      deliveryLabel: _deliveryReady ? formatFcfa(_preview!.deliveryFee) : 'À confirmer',
     );
   }
 
-  void _markManualAddress() {
-    if (!mounted) return;
-    final ready =
-        _name.text.trim().isNotEmpty &&
-        _phone.text.trim().isNotEmpty &&
-        _commune.trim().isNotEmpty &&
-        _quartier.trim().isNotEmpty &&
-        _address.trim().isNotEmpty;
-    if (ready && !_addressConfirmed) {
-      setState(() {
-        _addressConfirmed = true;
-        _savedAddressId = null;
-        _geoSource = 'mobile_manual';
-      });
-      unawaited(_refreshDeliveryPreview());
-    }
-  }
-
-  Widget _buildReviewStage() {
-    final preview = _preview;
-    final deliveryReady = _deliveryReady;
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: _CheckoutPageHeader(
-            current: 2,
-            completedThrough: 1,
-            fillCurrentStep: true,
-            onBack: () => setState(() => _stage = 1),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              _CheckoutPanel(
-                child: Column(
+  Widget _buildDeliveryStage() {
+    final saved = _currentSavedAddress;
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 22),
+      children: [
+        _CheckoutHeader(stage: 1, onBack: _goBack),
+        _summaryCard(cartIcon: false, subtitle: 'Voir détails'),
+        _CheckoutSection(
+          title: 'Adresse de livraison',
+          action: 'Changer',
+          onAction: _openAddressSheet,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!_addressConfirmed && _loadingAddresses)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: LinearProgressIndicator(minHeight: 2, color: OvanieColors.orange),
+                )
+              else if (!_addressConfirmed)
+                _AddAddressPrompt(onTap: _openAddressSheet)
+              else
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Adresse de livraison',
-                            style: _CheckoutStyles.panelTitle,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => setState(() => _stage = 1),
-                          child: const Text(
-                            'Changer',
-                            style: TextStyle(color: OvanieColors.orange),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF2EE),
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: const Icon(
-                            Icons.location_on_outlined,
-                            color: OvanieColors.orange,
-                            size: 27,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _addressTitle,
-                                style: _CheckoutStyles.subTitle,
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                _address,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Color(0xFF53617B),
-                                  fontSize: 11.3,
-                                  height: 1.3,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                '${_name.text.trim()}  •  ${formatCiPhoneDisplay(_phone.text)}',
-                                style: const TextStyle(
-                                  color: OvanieColors.navy,
-                                  fontSize: 11.2,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: _locating ? null : _useCurrentPosition,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: OvanieColors.navy,
-                            side: const BorderSide(color: Color(0xFFD7DEE9)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          icon: const Icon(Icons.my_location_rounded, size: 18),
-                          label: const Text(
-                            'Ma position',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              _CheckoutPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Contact pour la livraison',
-                      style: _CheckoutStyles.panelTitle,
-                    ),
-                    const SizedBox(height: 10),
-                    _ContactRow(
-                      icon: Icons.call_outlined,
-                      iconColor: const Color(0xFF16A34A),
-                      label: 'Téléphone',
-                      value: formatCiPhoneDisplay(_phone.text),
-                      onEdit: _editDeliveryPhone,
-                    ),
-                    const Divider(height: 18),
-                    _ContactRow(
-                      icon: Icons.chat_bubble_outline_rounded,
-                      iconColor: OvanieColors.navy,
-                      label: 'Consigne au livreur',
-                      value: _notes.trim().isEmpty
-                          ? 'Appeler avant d’arriver'
-                          : _notes.trim(),
-                      onEdit: _editDeliveryNote,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              _CheckoutPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Livraison', style: _CheckoutStyles.panelTitle),
-                    const SizedBox(height: 10),
-                    _DeliveryMetrics(preview: preview),
-                    const SizedBox(height: 9),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
+                    SizedBox(
+                      width: 128,
+                      height: 108,
+                      child: IgnorePointer(
+                        child: _CheckoutMapPreview(latitude: _latitude, longitude: _longitude),
                       ),
-                      decoration: BoxDecoration(
-                        color: deliveryReady
-                            ? const Color(0xFFF1FAF2)
-                            : const Color(0xFFFFF7EA),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            deliveryReady
-                                ? Icons.local_shipping_outlined
-                                : Icons.schedule_outlined,
-                            color: deliveryReady
-                                ? const Color(0xFF16A34A)
-                                : const Color(0xFFE08A00),
-                            size: 24,
+                          if (saved?.isDefault == true) ...[
+                            const _GreyChip(label: 'Par défaut'),
+                            const SizedBox(height: 8),
+                          ],
+                          Text(
+                            _addressTitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: _ckNavy, fontSize: 17, fontWeight: FontWeight.w800),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  deliveryReady
-                                      ? 'Livraison disponible'
-                                      : 'Calcul de livraison en cours',
-                                  style: TextStyle(
-                                    color: deliveryReady
-                                        ? const Color(0xFF14903A)
-                                        : const Color(0xFFC37500),
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 11.8,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  deliveryReady
-                                      ? 'Calculée selon votre adresse chantier'
-                                      : (preview?.deliveryMessage
-                                                    .trim()
-                                                    .isNotEmpty ==
-                                                true
-                                            ? preview!.deliveryMessage
-                                            : 'Nous vérifions votre zone de livraison.'),
-                                  style: const TextStyle(
-                                    color: Color(0xFF526181),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
+                          const SizedBox(height: 5),
+                          Text(
+                            [
+                              _name.text.trim(),
+                              formatCiPhoneDisplay(_phone.text).replaceAll(' ', '\u00A0'),
+                            ].where((part) => part.isNotEmpty).join('  •  '),
+                            style: const TextStyle(color: _ckMuted, fontSize: 13.5),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            _address.trim().isNotEmpty
+                                ? _address.trim()
+                                : [_quartier, _commune, _city].where((part) => part.trim().isNotEmpty).join(', '),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: _ckMuted, fontSize: 13.5, height: 1.35),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const _InfoStrip(
-                      text:
-                          'Les frais de livraison sont calculés pour l’adresse renseignée.',
-                    ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              _CheckoutPanel(
-                child: _ReviewSummary(
-                  preview: preview,
-                  itemCount: _selectedItemsCount,
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                _CheckoutError(message: _error!),
+              if (_locationWarning != null) ...[
+                const SizedBox(height: 14),
+                _LocationWarningBox(message: _locationWarning!, onRetry: _useCurrentPosition),
               ],
-            ]),
+            ],
           ),
         ),
+        _CheckoutSection(
+          title: 'Contact pour la livraison',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _FieldLabel('Téléphone'),
+              TextField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                inputFormatters: const [CiPhoneInputFormatter(withCountryCode: true)],
+                style: const TextStyle(color: _ckNavy, fontSize: 15.5),
+                decoration: _ckInputDecoration(
+                  hint: '+225 07 00 00 00 00',
+                  suffix: const Icon(Icons.call_outlined, color: _ckNavy, size: 22),
+                ),
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+              ),
+              const SizedBox(height: 16),
+              const _FieldLabel('Consigne au livreur'),
+              TextField(
+                controller: _notesController,
+                minLines: 2,
+                maxLines: 4,
+                style: const TextStyle(color: _ckNavy, fontSize: 15),
+                decoration: _ckInputDecoration(hint: 'Ex. Appeler avant d’arriver, portail bleu...'),
+                onChanged: (value) => _notes = value,
+              ),
+            ],
+          ),
+        ),
+        _CheckoutSection(
+          title: 'Livraison',
+          child: _DeliveryDetails(
+            preview: _preview,
+            calculating: _calculating,
+            ready: _deliveryReady,
+            addressConfirmed: _addressConfirmed,
+            fallbackWeightKg: _selectedCartLines.fold<double>(
+              0,
+              (sum, line) => sum + line.product.weightKg * line.quantity,
+            ),
+          ),
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: _CheckoutError(message: _error!),
+          ),
       ],
     );
   }
 
   Widget _buildPaymentStage() {
-    final preview = _preview;
     final codEnabled = _cashOnDeliveryEnabled;
     final onlineEnabled = _onlinePaymentEnabled;
     final onlineSelected = _paymentMethod == 'paydunya';
     final codSelected = _paymentMethod == 'cash_on_delivery';
     final operators = _availableOnlineOperators;
+    final needsPhone = onlineSelected && _onlineOperator.isNotEmpty && _onlineOperator != 'card';
+    final phoneError = _paymentSubmitted && _paymentPhoneInvalid;
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: _CheckoutPageHeader(
-            current: 2,
-            completedThrough: 1,
-            showSecureLabel: true,
-            fillCurrentStep: true,
-            onBack: () => setState(() {
-              _stage = 1;
-              _error = null;
-            }),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              const Text(
-                'Mode de paiement',
-                style: TextStyle(
-                  color: OvanieColors.navy,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _PaymentOptionTile(
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 22),
+      children: [
+        _CheckoutHeader(stage: 2, onBack: _goBack),
+        _summaryCard(cartIcon: true, subtitle: 'Voir détails'),
+        _CheckoutSection(
+          title: 'Mode de paiement',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_paymentSubmitted && _paymentMethodMissing) ...[
+                _PaymentMethodMissing(onChoose: () => setState(() => _paymentSubmitted = false)),
+                const SizedBox(height: 12),
+              ],
+              _PaymentModeTile(
+                image: 'assets/images/checkout/pay_cash.png',
                 title: 'Paiement à la livraison',
                 subtitle: 'En espèces, à la réception',
-                icon: Icons.payments_outlined,
                 selected: codSelected,
                 enabled: codEnabled,
                 onTap: _selectCashOnDelivery,
               ),
-              const SizedBox(height: 10),
-              _PaymentOptionTile(
+              const SizedBox(height: 12),
+              _PaymentModeTile(
+                image: 'assets/images/checkout/pay_online.png',
                 title: 'Paiement en ligne',
                 subtitle: 'Mobile Money ou carte bancaire',
-                icon: Icons.credit_card_rounded,
                 selected: onlineSelected,
                 enabled: onlineEnabled,
                 onTap: _selectOnlinePayment,
               ),
-              if (onlineSelected) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 5),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(11),
-                    border: Border.all(color: const Color(0xFFDDE3EC)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Moyens de paiement en ligne',
-                              style: TextStyle(
-                                color: OvanieColors.navy,
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                          Icon(
-                            Icons.keyboard_arrow_up_rounded,
-                            color: OvanieColors.orange,
-                            size: 24,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      for (final operator in operators)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 7),
-                          child: _OnlineOperatorTile(
-                            operator: operator,
-                            selected: _onlineOperator == operator.code,
-                            enabled: onlineEnabled,
-                            onTap: () => _selectOnlineOperator(operator),
-                          ),
-                        ),
-                      if (_onlineOperator.isNotEmpty &&
-                          _onlineOperator != 'card') ...[
-                        const SizedBox(height: 5),
-                        const Text(
-                          'Numéro Mobile Money',
-                          style: TextStyle(
-                            color: OvanieColors.navy,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 7),
-                        TextFormField(
-                          key: ValueKey<String>(
-                            'payment-phone-$_onlineOperator',
-                          ),
-                          initialValue: formatCiPhoneDisplay(
-                            _paymentPhone,
-                            includeCountryCode: false,
-                          ),
-                          keyboardType: TextInputType.phone,
-                          textInputAction: TextInputAction.done,
-                          autofillHints: const [AutofillHints.telephoneNumber],
-                          inputFormatters: const [CiPhoneInputFormatter()],
-                          decoration: InputDecoration(
-                            hintText: '07 00 00 00 00',
-                            prefixText: '+225  ',
-                            helperText:
-                                'Saisissez le numéro qui sera débité pour ce paiement.',
-                            prefixIcon: const Icon(Icons.phone_android_rounded),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onChanged: (value) {
-                            setState(() {
-                              _paymentPhone = normalizeCiPhoneForApi(value);
-                              _error = null;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      if (_onlineOperator == 'orange') ...[
-                        const Text(
-                          'OTP Orange Money',
-                          style: TextStyle(
-                            color: OvanieColors.navy,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 7),
-                        TextFormField(
-                          key: const ValueKey<String>('orange-money-otp'),
-                          initialValue: _orangeOtp,
-                          keyboardType: TextInputType.number,
-                          textInputAction: TextInputAction.done,
-                          decoration: InputDecoration(
-                            hintText: 'Saisissez l’OTP si Orange Money vous le demande',
-                            helperText:
-                                'Ce code n’est demandé que lorsque l’opérateur Orange l’exige.',
-                            prefixIcon: const Icon(Icons.password_rounded),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onChanged: (value) {
-                            setState(() {
-                              _orangeOtp = value.trim();
-                              _error = null;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-              if (!codEnabled &&
-                  (_cashOnDeliveryOption?.reason.trim().isNotEmpty ??
-                      false)) ...[
-                const SizedBox(height: 8),
+              if (!codEnabled && (_cashOnDeliveryOption?.reason.trim().isNotEmpty ?? false)) ...[
+                const SizedBox(height: 10),
                 _CheckoutError(message: _cashOnDeliveryOption!.reason),
               ],
-              if (!onlineEnabled &&
-                  (_onlinePaymentOption?.reason.trim().isNotEmpty ??
-                      false)) ...[
-                const SizedBox(height: 8),
+              if (!onlineEnabled && (_onlinePaymentOption?.reason.trim().isNotEmpty ?? false)) ...[
+                const SizedBox(height: 10),
                 _CheckoutError(message: _onlinePaymentOption!.reason),
               ],
-              const SizedBox(height: 12),
-              _CheckoutPanel(
-                child: _PaymentOrderSummary(
-                  preview: preview,
-                  itemCount: _selectedItemsCount,
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 9),
-                _CheckoutError(message: _error!),
-              ],
-            ]),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CheckoutPageHeader extends StatelessWidget {
-  final int current;
-  final int completedThrough;
-  final VoidCallback onBack;
-  final bool showSecureLabel;
-  final bool fillCurrentStep;
-
-  const _CheckoutPageHeader({
-    required this.current,
-    required this.onBack,
-    this.completedThrough = 0,
-    this.showSecureLabel = false,
-    this.fillCurrentStep = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 58,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  onPressed: onBack,
-                  icon: const Icon(
-                    Icons.arrow_back_rounded,
-                    color: OvanieColors.navy,
-                    size: 27,
-                  ),
-                ),
-              ),
-              const Text(
-                'Finaliser la commande',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: OvanieColors.navy,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: const Icon(
-                    Icons.lock_outline_rounded,
-                    color: Color(0xFF59657B),
-                    size: 20,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(22, 2, 22, 8),
-          child: _CheckoutProgressBar(
-            current: current,
-            completedThrough: completedThrough,
-            fillCurrentStep: fillCurrentStep,
+        if (onlineSelected)
+          _CheckoutSection(
+            title: 'Moyens de paiement en ligne',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final operator in operators)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _OperatorTile(
+                      operator: operator,
+                      selected: _onlineOperator == operator.code,
+                      enabled: onlineEnabled,
+                      onTap: () => _selectOnlineOperator(operator),
+                    ),
+                  ),
+                if (needsPhone) ...[
+                  const SizedBox(height: 6),
+                  const _FieldLabel('Numéro Mobile Money', large: true),
+                  _MobileMoneyField(
+                    key: ValueKey<String>('payment-phone-$_onlineOperator'),
+                    initialValue: formatCiPhoneDisplay(_paymentPhone, includeCountryCode: false),
+                    error: phoneError,
+                    onChanged: (value) => setState(() {
+                      _paymentPhone = normalizeCiPhoneForApi(value);
+                      _error = null;
+                    }),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    phoneError
+                        ? 'Saisissez le numéro Mobile Money ivoirien à 10 chiffres qui sera débité.'
+                        : 'Saisissez le numéro qui sera débité pour ce paiement.',
+                    style: TextStyle(color: phoneError ? _ckRed : _ckMuted, fontSize: 12.5),
+                  ),
+                ],
+                if (_onlineOperator == 'orange') ...[
+                  const SizedBox(height: 18),
+                  const _FieldLabel('OTP Orange Money', large: true),
+                  TextFormField(
+                    key: const ValueKey<String>('orange-money-otp'),
+                    initialValue: _orangeOtp,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
+                    style: const TextStyle(color: _ckNavy, fontSize: 15.5),
+                    decoration: _ckInputDecoration(hint: 'Saisissez l’OTP si Orange Money vous le demande'),
+                    onChanged: (value) => setState(() {
+                      _orangeOtp = value.trim();
+                      _error = null;
+                    }),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Ce code n’est demandé que lorsque l’opérateur Orange l’exige.',
+                    style: TextStyle(color: _ckMuted, fontSize: 12.5),
+                  ),
+                ],
+              ],
+            ),
           ),
-        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: _CheckoutError(message: _error!),
+          ),
       ],
     );
   }
-}
 
-class _CheckoutProgressBar extends StatelessWidget {
-  final int current;
-  final int completedThrough;
-  final bool fillCurrentStep;
+  Widget _buildConfirmationStage() {
+    final preview = _preview;
+    final lines = _selectedCartLines.toList(growable: false);
+    final count = lines.length;
+    final subtotal = preview?.subtotal ?? _selectedSubtotal;
+    final delivery = preview?.deliveryFee ?? 0;
+    final total = preview?.total ?? subtotal + delivery;
+    final discount = math.max(0.0, subtotal + delivery - total);
+    final saved = _currentSavedAddress;
+    final placeTitle = [
+      if (saved != null && saved.label.trim().isNotEmpty) saved.label.trim() else _addressTitle,
+      if (_commune.trim().isNotEmpty && _commune.trim() != _addressTitle) _commune.trim(),
+    ].join(', ');
 
-  const _CheckoutProgressBar({
-    required this.current,
-    required this.completedThrough,
-    this.fillCurrentStep = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const labels = ['Livraison', 'Paiement', 'Confirmation'];
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final gap = constraints.maxWidth / labels.length;
-        return SizedBox(
-          height: 70,
-          child: Stack(
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 22),
+      children: [
+        _CheckoutHeader(stage: 3, onBack: _goBack),
+        _summaryCard(cartIcon: true, subtitle: '$count article${count > 1 ? 's' : ''}'),
+        _CheckoutSection(
+          title: 'Récapitulatif',
+          trailing: Text(
+            '$count article${count > 1 ? 's' : ''}',
+            style: const TextStyle(color: _ckMuted, fontSize: 14.5),
+          ),
+          child: Column(
             children: [
-              Positioned(
-                left: gap / 2,
-                right: gap / 2,
-                top: 18,
-                child: Container(height: 2, color: const Color(0xFFD7DCE5)),
-              ),
-              if (current > 1)
-                Positioned(
-                  left: gap / 2,
-                  top: 18,
-                  width: gap * (current - 1),
-                  child: Container(height: 2, color: OvanieColors.orange),
-                ),
-              Row(
-                children: List.generate(labels.length, (index) {
-                  final step = index + 1;
-                  final done = step <= completedThrough;
-                  final active = step == current;
-                  return Expanded(
-                    child: Column(
+              for (var index = 0; index < lines.length; index++) ...[
+                _ConfirmationLine(line: lines[index]),
+                if (index != lines.length - 1) const Divider(height: 22, color: _ckBorder),
+              ],
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                decoration: BoxDecoration(color: _ckSoft, borderRadius: BorderRadius.circular(12)),
+                child: Column(
+                  children: [
+                    _TotalsRow(label: 'Total produits', value: formatFcfa(subtotal)),
+                    const SizedBox(height: 9),
+                    _TotalsRow(label: 'Livraison', value: formatFcfa(delivery)),
+                    const SizedBox(height: 9),
+                    _TotalsRow(label: 'Remise', value: '- ${formatFcfa(discount)}', valueColor: _ckGreen),
+                    const Divider(height: 26, color: Color(0xFFD9DFE8)),
+                    Row(
                       children: [
-                        Container(
-                          width: 34,
-                          height: 34,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color:
-                                done ||
-                                    (current == 1 && step == 1) ||
-                                    (fillCurrentStep && active)
-                                ? const Color(0xFFFF3E0D)
-                                : Colors.white,
-                            border: Border.all(
-                              color:
-                                  (done ||
-                                      active ||
-                                      (current == 1 && step == 1))
-                                  ? const Color(0xFFFF3E0D)
-                                  : const Color(0xFFC7CFDD),
-                              width: 1.3,
-                            ),
+                        const Expanded(
+                          child: Text(
+                            'Total à payer',
+                            style: TextStyle(color: _ckNavy, fontSize: 17, fontWeight: FontWeight.w800),
                           ),
-                          child: done
-                              ? const Icon(
-                                  Icons.check_rounded,
-                                  color: Colors.white,
-                                  size: 21,
-                                )
-                              : Text(
-                                  '$step',
-                                  style: TextStyle(
-                                    color:
-                                        (current == 1 && step == 1) ||
-                                            (fillCurrentStep && active)
-                                        ? Colors.white
-                                        : active
-                                        ? OvanieColors.orange
-                                        : const Color(0xFF70798C),
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
                         ),
-                        const SizedBox(height: 5),
-                        Text(
-                          labels[index],
-                          style: TextStyle(
-                            color:
-                                (done || active || (current == 1 && step == 1))
-                                ? OvanieColors.orange
-                                : const Color(0xFF59657B),
-                            fontSize: 12,
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              formatFcfa(total),
+                              style: const TextStyle(color: _ckNavy, fontSize: 26, fontWeight: FontWeight.w900),
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  );
-                }),
+                  ],
+                ),
               ),
             ],
           ),
-        );
-      },
+        ),
+        _CheckoutSection(
+          title: 'Adresse de livraison',
+          action: 'Modifier',
+          onAction: () => setState(() => _stage = 1),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            decoration: BoxDecoration(color: _ckSoft, borderRadius: BorderRadius.circular(12)),
+            child: Row(
+              children: [
+                const Icon(Icons.location_on_rounded, color: Color(0xFF6B7591), size: 30),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        placeTitle,
+                        style: const TextStyle(color: _ckNavy, fontSize: 15, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 5),
+                      if (_commune.trim().isNotEmpty) _AddressDetail(label: 'Commune', value: _commune),
+                      if (_quartier.trim().isNotEmpty) _AddressDetail(label: 'Quartier', value: _quartier),
+                      if (_notes.trim().isNotEmpty) _AddressDetail(label: 'Repère', value: _notes),
+                      if (_address.trim().isNotEmpty) _AddressDetail(label: 'Adresse complète', value: _address),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        _CheckoutSection(
+          title: 'Mode de paiement',
+          action: 'Modifier',
+          onAction: () => setState(() => _stage = 2),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _ckBorder),
+                ),
+                child: Row(
+                  children: [
+                    if (_paymentMethod == 'cash_on_delivery')
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.asset(
+                          'assets/images/checkout/pay_cash.png',
+                          width: 64,
+                          height: 50,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    else
+                      PaymentOperatorLogo(code: _onlineOperator, size: 54),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _paymentLabel,
+                            style: const TextStyle(color: _ckNavy, fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _paymentMethod == 'cash_on_delivery'
+                                ? 'En espèces, à la réception'
+                                : _onlineOperator == 'card'
+                                ? 'Visa, Mastercard et autres'
+                                : _maskedPhone(_paymentPhone),
+                            style: const TextStyle(color: _ckNavy, fontSize: 14.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(color: _ckGreenSoft, borderRadius: BorderRadius.circular(10)),
+                child: const Row(
+                  children: [
+                    Icon(Icons.lock_rounded, color: _ckGreen, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Vos informations de paiement sont sécurisées et cryptées.',
+                        style: TextStyle(color: Color(0xFF15803D), fontSize: 13.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: _CheckoutError(message: _error!),
+          ),
+      ],
     );
   }
 }
 
-class _CheckoutPanel extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry padding;
+String _maskedPhone(String raw) {
+  final digits = ciLocalPhoneDigits(raw);
+  if (digits.length != 10) return formatCiPhoneDisplay(raw, includeCountryCode: false);
+  return '${digits.substring(0, 2)} •• •• ${digits.substring(6, 8)} ${digits.substring(8)}';
+}
 
-  const _CheckoutPanel({
-    super.key,
-    required this.child,
-    this.padding = const EdgeInsets.all(12),
+String _capitalized(String value) {
+  final clean = value.trim();
+  if (clean.isEmpty) return clean;
+  return clean[0].toUpperCase() + clean.substring(1);
+}
+
+/// Unité de vente sans précision entre parenthèses : « sac (50 kg) » -> « sac ».
+String shortSaleUnit(String unit) {
+  final clean = unit.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+  return clean.isEmpty ? 'unité' : clean;
+}
+
+String _groupedNumber(num value) {
+  final digits = value.round().abs().toString();
+  final buffer = StringBuffer(value < 0 ? '-' : '');
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(' ');
+    buffer.write(digits[i]);
+  }
+  return buffer.toString();
+}
+
+const Color _ckNavy = Color(0xFF0A1B4F);
+const Color _ckMuted = Color(0xFF6B7591);
+const Color _ckBorder = Color(0xFFE3E8F0);
+const Color _ckSoft = Color(0xFFF1F4F8);
+const Color _ckBlue = Color(0xFF0B5ED7);
+const Color _ckGreen = Color(0xFF16A34A);
+const Color _ckGreenSoft = Color(0xFFE6F6EC);
+const Color _ckRed = Color(0xFFE5231B);
+
+InputDecoration _ckInputDecoration({String? hint, Widget? suffix, bool error = false, bool enabled = true}) {
+  OutlineInputBorder border(Color color, [double width = 1]) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(10),
+    borderSide: BorderSide(color: color, width: width),
+  );
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(color: Color(0xFF8A93A8), fontSize: 14.5),
+    suffixIcon: suffix,
+    filled: true,
+    fillColor: enabled ? Colors.white : const Color(0xFFEFF2F6),
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+    border: border(const Color(0xFFD5DCE6)),
+    enabledBorder: border(error ? _ckRed : const Color(0xFFD5DCE6), error ? 1.4 : 1),
+    disabledBorder: border(const Color(0xFFE1E6EE)),
+    focusedBorder: border(error ? _ckRed : OvanieColors.orange, 1.4),
+  );
+}
+
+/// Pastille verte « Paiement sécurisé » de l'en-tête.
+class _CheckoutHeader extends StatelessWidget {
+  final int stage;
+  final VoidCallback onBack;
+
+  const _CheckoutHeader({required this.stage, required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    if (stage == 1) {
+      return Column(
+        children: [
+          SizedBox(
+            height: 60,
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: onBack,
+                  tooltip: 'Retour',
+                  icon: const Icon(Icons.chevron_left_rounded, color: _ckNavy, size: 34),
+                ),
+                const Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Finaliser la commande',
+                      maxLines: 1,
+                      style: TextStyle(color: _ckNavy, fontSize: 19, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const PaymentSecureChip(),
+                const SizedBox(width: 12),
+              ],
+            ),
+          ),
+          const Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, 14), child: _InlineStepper()),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 12, 0),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: onBack,
+                tooltip: 'Retour',
+                icon: const Icon(Icons.arrow_back_rounded, color: _ckNavy, size: 28),
+              ),
+              const SizedBox(width: 2),
+              const Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Finaliser la commande',
+                    style: TextStyle(color: _ckNavy, fontSize: 22, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const PaymentSecureChip(),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+          child: _StackedStepper(stage: stage),
+        ),
+      ],
+    );
+  }
+}
+
+/// Étapes sur une ligne (écran Livraison).
+class _InlineStepper extends StatelessWidget {
+  const _InlineStepper();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget step(int number, String label, bool active) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: active ? OvanieColors.orange : const Color(0xFFEDF0F5),
+          ),
+          child: Text(
+            '$number',
+            style: TextStyle(
+              color: active ? Colors.white : const Color(0xFF6B7591),
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            color: active ? _ckNavy : const Color(0xFF6B7591),
+            fontSize: 14,
+            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+    Widget line() => Expanded(
+      child: Container(height: 1.5, margin: const EdgeInsets.symmetric(horizontal: 8), color: const Color(0xFFD5DBE5)),
+    );
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: SizedBox(
+        width: 380,
+        child: Row(
+          children: [
+            step(1, 'Livraison', true),
+            line(),
+            step(2, 'Paiement', false),
+            line(),
+            step(3, 'Confirmation', false),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Étapes avec libellés sous les pastilles (écrans Paiement et Confirmation).
+class _StackedStepper extends StatelessWidget {
+  final int stage;
+
+  const _StackedStepper({required this.stage});
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['Livraison', 'Paiement', 'Confirmation'];
+    Widget connector(int from) {
+      final done = stage > from + 1;
+      final reaching = stage == from + 1;
+      return Expanded(
+        child: Container(
+          height: 2.5,
+          decoration: BoxDecoration(
+            color: done ? _ckGreen : (reaching ? null : const Color(0xFFDDE2EA)),
+            gradient: reaching ? const LinearGradient(colors: [_ckGreen, _ckGreen, OvanieColors.orange]) : null,
+          ),
+        ),
+      );
+    }
+
+    Widget dot(int number) {
+      final done = number < stage;
+      final active = number == stage;
+      return Container(
+        width: 42,
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: done ? _ckGreen : (active ? OvanieColors.orange : const Color(0xFFEDF0F5)),
+        ),
+        child: done
+            ? const Icon(Icons.check_rounded, color: Colors.white, size: 24)
+            : Text(
+                '$number',
+                style: TextStyle(
+                  color: active ? Colors.white : const Color(0xFF8A93A8),
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 34),
+          child: Row(children: [dot(1), connector(1), dot(2), connector(2), dot(3)]),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (var i = 0; i < labels.length; i++)
+              Expanded(
+                child: Text(
+                  labels[i],
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: i + 1 < stage ? _ckGreen : (i + 1 == stage ? OvanieColors.orange : const Color(0xFF8A93A8)),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CheckoutSummaryCard extends StatelessWidget {
+  final bool cartIcon;
+  final String subtitle;
+  final String amountLabel;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final List<CartLine> lines;
+  final String deliveryLabel;
+
+  const _CheckoutSummaryCard({
+    required this.cartIcon,
+    required this.subtitle,
+    required this.amountLabel,
+    required this.expanded,
+    required this.onToggle,
+    required this.lines,
+    required this.deliveryLabel,
   });
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: padding,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(11),
-      border: Border.all(color: const Color(0xFFE0E5EC)),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x08071B48),
-          blurRadius: 10,
-          offset: Offset(0, 3),
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(color: _ckSoft, borderRadius: BorderRadius.circular(14)),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    if (cartIcon) ...[
+                      const Icon(Icons.shopping_cart_outlined, color: _ckNavy, size: 28),
+                      const SizedBox(width: 16),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Récapitulatif de la commande',
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: _ckNavy,
+                                fontSize: cartIcon ? 15.5 : 17,
+                                fontWeight: cartIcon ? FontWeight.w600 : FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Text(subtitle, style: const TextStyle(color: _ckMuted, fontSize: 14.5)),
+                              const SizedBox(width: 4),
+                              Icon(
+                                expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                                color: _ckMuted,
+                                size: 22,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      amountLabel,
+                      style: TextStyle(color: _ckNavy, fontSize: cartIcon ? 17.5 : 19, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+                if (expanded) ...[
+                  const Divider(height: 24, color: Color(0xFFDCE2EA)),
+                  for (final line in lines)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 7),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${line.product.name}  ×${line.quantity}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: _ckNavy, fontSize: 13.5),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            formatFcfa(line.subtotal),
+                            style: const TextStyle(color: _ckNavy, fontSize: 13.5, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Livraison', style: TextStyle(color: _ckMuted, fontSize: 13.5)),
+                      ),
+                      Text(deliveryLabel, style: const TextStyle(color: _ckMuted, fontSize: 13.5)),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _CheckoutSection extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final String? action;
+  final VoidCallback? onAction;
+  final Widget? trailing;
+
+  const _CheckoutSection({required this.title, required this.child, this.action, this.onAction, this.trailing});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _ckBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(color: _ckNavy, fontSize: 19, fontWeight: FontWeight.w800),
+                ),
+              ),
+              if (trailing != null) trailing!,
+              if (action != null)
+                InkWell(
+                  onTap: onAction,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                    child: Text(
+                      action!,
+                      style: const TextStyle(color: _ckBlue, fontSize: 15, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _FieldLabel extends StatelessWidget {
+  final String text;
+  final bool large;
+
+  const _FieldLabel(this.text, {this.large = false});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      text,
+      style: TextStyle(
+        color: _ckNavy,
+        fontSize: large ? 17 : 14.5,
+        fontWeight: large ? FontWeight.w700 : FontWeight.w500,
+      ),
     ),
-    child: child,
   );
 }
 
-class _CheckoutStyles {
-  static const panelTitle = TextStyle(
-    color: OvanieColors.navy,
-    fontSize: 17,
-    fontWeight: FontWeight.w900,
-  );
-  static const subTitle = TextStyle(
-    color: OvanieColors.navy,
-    fontSize: 12.5,
-    fontWeight: FontWeight.w900,
-  );
-}
-
-class _SearchLikeField extends StatelessWidget {
+class _GreyChip extends StatelessWidget {
   final String label;
+
+  const _GreyChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    decoration: BoxDecoration(color: const Color(0xFFEDF0F4), borderRadius: BorderRadius.circular(8)),
+    child: Text(label, style: const TextStyle(color: Color(0xFF4A556E), fontSize: 12.5)),
+  );
+}
+
+class _AddAddressPrompt extends StatelessWidget {
   final VoidCallback onTap;
 
-  const _SearchLikeField({required this.label, required this.onTap});
+  const _AddAddressPrompt({required this.onTap});
 
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
-    borderRadius: BorderRadius.circular(8),
+    borderRadius: BorderRadius.circular(12),
     child: Container(
-      height: 45,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD9E0EA)),
+        color: const Color(0xFFFFF6F0),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: OvanieColors.orange.withValues(alpha: .45)),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Icon(Icons.search_rounded, color: OvanieColors.navy, size: 20),
-          const SizedBox(width: 9),
+          Icon(Icons.add_location_alt_outlined, color: OvanieColors.orange, size: 28),
+          SizedBox(width: 12),
           Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFF5C6880), fontSize: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ajouter une adresse de livraison',
+                  style: TextStyle(color: _ckNavy, fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'Rechercher, utiliser ma position ou saisir l’adresse',
+                  style: TextStyle(color: _ckMuted, fontSize: 13),
+                ),
+              ],
             ),
           ),
+          Icon(Icons.chevron_right_rounded, color: _ckNavy),
         ],
       ),
     ),
   );
+}
+
+/// Encadré jaune « position trop imprécise » avec lien « Réessayer ».
+class _LocationWarningBox extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _LocationWarningBox({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFF8E6),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFF5D27A)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.warning_rounded, color: Color(0xFFF59E0B), size: 30),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message, style: const TextStyle(color: Color(0xFFC2410C), fontSize: 14, height: 1.4)),
+              const SizedBox(height: 6),
+              InkWell(
+                onTap: onRetry,
+                child: const Text(
+                  'Réessayer',
+                  style: TextStyle(
+                    color: Color(0xFFEA580C),
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.underline,
+                    decorationColor: Color(0xFFEA580C),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _DeliveryDetails extends StatelessWidget {
+  final CheckoutPreview? preview;
+  final bool calculating;
+  final bool ready;
+  final bool addressConfirmed;
+  final double fallbackWeightKg;
+
+  const _DeliveryDetails({
+    required this.preview,
+    required this.calculating,
+    required this.ready,
+    required this.addressConfirmed,
+    required this.fallbackWeightKg,
+  });
+
+  String _value(String Function(CheckoutPreview preview) read) {
+    if (calculating) return 'Calcul...';
+    final current = preview;
+    if (current == null) return '—';
+    final value = read(current).trim();
+    return value.isEmpty ? '—' : value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final weight = preview?.totalWeightKg ?? 0;
+    final shownWeight = weight > 0 ? weight : fallbackWeightKg;
+
+    final Widget status;
+    if (calculating) {
+      status = const Row(
+        children: [
+          SizedBox(
+            width: 34,
+            height: 34,
+            child: CircularProgressIndicator(strokeWidth: 3.2, color: OvanieColors.orange),
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Calcul de livraison en cours',
+                  style: TextStyle(color: _ckNavy, fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+                SizedBox(height: 2),
+                Text('Nous vérifions votre zone de livraison.', style: TextStyle(color: _ckMuted, fontSize: 13.5)),
+              ],
+            ),
+          ),
+        ],
+      );
+    } else if (ready) {
+      status = Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(color: _ckGreenSoft, borderRadius: BorderRadius.circular(10)),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_circle_rounded, color: _ckGreen, size: 22),
+                SizedBox(width: 8),
+                Text(
+                  'Livraison disponible',
+                  style: TextStyle(color: Color(0xFF15803D), fontSize: 14.5, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text('Calculée selon votre adresse chantier', style: TextStyle(color: _ckMuted, fontSize: 13)),
+          ),
+        ],
+      );
+    } else if (preview != null) {
+      status = Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: const Color(0xFFFFF6EA), borderRadius: BorderRadius.circular(10)),
+        child: Text(
+          preview!.deliveryMessage.trim().isNotEmpty
+              ? preview!.deliveryMessage
+              : 'La livraison doit être confirmée pour cette adresse.',
+          style: const TextStyle(color: Color(0xFFB45309), fontSize: 13.5, height: 1.35),
+        ),
+      );
+    } else {
+      status = Text(
+        addressConfirmed
+            ? 'La livraison sera calculée pour cette adresse.'
+            : 'Choisissez une adresse pour calculer la livraison.',
+        style: const TextStyle(color: _ckMuted, fontSize: 13.5),
+      );
+    }
+
+    final distance = preview?.deliveryDistanceKm;
+    final delay = preview?.averageDelayHours ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        status,
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _MetricTile(
+                icon: Icons.storefront_outlined,
+                label: 'Depuis la boutique',
+                value: calculating
+                    ? 'Calcul...'
+                    : (distance != null ? '${distance.toStringAsFixed(1).replaceAll('.', ',')} km' : '—'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _MetricTile(
+                icon: Icons.location_on_outlined,
+                label: 'Zone',
+                value: _value(
+                  (p) => p.territoryZoneName.isNotEmpty
+                      ? _capitalized(p.territoryZoneName)
+                      : (p.deliveryCommune.isNotEmpty ? p.deliveryCommune : p.deliveryCity),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _MetricTile(
+                icon: Icons.local_shipping_outlined,
+                label: 'Véhicule estimé',
+                value: _value((p) => p.recommendedVehicle),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _MetricTile(
+                icon: Icons.schedule_rounded,
+                label: 'Livraison estimée',
+                value: calculating ? 'Calcul...' : (preview == null ? '—' : (delay > 0 ? '$delay h' : '24 à 48 h')),
+              ),
+            ),
+          ],
+        ),
+        const Divider(height: 30, color: _ckBorder),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Poids total', style: TextStyle(color: _ckNavy, fontSize: 15)),
+            ),
+            Text(
+              shownWeight > 0 ? '${_groupedNumber(shownWeight)} kg' : '—',
+              style: const TextStyle(color: _ckNavy, fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Les frais de livraison sont calculés pour l’adresse renseignée.',
+          style: TextStyle(color: _ckMuted, fontSize: 13),
+        ),
+      ],
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _MetricTile({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 80,
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: _ckBorder),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, color: _ckNavy, size: 26),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(label, maxLines: 1, style: const TextStyle(color: _ckMuted, fontSize: 12.5)),
+              ),
+              const SizedBox(height: 3),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  style: const TextStyle(color: _ckNavy, fontSize: 15, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _PaymentMethodMissing extends StatelessWidget {
+  final VoidCallback onChoose;
+
+  const _PaymentMethodMissing({required this.onChoose});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFEEEE),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFF7B7B7)),
+    ),
+    child: Column(
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.error_rounded, color: _ckRed, size: 24),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Choisissez un mode de paiement avant de continuer.',
+                style: TextStyle(color: _ckRed, fontSize: 14.5, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: OutlinedButton(
+            onPressed: onChoose,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _ckNavy,
+              backgroundColor: Colors.white,
+              side: const BorderSide(color: _ckNavy, width: 1.3),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text(
+              'Choisir un mode de paiement',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _RadioDot extends StatelessWidget {
+  final bool selected;
+
+  const _RadioDot({required this.selected});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 26,
+    height: 26,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: Colors.white,
+      border: Border.all(color: selected ? OvanieColors.orange : const Color(0xFFB9C2D0), width: selected ? 2 : 1.5),
+    ),
+    alignment: Alignment.center,
+    child: selected
+        ? Container(
+            width: 14,
+            height: 14,
+            decoration: const BoxDecoration(color: OvanieColors.orange, shape: BoxShape.circle),
+          )
+        : null,
+  );
+}
+
+BoxDecoration _choiceDecoration(bool selected) => BoxDecoration(
+  color: selected ? const Color(0xFFFFF6F0) : Colors.white,
+  borderRadius: BorderRadius.circular(12),
+  border: Border.all(color: selected ? OvanieColors.orange : _ckBorder, width: selected ? 1.6 : 1),
+);
+
+class _PaymentModeTile extends StatelessWidget {
+  final String image;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _PaymentModeTile({
+    required this.image,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Opacity(
+    opacity: enabled ? 1 : .5,
+    child: InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+        decoration: _choiceDecoration(selected),
+        child: Row(
+          children: [
+            _RadioDot(selected: selected),
+            const SizedBox(width: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(image, width: 86, height: 66, fit: BoxFit.cover),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      style: const TextStyle(color: _ckNavy, fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(color: _ckMuted, fontSize: 13.5)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Logo rond de l'opérateur, comme sur les maquettes de paiement.
+class _OperatorTile extends StatelessWidget {
+  final CheckoutPaymentOperatorOption operator;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _OperatorTile({required this.operator, required this.selected, required this.enabled, required this.onTap});
+
+  String get _subtitle {
+    switch (operator.code) {
+      case 'wave':
+        return 'Payez avec votre compte Wave';
+      case 'orange':
+        return 'Payez avec Orange Money';
+      case 'mtn':
+        return 'Payez avec MTN Mobile Money';
+      case 'moov':
+        return 'Payez avec Moov Money';
+      case 'card':
+        return 'Visa, Mastercard et autres';
+      default:
+        return 'Paiement sécurisé';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Opacity(
+    opacity: enabled ? 1 : .5,
+    child: InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 9, 12, 9),
+        decoration: _choiceDecoration(selected),
+        child: Row(
+          children: [
+            _RadioDot(selected: selected),
+            const SizedBox(width: 14),
+            SizedBox(
+              width: 82,
+              child: Center(child: PaymentOperatorLogo(code: operator.code, size: 50)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    operator.label,
+                    style: const TextStyle(color: _ckNavy, fontSize: 15.5, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(_subtitle, style: const TextStyle(color: _ckMuted, fontSize: 13)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Champ « +225 ⌄ | numéro » des maquettes de paiement.
+class _MobileMoneyField extends StatelessWidget {
+  final String initialValue;
+  final bool error;
+  final ValueChanged<String> onChanged;
+
+  const _MobileMoneyField({super.key, required this.initialValue, required this.error, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = error ? _ckRed : const Color(0xFFD5DCE6);
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor, width: error ? 1.4 : 1),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 16),
+          const Text('+225', style: TextStyle(color: _ckNavy, fontSize: 16)),
+          const SizedBox(width: 6),
+          const Icon(Icons.keyboard_arrow_down_rounded, color: _ckMuted, size: 22),
+          const SizedBox(width: 10),
+          Container(width: 1, color: borderColor),
+          Expanded(
+            child: TextFormField(
+              initialValue: initialValue,
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.telephoneNumber],
+              inputFormatters: const [CiPhoneInputFormatter()],
+              style: const TextStyle(color: _ckNavy, fontSize: 16.5),
+              decoration: const InputDecoration(
+                hintText: '07 00 00 00 00',
+                hintStyle: TextStyle(color: Color(0xFF8A93A8)),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                filled: false,
+                contentPadding: EdgeInsets.symmetric(horizontal: 16),
+              ),
+              onChanged: onChanged,
+            ),
+          ),
+          if (error) ...[const Icon(Icons.error_rounded, color: _ckRed, size: 24), const SizedBox(width: 14)],
+        ],
+      ),
+    );
+  }
+}
+
+class _ConfirmationLine extends StatelessWidget {
+  final CartLine line;
+
+  const _ConfirmationLine({required this.line});
+
+  @override
+  Widget build(BuildContext context) {
+    final product = line.product;
+    final unit = shortSaleUnit(product.unitLabel);
+    final subtitle =
+        line.variant?.label ??
+        (product.packaging.trim().isNotEmpty
+            ? product.packaging.trim()
+            : (product.weightKg > 0 ? '${_groupedNumber(product.weightKg)} kg' : unit));
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 62,
+            height: 58,
+            color: const Color(0xFFF3F4F6),
+            child: line.imageUrl.trim().isEmpty
+                ? const Icon(Icons.inventory_2_outlined, color: Color(0xFFB9C2D2))
+                : Image.network(
+                    line.imageUrl,
+                    fit: BoxFit.cover,
+                    cacheWidth: 220,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Color(0xFFB9C2D2)),
+                  ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _ckNavy, fontSize: 14.5, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _ckMuted, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text('×${line.quantity}', style: const TextStyle(color: _ckNavy, fontSize: 14.5)),
+        const SizedBox(width: 14),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              formatFcfa(line.subtotal),
+              style: const TextStyle(color: _ckNavy, fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 3),
+            Text('${formatFcfa(line.unitPrice)} / $unit', style: const TextStyle(color: _ckMuted, fontSize: 12)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TotalsRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  const _TotalsRow({required this.label, required this.value, this.valueColor = _ckNavy});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(label, style: const TextStyle(color: _ckMuted, fontSize: 15)),
+      ),
+      Text(value, style: TextStyle(color: valueColor, fontSize: 15)),
+    ],
+  );
+}
+
+class _AddressDetail extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _AddressDetail({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 3),
+    child: Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '$label : ',
+            style: const TextStyle(color: Color(0xFF4A556E), fontWeight: FontWeight.w700),
+          ),
+          TextSpan(text: value.trim()),
+        ],
+      ),
+      style: const TextStyle(color: _ckMuted, fontSize: 13.5, height: 1.35),
+    ),
+  );
+}
+
+class _CheckoutTotalBar extends StatelessWidget {
+  final String amountLabel;
+  final String buttonLabel;
+  final bool loading;
+  final VoidCallback onPressed;
+
+  const _CheckoutTotalBar({
+    required this.amountLabel,
+    required this.buttonLabel,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      border: Border(top: BorderSide(color: _ckBorder)),
+      boxShadow: [BoxShadow(color: Color(0x0F000000), blurRadius: 12, offset: Offset(0, -3))],
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Total à payer', style: TextStyle(color: _ckMuted, fontSize: 14)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  amountLabel,
+                  style: const TextStyle(color: _ckNavy, fontSize: 24, fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: (MediaQuery.sizeOf(context).width * .5).clamp(150.0, 210.0),
+          height: 54,
+          child: FilledButton(
+            onPressed: loading ? null : onPressed,
+            style: FilledButton.styleFrom(
+              elevation: 0,
+              backgroundColor: OvanieColors.orange,
+              disabledBackgroundColor: OvanieColors.orange.withValues(alpha: .6),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: loading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                  )
+                : FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(buttonLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _CheckoutWideBar extends StatelessWidget {
+  final String label;
+  final bool loading;
+  final VoidCallback onPressed;
+
+  const _CheckoutWideBar({required this.label, required this.loading, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      border: Border(top: BorderSide(color: _ckBorder)),
+    ),
+    child: SizedBox(
+      height: 56,
+      child: FilledButton(
+        onPressed: loading ? null : onPressed,
+        style: FilledButton.styleFrom(
+          elevation: 0,
+          backgroundColor: OvanieColors.orange,
+          disabledBackgroundColor: OvanieColors.orange.withValues(alpha: .6),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: loading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+              )
+            : Text(label, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+      ),
+    ),
+  );
+}
+
+/// Fenêtre « Autoriser la localisation » (maquette du tunnel de commande).
+Future<bool> showLocationPermissionDialog(BuildContext context, DeviceLocationException error) async {
+  final openDeviceSettings = error.reason == DeviceLocationFailureReason.serviceDisabled;
+  final openAppSettings = error.reason == DeviceLocationFailureReason.permissionDeniedForever;
+  final retry = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 36),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 26, 22, 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 78,
+              height: 78,
+              decoration: const BoxDecoration(color: Color(0xFFFFEDE2), shape: BoxShape.circle),
+              child: const Icon(Icons.location_on_rounded, color: OvanieColors.orange, size: 42),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Autoriser la localisation',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _ckNavy, fontSize: 21, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              openDeviceSettings
+                  ? 'La localisation du téléphone est désactivée. Activez-la puis revenez dans OVANIE.'
+                  : 'OVANIE a besoin de votre position uniquement pour renseigner votre adresse de livraison. Activez « Localisation » et « Position précise », puis revenez dans l’application.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFF4A556E), fontSize: 15, height: 1.45),
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: FilledButton(
+                onPressed: () async {
+                  Navigator.of(dialogContext).pop(!openDeviceSettings && !openAppSettings);
+                  if (openDeviceSettings) {
+                    await DeviceLocation.openDeviceLocationSettings();
+                  } else if (openAppSettings) {
+                    await DeviceLocation.openAppLocationSettings();
+                  }
+                },
+                style: FilledButton.styleFrom(
+                  elevation: 0,
+                  backgroundColor: OvanieColors.orange,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(
+                  openDeviceSettings || openAppSettings ? 'Ouvrir les paramètres' : 'Réessayer',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Plus tard', style: TextStyle(color: Color(0xFF8A93A8), fontSize: 15.5)),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return retry == true;
+}
+
+bool isLocationPermissionProblem(String message) {
+  final value = message.toLowerCase();
+  return value.contains('autorisation') ||
+      value.contains('localisation refusée') ||
+      value.contains('localisation refusee') ||
+      value.contains('bloquée') ||
+      value.contains('bloquee') ||
+      value.contains('activez la localisation du téléphone');
 }
 
 class _CheckoutMapPreview extends StatelessWidget {
@@ -2093,9 +2589,7 @@ class _CheckoutMapPreview extends StatelessWidget {
     // Avant que l'utilisateur n'autorise le GPS, la carte peut afficher la zone
     // générale d'Abidjan, mais aucun marqueur n'est affiché : on ne présente
     // donc jamais ce centre par défaut comme la position réelle du client.
-    final center = _hasPosition
-        ? LatLng(latitude!, longitude!)
-        : const LatLng(5.359952, -4.008256);
+    final center = _hasPosition ? LatLng(latitude!, longitude!) : const LatLng(5.359952, -4.008256);
     final zoom = _hasPosition ? 17.4 : 11.8;
 
     return ClipRRect(
@@ -2113,9 +2607,7 @@ class _CheckoutMapPreview extends StatelessWidget {
             initialZoom: zoom,
             minZoom: 4,
             maxZoom: 19,
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-            ),
+            interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
           ),
           children: [
             TileLayer(
@@ -2135,9 +2627,7 @@ class _CheckoutMapPreview extends StatelessWidget {
                       Icons.location_on_rounded,
                       color: OvanieColors.orange,
                       size: 44,
-                      shadows: [
-                        Shadow(color: Color(0x42000000), blurRadius: 5),
-                      ],
+                      shadows: [Shadow(color: Color(0x42000000), blurRadius: 5)],
                     ),
                   ),
                 ],
@@ -2149,514 +2639,20 @@ class _CheckoutMapPreview extends StatelessWidget {
   }
 }
 
-class _SavedAddressTile extends StatelessWidget {
-  final CheckoutSavedAddress item;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SavedAddressTile({
-    required this.item,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(9),
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(
-          color: selected ? OvanieColors.orange : const Color(0xFFDDE3EC),
-          width: selected ? 1.2 : 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            selected ? Icons.radio_button_checked : Icons.radio_button_off,
-            color: selected ? OvanieColors.orange : const Color(0xFF7D8799),
-            size: 22,
-          ),
-          const SizedBox(width: 9),
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: selected
-                  ? const Color(0xFFFFF1EC)
-                  : const Color(0xFFF5F7F9),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Icon(
-              item.label.toLowerCase().contains('bureau')
-                  ? Icons.business_center_outlined
-                  : Icons.location_on_outlined,
-              color: selected ? OvanieColors.orange : const Color(0xFF6E7890),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.label.trim().isEmpty ? 'Adresse' : item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: OvanieColors.navy,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    if (item.isDefault)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF1EB),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          'Par défaut',
-                          style: TextStyle(
-                            color: OvanieColors.orange,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  [
-                    item.city,
-                    item.commune,
-                    item.quartier,
-                  ].where((e) => e.trim().isNotEmpty).join(', '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF526181),
-                    fontSize: 11.5,
-                  ),
-                ),
-                if (item.address.trim().isNotEmpty)
-                  Text(
-                    item.address,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF526181),
-                      fontSize: 11.5,
-                    ),
-                  ),
-                if (item.recipientName.trim().isNotEmpty ||
-                    item.phone.trim().isNotEmpty)
-                  Text(
-                    '${item.recipientName}${item.recipientName.trim().isNotEmpty && item.phone.trim().isNotEmpty ? '  •  ' : ''}${formatCiPhoneDisplay(item.phone)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: OvanieColors.navy,
-                      fontSize: 11.5,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 4),
-          const Icon(
-            Icons.more_vert_rounded,
-            color: OvanieColors.navy,
-            size: 19,
-          ),
-        ],
-      ),
-    ),
+/// Feuille de choix (commune, quartier…) partagée avec le carnet d'adresses.
+Future<String?> showLocationPickerSheet(
+  BuildContext context, {
+  required String title,
+  required List<String> items,
+  String? selected,
+}) {
+  return showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _LocationPickerSheet(title: title, items: items, selected: selected),
   );
-}
-
-class _CompactTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final TextInputType? keyboardType;
-  final IconData? prefixIcon;
-  final List<TextInputFormatter>? inputFormatters;
-  final ValueChanged<String>? onChanged;
-
-  const _CompactTextField({
-    required this.controller,
-    required this.label,
-    this.keyboardType,
-    this.prefixIcon,
-    this.inputFormatters,
-    this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 44,
-    child: TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      onChanged: onChanged,
-      style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(fontSize: 12),
-        prefixIcon: prefixIcon == null ? null : Icon(prefixIcon, size: 18),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 11,
-          vertical: 10,
-        ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFD9E0EA)),
-        ),
-      ),
-    ),
-  );
-}
-
-class _CompactEditableLocation extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final String hint;
-  final ValueChanged<String> onChanged;
-
-  const _CompactEditableLocation({
-    required this.controller,
-    required this.label,
-    required this.hint,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 44,
-    child: TextField(
-      controller: controller,
-      onChanged: onChanged,
-      textInputAction: TextInputAction.next,
-      style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        labelStyle: const TextStyle(fontSize: 12),
-        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9AA5B5)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 11,
-          vertical: 10,
-        ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFD9E0EA)),
-        ),
-      ),
-    ),
-  );
-}
-
-class _DeliveryEditSheet extends StatefulWidget {
-  final String title;
-  final String label;
-  final String initialValue;
-  final String hint;
-  final bool phone;
-  final bool allowEmpty;
-
-  const _DeliveryEditSheet({
-    required this.title,
-    required this.label,
-    required this.initialValue,
-    required this.hint,
-    required this.phone,
-    this.allowEmpty = false,
-  });
-
-  @override
-  State<_DeliveryEditSheet> createState() => _DeliveryEditSheetState();
-}
-
-class _DeliveryEditSheetState extends State<_DeliveryEditSheet> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialValue);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    Navigator.of(context).pop(_controller.text.trim());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Container(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottom),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD9E0EA),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              widget.title,
-              style: const TextStyle(
-                color: OvanieColors.navy,
-                fontSize: 19,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _controller,
-              autofocus: true,
-              keyboardType: widget.phone
-                  ? TextInputType.phone
-                  : TextInputType.text,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => _submit(),
-              inputFormatters: widget.phone
-                  ? <TextInputFormatter>[CiPhoneInputFormatter()]
-                  : null,
-              minLines: widget.phone ? 1 : 2,
-              maxLines: widget.phone ? 1 : 4,
-              decoration: InputDecoration(
-                labelText: widget.label,
-                hintText: widget.hint,
-                prefixIcon: widget.phone
-                    ? const Icon(Icons.call_outlined, color: OvanieColors.navy)
-                    : const Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        color: OvanieColors.navy,
-                      ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(13),
-                  borderSide: const BorderSide(color: Color(0xFFD9E0EA)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(13),
-                  borderSide: const BorderSide(
-                    color: OvanieColors.orange,
-                    width: 1.4,
-                  ),
-                ),
-              ),
-              validator: (value) {
-                final clean = (value ?? '').trim();
-                if (clean.isEmpty && !widget.allowEmpty) {
-                  return 'Ce champ est obligatoire.';
-                }
-                if (widget.phone) {
-                  final digits = clean.replaceAll(RegExp(r'\D+'), '');
-                  if (digits.length < 10) {
-                    return 'Renseignez un numéro de téléphone valide.';
-                  }
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: OvanieColors.navy,
-                      minimumSize: const Size.fromHeight(48),
-                      side: const BorderSide(color: Color(0xFFD9E0EA)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Annuler',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: FilledButton(
-                    onPressed: _submit,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: OvanieColors.orange,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Enregistrer',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CompactLocationDropdown extends StatelessWidget {
-  final String label;
-  final String hint;
-  final String? value;
-  final List<String> items;
-  final ValueChanged<String?>? onChanged;
-
-  const _CompactLocationDropdown({
-    required this.label,
-    required this.hint,
-    required this.value,
-    required this.items,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final uniqueItems = <String>[];
-    final seen = <String>{};
-    for (final item in items) {
-      final clean = item.trim();
-      final key = clean.toLowerCase();
-      if (clean.isNotEmpty && seen.add(key)) uniqueItems.add(clean);
-    }
-
-    final effectiveValue =
-        value != null &&
-            uniqueItems.any(
-              (item) => item.toLowerCase() == value!.trim().toLowerCase(),
-            )
-        ? value!.trim()
-        : null;
-    final enabled = onChanged != null;
-
-    return SizedBox(
-      height: 44,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: !enabled
-              ? null
-              : () async {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  final selected = await showModalBottomSheet<String>(
-                    context: context,
-                    isScrollControlled: true,
-                    useSafeArea: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => _LocationPickerSheet(
-                      title: label,
-                      items: uniqueItems,
-                      selected: effectiveValue,
-                    ),
-                  );
-                  if (selected != null) onChanged?.call(selected);
-                },
-          borderRadius: BorderRadius.circular(8),
-          child: InputDecorator(
-            isEmpty: false,
-            decoration: InputDecoration(
-              labelText: label,
-              floatingLabelBehavior: FloatingLabelBehavior.always,
-              enabled: enabled,
-              labelStyle: const TextStyle(fontSize: 12),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 11,
-                vertical: 9,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFD9E0EA)),
-              ),
-              disabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE7EAF0)),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    effectiveValue ?? hint,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: effectiveValue == null
-                          ? const Color(0xFF9AA5B5)
-                          : OvanieColors.navy,
-                      fontSize: 12,
-                      fontWeight: effectiveValue == null
-                          ? FontWeight.w500
-                          : FontWeight.w700,
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: enabled ? OvanieColors.navy : const Color(0xFFB8C0CC),
-                  size: 19,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _LocationPickerSheet extends StatefulWidget {
@@ -2664,11 +2660,7 @@ class _LocationPickerSheet extends StatefulWidget {
   final List<String> items;
   final String? selected;
 
-  const _LocationPickerSheet({
-    required this.title,
-    required this.items,
-    required this.selected,
-  });
+  const _LocationPickerSheet({required this.title, required this.items, required this.selected});
 
   @override
   State<_LocationPickerSheet> createState() => _LocationPickerSheetState();
@@ -2687,35 +2679,31 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
   List<String> get _filtered {
     final q = _query.trim().toLowerCase();
     if (q.isEmpty) return widget.items;
-    return widget.items
-        .where((item) => item.toLowerCase().contains(q))
-        .toList(growable: false);
+    return widget.items.where((item) => item.toLowerCase().contains(q)).toList(growable: false);
   }
 
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
     return FractionallySizedBox(
-      heightFactor: 0.72,
+      heightFactor: 0.86,
       child: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
         ),
         child: Column(
           children: [
             const SizedBox(height: 10),
             Container(
-              width: 42,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD9E0EA),
-                borderRadius: BorderRadius.circular(99),
-              ),
+              width: 46,
+              height: 5,
+              decoration: BoxDecoration(color: const Color(0xFFD0D6DF), borderRadius: BorderRadius.circular(3)),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              padding: const EdgeInsets.fromLTRB(20, 14, 10, 12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Column(
@@ -2723,42 +2711,33 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
                       children: [
                         Text(
                           'Choisir ${widget.title.toLowerCase()}',
-                          style: const TextStyle(
-                            color: OvanieColors.navy,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                          ),
+                          style: const TextStyle(color: _ckNavy, fontSize: 25, fontWeight: FontWeight.w900),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         Text(
                           '${widget.items.length} option${widget.items.length > 1 ? 's' : ''}',
-                          style: const TextStyle(
-                            color: Color(0xFF7A8599),
-                            fontSize: 11.5,
-                          ),
+                          style: const TextStyle(color: _ckMuted, fontSize: 15),
                         ),
                       ],
                     ),
                   ),
-                  IconButton(
+                  TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: OvanieColors.navy,
-                    ),
+                    child: const Text('Fermer', style: TextStyle(color: _ckBlue, fontSize: 16.5)),
                   ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: TextField(
                 controller: _search,
-                autofocus: false,
                 onChanged: (value) => setState(() => _query = value),
+                style: const TextStyle(color: _ckNavy, fontSize: 15.5),
                 decoration: InputDecoration(
-                  hintText: 'Rechercher…',
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  hintText: 'Rechercher...',
+                  hintStyle: const TextStyle(color: Color(0xFF8A93A8), fontSize: 15.5),
+                  prefixIcon: const Icon(Icons.search_rounded, color: _ckMuted, size: 26),
                   suffixIcon: _query.isEmpty
                       ? null
                       : IconButton(
@@ -2766,65 +2745,66 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
                             _search.clear();
                             setState(() => _query = '');
                           },
-                          icon: const Icon(Icons.close_rounded, size: 18),
+                          icon: const Icon(Icons.close_rounded, size: 20),
                         ),
                   filled: true,
-                  fillColor: const Color(0xFFF7F9FC),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
+                  fillColor: _ckSoft,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 ),
               ),
             ),
-            const Divider(height: 1),
             Expanded(
               child: filtered.isEmpty
                   ? const Center(
                       child: Text(
                         'Aucun résultat',
-                        style: TextStyle(
-                          color: Color(0xFF7A8599),
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: TextStyle(color: _ckMuted, fontWeight: FontWeight.w600),
                       ),
                     )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
                       itemCount: filtered.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(height: 1, indent: 20, endIndent: 20),
                       itemBuilder: (context, index) {
                         final item = filtered[index];
-                        final selected =
-                            widget.selected?.trim().toLowerCase() ==
-                            item.toLowerCase();
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 2,
-                          ),
-                          title: Text(
-                            item,
-                            style: TextStyle(
-                              color: OvanieColors.navy,
-                              fontSize: 14,
-                              fontWeight: selected
-                                  ? FontWeight.w900
-                                  : FontWeight.w700,
+                        final selected = widget.selected?.trim().toLowerCase() == item.toLowerCase();
+                        return InkWell(
+                          onTap: () => Navigator.of(context).pop(item),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            height: 64,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: selected
+                                ? BoxDecoration(
+                                    color: const Color(0xFFFFF6F0),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: OvanieColors.orange, width: 1.4),
+                                  )
+                                : const BoxDecoration(
+                                    border: Border(bottom: BorderSide(color: _ckBorder)),
+                                  ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item,
+                                    style: TextStyle(
+                                      color: _ckNavy,
+                                      fontSize: 17,
+                                      fontWeight: selected ? FontWeight.w800 : FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                                if (selected)
+                                  Container(
+                                    width: 30,
+                                    height: 30,
+                                    decoration: const BoxDecoration(color: OvanieColors.orange, shape: BoxShape.circle),
+                                    child: const Icon(Icons.check_rounded, color: Colors.white, size: 20),
+                                  ),
+                              ],
                             ),
                           ),
-                          trailing: selected
-                              ? const Icon(
-                                  Icons.check_circle_rounded,
-                                  color: OvanieColors.orange,
-                                )
-                              : const Icon(
-                                  Icons.chevron_right_rounded,
-                                  color: Color(0xFFA2ABBA),
-                                ),
-                          onTap: () => Navigator.of(context).pop(item),
                         );
                       },
                     ),
@@ -2834,664 +2814,6 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
       ),
     );
   }
-}
-
-class _InfoStrip extends StatelessWidget {
-  final String text;
-  const _InfoStrip({required this.text});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF3F8FF),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: const Color(0xFFD8E6FA)),
-    ),
-    child: Row(
-      children: [
-        const Icon(
-          Icons.info_outline_rounded,
-          color: Color(0xFF1266F1),
-          size: 19,
-        ),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _DeliveryQuickStats extends StatelessWidget {
-  final CheckoutPreview? preview;
-  final bool calculating;
-  const _DeliveryQuickStats({required this.preview, required this.calculating});
-
-  @override
-  Widget build(BuildContext context) {
-    final distance = preview?.deliveryDistanceKm;
-    final vehicle = preview?.recommendedVehicle.trim().isNotEmpty == true
-        ? preview!.recommendedVehicle
-        : 'À confirmer';
-    final zone = preview?.deliveryZone.trim().isNotEmpty == true
-        ? preview!.deliveryZone
-        : 'Abidjan';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: const Color(0xFFE0E5EC)),
-      ),
-      child: Row(
-        children: [
-          // Distance réelle depuis la boutique, sinon la zone de livraison.
-          _MiniMetric(
-            icon: distance != null
-                ? Icons.route_outlined
-                : Icons.location_on_outlined,
-            label: distance != null ? 'Depuis la boutique' : 'Zone',
-            value: distance != null
-                ? '${distance.toStringAsFixed(1).replaceAll('.', ',')} km'
-                : zone,
-          ),
-          const _MiniDivider(),
-          _MiniMetric(
-            icon: Icons.electric_rickshaw_outlined,
-            label: 'Véhicule estimé',
-            value: vehicle,
-          ),
-          const _MiniDivider(),
-          _MiniMetric(
-            icon: Icons.schedule_outlined,
-            label: 'Livraison estimée',
-            value: calculating ? 'Calcul…' : '24 à 48 h',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MiniMetric extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  const _MiniMetric({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: Row(
-      children: [
-        Icon(icon, color: OvanieColors.navy, size: 22),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFF59657B), fontSize: 11),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: OvanieColors.navy,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _MiniDivider extends StatelessWidget {
-  const _MiniDivider();
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 1,
-    height: 30,
-    margin: const EdgeInsets.symmetric(horizontal: 8),
-    color: OvanieColors.border,
-  );
-}
-
-class _OrderSummaryCompact extends StatelessWidget {
-  final double subtotal;
-  final double? deliveryFee;
-  final double? total;
-  final int itemCount;
-
-  const _OrderSummaryCompact({
-    required this.subtotal,
-    required this.deliveryFee,
-    required this.total,
-    required this.itemCount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final finalTotal = total ?? subtotal;
-    return _CheckoutPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Récapitulatif de la commande',
-                  style: _CheckoutStyles.subTitle,
-                ),
-              ),
-              Text(
-                '$itemCount article${itemCount > 1 ? 's' : ''}',
-                style: const TextStyle(
-                  color: OvanieColors.navy,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          _SummaryRow(label: 'Total produits', value: formatFcfa(subtotal)),
-          const SizedBox(height: 7),
-          _SummaryRow(
-            label: 'Livraison',
-            value: deliveryFee == null
-                ? 'À confirmer'
-                : formatFcfa(deliveryFee!),
-          ),
-          const SizedBox(height: 9),
-          const Divider(height: 1),
-          const SizedBox(height: 9),
-          _SummaryRow(
-            label: 'Total à payer',
-            value: formatFcfa(finalTotal),
-            strong: true,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool strong;
-  final bool accent;
-
-  const _SummaryRow({
-    required this.label,
-    required this.value,
-    this.strong = false,
-    this.accent = false,
-  });
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(
-        child: Text(
-          label,
-          style: TextStyle(
-            color: accent ? OvanieColors.orange : OvanieColors.navy,
-            fontSize: strong ? 13 : 10.8,
-            fontWeight: strong ? FontWeight.w900 : FontWeight.w500,
-          ),
-        ),
-      ),
-      const SizedBox(width: 8),
-      FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          value,
-          style: TextStyle(
-            color: strong || accent ? OvanieColors.orange : OvanieColors.navy,
-            fontSize: strong ? 19 : 10.8,
-            fontWeight: strong ? FontWeight.w900 : FontWeight.w500,
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-class _DeliveryMetrics extends StatelessWidget {
-  final CheckoutPreview? preview;
-  const _DeliveryMetrics({required this.preview});
-
-  @override
-  Widget build(BuildContext context) {
-    final weight = preview == null
-        ? '—'
-        : '${preview!.totalWeightKg.round()} kg';
-    final vehicle = preview?.recommendedVehicle.trim().isNotEmpty == true
-        ? preview!.recommendedVehicle
-        : 'À confirmer';
-    final zone = preview?.deliveryZone.trim().isNotEmpty == true
-        ? preview!.deliveryZone
-        : 'Abidjan';
-    return Row(
-      children: [
-        _DeliveryMetric(
-          icon: Icons.calendar_month_outlined,
-          label: 'Livraison estimée',
-          value: '24 à 48 h',
-        ),
-        const SizedBox(width: 7),
-        _DeliveryMetric(
-          icon: Icons.location_on_outlined,
-          label: 'Zone',
-          value: zone,
-        ),
-        const SizedBox(width: 7),
-        _DeliveryMetric(
-          icon: Icons.electric_rickshaw_outlined,
-          label: 'Véhicule',
-          value: vehicle,
-        ),
-        const SizedBox(width: 7),
-        _DeliveryMetric(
-          icon: Icons.scale_outlined,
-          label: 'Poids total',
-          value: weight,
-        ),
-      ],
-    );
-  }
-}
-
-class _DeliveryMetric extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  const _DeliveryMetric({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE3EC)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: OvanieColors.navy, size: 19),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF59657B),
-                    fontSize: 11,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: OvanieColors.navy,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _ContactRow extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final String value;
-  final VoidCallback onEdit;
-
-  const _ContactRow({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.value,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Container(
-        width: 39,
-        height: 39,
-        decoration: BoxDecoration(
-          color: iconColor.withValues(alpha: .08),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, color: iconColor, size: 22),
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(color: Color(0xFF59657B), fontSize: 11.5),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: OvanieColors.navy,
-                fontSize: 11.8,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-      TextButton.icon(
-        onPressed: onEdit,
-        style: TextButton.styleFrom(foregroundColor: OvanieColors.orange),
-        iconAlignment: IconAlignment.end,
-        icon: const Icon(Icons.chevron_right_rounded, size: 18),
-        label: const Text('Modifier', style: TextStyle(fontSize: 12)),
-      ),
-    ],
-  );
-}
-
-class _ReviewSummary extends StatelessWidget {
-  final CheckoutPreview? preview;
-  final int itemCount;
-  const _ReviewSummary({required this.preview, required this.itemCount});
-
-  @override
-  Widget build(BuildContext context) {
-    final subtotal = preview?.subtotal ?? 0;
-    final delivery = preview?.deliveryFee ?? 0;
-    final total = preview?.total ?? subtotal + delivery;
-    final inferredDiscount = math.max(0.0, subtotal + delivery - total);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text('Récapitulatif', style: _CheckoutStyles.panelTitle),
-            ),
-            Text(
-              '$itemCount article${itemCount > 1 ? 's' : ''}',
-              style: const TextStyle(color: OvanieColors.navy, fontSize: 12),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _SummaryRow(label: 'Total produits', value: formatFcfa(subtotal)),
-        const SizedBox(height: 9),
-        _SummaryRow(label: 'Livraison', value: formatFcfa(delivery)),
-        if (inferredDiscount > 0) ...[
-          const SizedBox(height: 9),
-          _SummaryRow(
-            label: 'Remise',
-            value: '-${formatFcfa(inferredDiscount)}',
-            accent: true,
-          ),
-        ],
-        const SizedBox(height: 9),
-        const Divider(height: 1),
-        const SizedBox(height: 11),
-        _SummaryRow(
-          label: 'Total à payer',
-          value: formatFcfa(total),
-          strong: true,
-        ),
-      ],
-    );
-  }
-}
-
-class _PaymentOrderSummary extends StatelessWidget {
-  final CheckoutPreview? preview;
-  final int itemCount;
-
-  const _PaymentOrderSummary({required this.preview, required this.itemCount});
-
-  @override
-  Widget build(BuildContext context) {
-    final subtotal = preview?.subtotal ?? CartStore.instance.subtotal;
-    final delivery = preview?.deliveryFee ?? 0;
-    final total = preview?.total ?? subtotal + delivery;
-    final discount = math.max(0.0, subtotal + delivery - total);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Récapitulatif de la commande',
-                style: _CheckoutStyles.panelTitle,
-              ),
-            ),
-            const Text(
-              'Voir détails',
-              style: TextStyle(
-                color: OvanieColors.orange,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(width: 2),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: OvanieColors.orange,
-              size: 18,
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        _SummaryRow(
-          label: 'Sous-total ($itemCount articles)',
-          value: formatFcfa(subtotal),
-        ),
-        const SizedBox(height: 10),
-        _SummaryRow(label: 'Livraison', value: formatFcfa(delivery)),
-        if (discount > 0) ...[
-          const SizedBox(height: 10),
-          _SummaryRow(
-            label: 'Remise',
-            value: '-${formatFcfa(discount)}',
-            accent: true,
-          ),
-        ],
-        const SizedBox(height: 11),
-        const Divider(height: 1),
-        const SizedBox(height: 12),
-        _SummaryRow(
-          label: 'Total à payer',
-          value: formatFcfa(total),
-          strong: true,
-        ),
-      ],
-    );
-  }
-}
-
-class _PaymentStageBottomBar extends StatelessWidget {
-  final bool loading;
-  final String label;
-  final VoidCallback? onPressed;
-
-  const _PaymentStageBottomBar({
-    required this.loading,
-    required this.label,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(18, 9, 18, 12),
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      border: Border(top: BorderSide(color: Color(0xFFE6E9EF))),
-      boxShadow: [
-        BoxShadow(
-          color: Color(0x10000000),
-          blurRadius: 14,
-          offset: Offset(0, -4),
-        ),
-      ],
-    ),
-    child: SizedBox(
-      height: 54,
-      child: FilledButton.icon(
-        onPressed: loading ? null : onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFFFF3A0B),
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: const Color(0xFFFFA68D),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-        ),
-        icon: loading
-            ? const SizedBox.square(
-                dimension: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.arrow_forward_rounded),
-        label: Text(
-          label,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-        ),
-      ),
-    ),
-  );
-}
-
-class _CheckoutBottomBar extends StatelessWidget {
-  final double amount;
-  final bool loading;
-  final String label;
-  final VoidCallback onPressed;
-  final bool secure;
-
-  const _CheckoutBottomBar({
-    required this.amount,
-    required this.loading,
-    required this.label,
-    required this.onPressed,
-    this.secure = false,
-  });
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(18, 11, 18, 12),
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      border: Border(top: BorderSide(color: Color(0xFFE6E9EF))),
-      boxShadow: [
-        BoxShadow(
-          color: Color(0x10000000),
-          blurRadius: 14,
-          offset: Offset(0, -4),
-        ),
-      ],
-    ),
-    child: Row(
-      children: [
-        SizedBox(
-          width: 145,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              formatFcfa(amount),
-              style: const TextStyle(
-                color: OvanieColors.orange,
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: SizedBox(
-            height: 52,
-            child: FilledButton.icon(
-              onPressed: loading ? null : onPressed,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFFF3A0B),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFFFFA68D),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
-                ),
-              ),
-              icon: loading
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.arrow_forward_rounded),
-              label: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
 }
 
 class _CheckoutError extends StatelessWidget {
@@ -3508,474 +2830,12 @@ class _CheckoutError extends StatelessWidget {
     ),
     child: Row(
       children: [
-        const Icon(
-          Icons.error_outline_rounded,
-          color: OvanieColors.orange,
-          size: 20,
-        ),
+        const Icon(Icons.error_outline_rounded, color: OvanieColors.orange, size: 20),
         const SizedBox(width: 9),
         Expanded(
-          child: Text(
-            message,
-            style: const TextStyle(color: Color(0xFF8B3122), fontSize: 12),
-          ),
+          child: Text(message, style: const TextStyle(color: Color(0xFF8B3122), fontSize: 12)),
         ),
       ],
-    ),
-  );
-}
-
-class _OnlineOperatorTile extends StatelessWidget {
-  final CheckoutPaymentOperatorOption operator;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  const _OnlineOperatorTile({
-    required this.operator,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    String? asset;
-    String subtitle = 'Paiement sécurisé';
-    switch (operator.code) {
-      case 'wave':
-        asset = 'assets/images/operators/wave.png';
-        subtitle = 'Payez avec votre compte Wave';
-        break;
-      case 'orange':
-        asset = 'assets/images/operators/orange.png';
-        subtitle = 'Payez avec Orange Money';
-        break;
-      case 'mtn':
-        asset = 'assets/images/operators/mtn.png';
-        subtitle = 'Payez avec MTN Mobile Money';
-        break;
-      case 'moov':
-        asset = 'assets/images/operators/moov.png';
-        subtitle = 'Payez avec Moov Money';
-        break;
-      case 'card':
-        subtitle = 'Visa, Mastercard et autres';
-        break;
-    }
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 58),
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-        decoration: BoxDecoration(
-          color: enabled ? Colors.white : const Color(0xFFF7F8FA),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: selected ? OvanieColors.orange : const Color(0xFFE0E5EC),
-          ),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 64,
-              height: 38,
-              child: asset == null
-                  ? const Icon(
-                      Icons.credit_card_rounded,
-                      color: Color(0xFF0B4AB8),
-                      size: 31,
-                    )
-                  : Image.asset(asset, fit: BoxFit.contain),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    operator.label,
-                    style: const TextStyle(
-                      color: OvanieColors.navy,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: Color(0xFF59657B),
-                      fontSize: 11.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (operator.code == 'card') ...[
-              const _VisaBadge(),
-              const SizedBox(width: 7),
-              const _MastercardBadge(),
-              const SizedBox(width: 10),
-            ],
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: selected ? OvanieColors.orange : const Color(0xFF9AA5B5),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _VisaBadge extends StatelessWidget {
-  const _VisaBadge();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(5),
-      border: Border.all(color: const Color(0xFFE1E5EC)),
-    ),
-    child: const Text(
-      'VISA',
-      style: TextStyle(
-        color: Color(0xFF1434CB),
-        fontSize: 12,
-        fontWeight: FontWeight.w900,
-        fontStyle: FontStyle.italic,
-      ),
-    ),
-  );
-}
-
-class _MastercardBadge extends StatelessWidget {
-  const _MastercardBadge();
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 31,
-    height: 22,
-    child: Stack(
-      alignment: Alignment.center,
-      children: [
-        Positioned(
-          left: 2,
-          child: Container(
-            width: 19,
-            height: 19,
-            decoration: const BoxDecoration(
-              color: Color(0xFFEB001B),
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-        Positioned(
-          right: 2,
-          child: Container(
-            width: 19,
-            height: 19,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF79E1B),
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _PaymentWaitingScreen extends StatefulWidget {
-  final int orderId;
-  final String orderNumber;
-  final double amount;
-  final String methodLabel;
-  final String paymentUrl;
-
-  const _PaymentWaitingScreen({
-    required this.orderId,
-    required this.orderNumber,
-    required this.amount,
-    required this.methodLabel,
-    required this.paymentUrl,
-  });
-
-  @override
-  State<_PaymentWaitingScreen> createState() => _PaymentWaitingScreenState();
-}
-
-class _PaymentWaitingScreenState extends State<_PaymentWaitingScreen>
-    with WidgetsBindingObserver {
-  Timer? _timer;
-  bool _checking = false;
-  bool _providerReturned = false;
-  bool _waiting = true;
-  int _attempts = 0;
-  int _attemptsAfterReturn = 0;
-  String _message =
-      'Terminez le paiement dans la page sécurisée, puis revenez dans OVANIE.';
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _startPolling();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _providerReturned = true;
-      _attemptsAfterReturn = 0;
-      if (mounted) {
-        setState(() {
-          _waiting = true;
-          _message = 'Vérification de la réponse du prestataire…';
-        });
-      }
-      _startPolling();
-      unawaited(_check());
-    }
-  }
-
-  void _startPolling() {
-    _timer?.cancel();
-    _timer = Timer.periodic(
-      const Duration(seconds: 3),
-      (_) => unawaited(_check()),
-    );
-    unawaited(_check());
-  }
-
-  void _stopAsPending() {
-    _timer?.cancel();
-    if (!mounted) return;
-    setState(() {
-      _waiting = false;
-      _message =
-          'Votre paiement n’est pas encore confirmé. Vous pouvez reprendre le paiement ou vérifier à nouveau.';
-    });
-  }
-
-  Future<void> _check() async {
-    if (_checking) return;
-    _checking = true;
-    try {
-      final order = await const OrdersRepository().fetchOrder(widget.orderId);
-      if (!mounted) return;
-
-      if (order.isPaymentConfirmed) {
-        _timer?.cancel();
-        await CartStore.instance.clearLocalMirrorOnly();
-        try {
-          await const CartApiRepository().refreshLocalCartFromServer();
-        } catch (_) {}
-        if (!mounted) return;
-        await Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(
-            builder: (_) => OrderConfirmationScreen(
-              orderId: order.id,
-              initialOrderNumber: order.orderNumber,
-              initialAmount: order.total,
-              initialPaymentMethod: widget.methodLabel,
-              returnState: 'completed',
-            ),
-          ),
-        );
-        return;
-      }
-
-      if (order.isPaymentFailed || order.isPaymentCancelled) {
-        _timer?.cancel();
-        await Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(
-            builder: (_) => OrderConfirmationScreen(
-              orderId: order.id,
-              initialOrderNumber: order.orderNumber,
-              initialAmount: order.total,
-              initialPaymentMethod: widget.methodLabel,
-              returnState: order.isPaymentCancelled ? 'cancelled' : 'failed',
-            ),
-          ),
-        );
-        return;
-      }
-
-      _attempts++;
-      if (_providerReturned) _attemptsAfterReturn++;
-
-      // Un retour manuel depuis Chrome sans paiement ne doit jamais produire
-      // une roue infinie. Après quelques vérifications le statut reste « en
-      // attente » et l'utilisateur peut relancer la page PayDunya.
-      if ((_providerReturned && _attemptsAfterReturn >= 5) || _attempts >= 20) {
-        _stopAsPending();
-      }
-    } catch (_) {
-      _attempts++;
-      if (_providerReturned) _attemptsAfterReturn++;
-      if (!mounted) return;
-      if ((_providerReturned && _attemptsAfterReturn >= 5) || _attempts >= 20) {
-        _timer?.cancel();
-        setState(() {
-          _waiting = false;
-          _message =
-              'La connexion est instable et le paiement n’a pas pu être confirmé. Votre commande reste protégée : vérifiez le statut ou reprenez le paiement.';
-        });
-      } else if (_attempts > 2) {
-        setState(() {
-          _message =
-              'Connexion instable. Nous continuons de vérifier votre paiement.';
-        });
-      }
-    } finally {
-      _checking = false;
-    }
-  }
-
-  Future<void> _resumePayment() async {
-    final url = widget.paymentUrl.trim();
-    if (url.isEmpty) return;
-    await InAppPaymentScreen.open(context, url);
-    if (!mounted) return;
-    _providerReturned = false;
-    _attempts = 0;
-    _attemptsAfterReturn = 0;
-    setState(() {
-      _waiting = true;
-      _message =
-          'Terminez le paiement dans la page sécurisée, puis revenez dans OVANIE.';
-    });
-    _startPolling();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.white,
-    body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-        children: [
-          _CheckoutPageHeader(
-            current: 2,
-            completedThrough: 1,
-            onBack: () => Navigator.of(context).maybePop(),
-          ),
-          const SizedBox(height: 40),
-          Center(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: _waiting
-                  ? const SizedBox(
-                      key: ValueKey('loading'),
-                      width: 58,
-                      height: 58,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 5,
-                        color: OvanieColors.orange,
-                      ),
-                    )
-                  : Container(
-                      key: const ValueKey('pending'),
-                      width: 64,
-                      height: 64,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFFF3EA),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.hourglass_bottom_rounded,
-                        color: OvanieColors.orange,
-                        size: 34,
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            _waiting ? 'Vérification du paiement' : 'Paiement non finalisé',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: OvanieColors.navy,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 9),
-          Text(
-            _message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFF59657B),
-              fontSize: 12.5,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 22),
-          _CheckoutPanel(
-            child: Column(
-              children: [
-                _SummaryRow(label: 'Commande', value: widget.orderNumber),
-                const SizedBox(height: 9),
-                _SummaryRow(label: 'Montant', value: formatFcfa(widget.amount)),
-                const SizedBox(height: 9),
-                _SummaryRow(label: 'Méthode', value: widget.methodLabel),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (!_waiting) ...[
-            SizedBox(
-              height: 50,
-              child: FilledButton.icon(
-                onPressed: _resumePayment,
-                style: FilledButton.styleFrom(
-                  backgroundColor: OvanieColors.orange,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                ),
-                icon: const Icon(Icons.open_in_browser_rounded),
-                label: const Text(
-                  'Reprendre le paiement',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-          SizedBox(
-            height: 50,
-            child: OutlinedButton.icon(
-              onPressed: _checking ? null : _check,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: OvanieColors.navy,
-                side: const BorderSide(color: OvanieColors.navy),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
-                ),
-              ),
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text(
-                'Vérifier le statut maintenant',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-        ],
-      ),
     ),
   );
 }
@@ -4019,11 +2879,7 @@ class _AddressSheet extends StatefulWidget {
   final List<CheckoutSavedAddress> savedAddresses;
   final bool loadingSavedAddresses;
 
-  const _AddressSheet({
-    required this.initial,
-    required this.savedAddresses,
-    required this.loadingSavedAddresses,
-  });
+  const _AddressSheet({required this.initial, required this.savedAddresses, required this.loadingSavedAddresses});
 
   @override
   State<_AddressSheet> createState() => _AddressSheetState();
@@ -4038,6 +2894,15 @@ class _AddressSheetState extends State<_AddressSheet> {
   late final TextEditingController _name;
   late final TextEditingController _phone;
   late final TextEditingController _search;
+  late final TextEditingController _landmark;
+  late final TextEditingController _fullAddress;
+  late final TextEditingController _otherQuartier;
+
+  // « Ajouter une nouvelle adresse » : saisie manuelle commune / quartier.
+  bool _manualMode = false;
+  String _manualCommune = '';
+  String _manualQuartier = '';
+  String? _manualError;
 
   late String _zone;
   late String _commune;
@@ -4070,10 +2935,11 @@ class _AddressSheetState extends State<_AddressSheet> {
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.initial.name);
-    _phone = TextEditingController(
-      text: formatCiPhoneDisplay(widget.initial.phone),
-    );
-    _search = TextEditingController(text: widget.initial.address);
+    _phone = TextEditingController(text: formatCiPhoneDisplay(widget.initial.phone));
+    _search = TextEditingController(text: widget.initial.savedAddressId == null ? widget.initial.address : '');
+    _landmark = TextEditingController(text: widget.initial.notes);
+    _fullAddress = TextEditingController();
+    _otherQuartier = TextEditingController();
     _zone = widget.initial.zone;
     _commune = widget.initial.commune;
     _quartier = widget.initial.quartier;
@@ -4096,6 +2962,9 @@ class _AddressSheetState extends State<_AddressSheet> {
     _name.dispose();
     _phone.dispose();
     _search.dispose();
+    _landmark.dispose();
+    _fullAddress.dispose();
+    _otherQuartier.dispose();
     super.dispose();
   }
 
@@ -4150,18 +3019,10 @@ class _AddressSheetState extends State<_AddressSheet> {
     // Un nom de quartier/lieu + ville + pays est suffisant pour confirmer le
     // résultat de « Ma position ». Exemple :
     // « Feh Kessé, Abidjan, Côte d'Ivoire ».
-    final parts = clean
-        .split(',')
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .toList(growable: false);
+    final parts = clean.split(',').map((part) => part.trim()).where((part) => part.isNotEmpty).toList(growable: false);
     if (parts.length >= 3) {
       final first = parts.first.toLowerCase();
-      const genericFirstParts = <String>{
-        'abidjan',
-        "côte d'ivoire",
-        "cote d'ivoire",
-      };
+      const genericFirstParts = <String>{'abidjan', "côte d'ivoire", "cote d'ivoire"};
       return !genericFirstParts.contains(first);
     }
 
@@ -4171,9 +3032,7 @@ class _AddressSheetState extends State<_AddressSheet> {
   bool get _hasSelectedLocation {
     final address = _address.trim();
     final commune = _commune.trim();
-    final gpsSource =
-        _geoSource == 'mobile_live_gps' ||
-        _geoSource == 'mobile_location_assist';
+    final gpsSource = _geoSource == 'mobile_live_gps' || _geoSource == 'mobile_location_assist';
 
     final coordinatesOk =
         _latitude != null &&
@@ -4199,12 +3058,10 @@ class _AddressSheetState extends State<_AddressSheet> {
         return false;
       }
 
-      if (_geoSource == 'mobile_live_gps' &&
-          accuracy > DeviceLocation.maxAcceptedAccuracyMeters) {
+      if (_geoSource == 'mobile_live_gps' && accuracy > DeviceLocation.maxAcceptedAccuracyMeters) {
         return false;
       }
-      if (_geoSource == 'mobile_location_assist' &&
-          accuracy > _addressLookupMaxAccuracyMeters) {
+      if (_geoSource == 'mobile_location_assist' && accuracy > _addressLookupMaxAccuracyMeters) {
         return false;
       }
 
@@ -4212,9 +3069,7 @@ class _AddressSheetState extends State<_AddressSheet> {
     }
 
     final adminOk =
-        (_zone == 'abidjan' &&
-            commune.isNotEmpty &&
-            commune.toLowerCase() != 'abidjan') ||
+        (_zone == 'abidjan' && commune.isNotEmpty && commune.toLowerCase() != 'abidjan') ||
         (_zone == 'interieur' && _city.trim().isNotEmpty);
 
     if (!adminOk || !_looksLikeDetailedAddress(address)) {
@@ -4237,12 +3092,8 @@ class _AddressSheetState extends State<_AddressSheet> {
     if (selected == null) return;
     final safeSelected = selected;
 
-    final place =
-        '${safeSelected.commune} ${safeSelected.city} ${safeSelected.address}'
-            .toLowerCase();
-    final zone =
-        place.contains('abidjan') ||
-            (safeSelected.commune.isNotEmpty && safeSelected.city.isEmpty)
+    final place = '${safeSelected.commune} ${safeSelected.city} ${safeSelected.address}'.toLowerCase();
+    final zone = place.contains('abidjan') || (safeSelected.commune.isNotEmpty && safeSelected.city.isEmpty)
         ? 'abidjan'
         : 'interieur';
 
@@ -4254,12 +3105,10 @@ class _AddressSheetState extends State<_AddressSheet> {
       if (safeSelected.phone.isNotEmpty) _phone.text = safeSelected.phone;
       _zone = zone;
       _commune = safeSelected.commune;
-      _quartier = safeSelected.sousQuartier.isNotEmpty
-          ? safeSelected.sousQuartier
-          : safeSelected.quartier;
+      _quartier = safeSelected.sousQuartier.isNotEmpty ? safeSelected.sousQuartier : safeSelected.quartier;
       _city = safeSelected.city;
       _address = safeSelected.address;
-      _search.text = safeSelected.address;
+      _search.clear();
       _latitude = safeSelected.latitude;
       _longitude = safeSelected.longitude;
       _geoSource = 'address_book';
@@ -4366,10 +3215,7 @@ class _AddressSheetState extends State<_AddressSheet> {
     final firstPart = display.split(',').first.trim();
     final firstLower = firstPart.toLowerCase();
     final isAbidjan =
-        lower.contains('abidjan') ||
-        firstLower == 'bingerville' ||
-        firstLower == 'anyama' ||
-        firstLower == 'songon';
+        lower.contains('abidjan') || firstLower == 'bingerville' || firstLower == 'anyama' || firstLower == 'songon';
     return GeoResolvedPlace(
       displayName: display,
       zone: isAbidjan ? 'abidjan' : 'interieur',
@@ -4383,10 +3229,7 @@ class _AddressSheetState extends State<_AddressSheet> {
 
   String _sourceForLocationAccuracy(double? accuracy, {bool emulator = false}) {
     if (emulator) return 'mobile_live_gps';
-    if (accuracy != null &&
-        accuracy.isFinite &&
-        accuracy > 0 &&
-        accuracy <= DeviceLocation.maxAcceptedAccuracyMeters) {
+    if (accuracy != null && accuracy.isFinite && accuracy > 0 && accuracy <= DeviceLocation.maxAcceptedAccuracyMeters) {
       return 'mobile_live_gps';
     }
     return 'mobile_location_assist';
@@ -4422,10 +3265,7 @@ class _AddressSheetState extends State<_AddressSheet> {
       if (!mounted) return;
 
       final accuracy = position.accuracy;
-      final source = _sourceForLocationAccuracy(
-        accuracy,
-        emulator: position.isEmulator,
-      );
+      final source = _sourceForLocationAccuracy(accuracy, emulator: position.isEmulator);
 
       setState(() {
         _locationAccuracyMeters = accuracy;
@@ -4443,10 +3283,7 @@ class _AddressSheetState extends State<_AddressSheet> {
       // Une position <=500 m peut servir à retrouver une adresse lisible,
       // tandis que le flux Fused continue silencieusement à améliorer le point.
       if (position.isEmulator ||
-          (accuracy != null &&
-              accuracy.isFinite &&
-              accuracy > 0 &&
-              accuracy <= _addressLookupMaxAccuracyMeters)) {
+          (accuracy != null && accuracy.isFinite && accuracy > 0 && accuracy <= _addressLookupMaxAccuracyMeters)) {
         try {
           final place = await _geoRepository.reverse(
             latitude: position.latitude,
@@ -4479,22 +3316,29 @@ class _AddressSheetState extends State<_AddressSheet> {
       _startLiveTracking();
     } on DeviceLocationException catch (error) {
       if (!mounted) return;
+      final permission = isLocationPermissionProblem(error.message);
       setState(() {
-        _locationError = error.message;
+        _locationError = permission ? null : error.message;
         _geoStatus = '';
       });
+      if (permission) {
+        final retry = await showLocationPermissionDialog(context, error);
+        if (retry && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) unawaited(_useCurrentPosition());
+          });
+        }
+      }
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
-        _locationError =
-            'Nous n’avons pas pu détecter votre adresse. Saisissez-la manuellement.';
+        _locationError = 'Nous n’avons pas pu détecter votre adresse. Saisissez-la manuellement.';
         _geoStatus = '';
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _locationError =
-            'Nous n’avons pas pu détecter votre adresse. Saisissez-la manuellement.';
+        _locationError = 'Nous n’avons pas pu détecter votre adresse. Saisissez-la manuellement.';
         _geoStatus = '';
       });
     } finally {
@@ -4504,20 +3348,17 @@ class _AddressSheetState extends State<_AddressSheet> {
 
   void _startLiveTracking() {
     _livePositionSubscription?.cancel();
-    _livePositionSubscription =
-        DeviceLocation.positionStream(distanceFilterMeters: 0).listen(
-          (position) => unawaited(_applyLivePosition(position)),
-          onError: (Object error) {
-            if (!mounted ||
-                (_geoSource != 'mobile_live_gps' &&
-                    _geoSource != 'mobile_location_assist')) {
-              return;
-            }
-            setState(() {
-              _geoStatus = '';
-            });
-          },
-        );
+    _livePositionSubscription = DeviceLocation.positionStream(distanceFilterMeters: 0).listen(
+      (position) => unawaited(_applyLivePosition(position)),
+      onError: (Object error) {
+        if (!mounted || (_geoSource != 'mobile_live_gps' && _geoSource != 'mobile_location_assist')) {
+          return;
+        }
+        setState(() {
+          _geoStatus = '';
+        });
+      },
+    );
   }
 
   void _stopLiveTracking() {
@@ -4530,9 +3371,7 @@ class _AddressSheetState extends State<_AddressSheet> {
   }
 
   Future<void> _applyLivePosition(DevicePosition position) async {
-    if (!mounted ||
-        (_geoSource != 'mobile_live_gps' &&
-            _geoSource != 'mobile_location_assist')) {
+    if (!mounted || (_geoSource != 'mobile_live_gps' && _geoSource != 'mobile_location_assist')) {
       return;
     }
 
@@ -4547,21 +3386,13 @@ class _AddressSheetState extends State<_AddressSheet> {
     if (accuracy == null || !accuracy.isFinite || accuracy <= 0) return;
 
     final previousAccuracy = _locationAccuracyMeters;
-    final source = _sourceForLocationAccuracy(
-      accuracy,
-      emulator: position.isEmulator,
-    );
+    final source = _sourceForLocationAccuracy(accuracy, emulator: position.isEmulator);
 
     final previousLat = _latitude;
     final previousLng = _longitude;
     final moved = previousLat == null || previousLng == null
         ? double.infinity
-        : _distanceMeters(
-            previousLat,
-            previousLng,
-            position.latitude,
-            position.longitude,
-          );
+        : _distanceMeters(previousLat, previousLng, position.latitude, position.longitude);
 
     // V69 : ne plus figer le premier point uniquement parce qu'il annonçait une
     // accuracy légèrement meilleure. Un fix Fused plus récent peut corriger la
@@ -4576,8 +3407,7 @@ class _AddressSheetState extends State<_AddressSheet> {
       final clearlyBetter = accuracy + 3 < previousAccuracy;
       final comparableAccuracy = accuracy <= (previousAccuracy * 1.25 + 5);
       final meaningfulCorrection =
-          comparableAccuracy &&
-          moved >= math.max(12.0, math.min(40.0, previousAccuracy * 0.5));
+          comparableAccuracy && moved >= math.max(12.0, math.min(40.0, previousAccuracy * 0.5));
       if (!clearlyBetter && !meaningfulCorrection) {
         return;
       }
@@ -4600,18 +3430,11 @@ class _AddressSheetState extends State<_AddressSheet> {
     }
 
     final now = DateTime.now();
-    final sinceReverse = _lastReverseAt == null
-        ? const Duration(days: 1)
-        : now.difference(_lastReverseAt!);
+    final sinceReverse = _lastReverseAt == null ? const Duration(days: 1) : now.difference(_lastReverseAt!);
 
-    final improvedEnough =
-        previousAccuracy == null ||
-        !previousAccuracy.isFinite ||
-        accuracy + 5 < previousAccuracy;
+    final improvedEnough = previousAccuracy == null || !previousAccuracy.isFinite || accuracy + 5 < previousAccuracy;
 
-    if (!improvedEnough &&
-        moved < 10 &&
-        sinceReverse < const Duration(seconds: 6)) {
+    if (!improvedEnough && moved < 10 && sinceReverse < const Duration(seconds: 6)) {
       return;
     }
 
@@ -4628,17 +3451,11 @@ class _AddressSheetState extends State<_AddressSheet> {
       );
       if (!mounted ||
           requestId != _liveReverseRequestId ||
-          (_geoSource != 'mobile_live_gps' &&
-              _geoSource != 'mobile_location_assist')) {
+          (_geoSource != 'mobile_live_gps' && _geoSource != 'mobile_location_assist')) {
         return;
       }
 
-      _applyResolvedPlace(
-        place,
-        source: source,
-        exactLatitude: position.latitude,
-        exactLongitude: position.longitude,
-      );
+      _applyResolvedPlace(place, source: source, exactLatitude: position.latitude, exactLongitude: position.longitude);
       if (mounted) {
         setState(() {
           _geoStatus = '';
@@ -4662,10 +3479,7 @@ class _AddressSheetState extends State<_AddressSheet> {
     final dLng = radians(lng2 - lng1);
     final a =
         math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(radians(lat1)) *
-            math.cos(radians(lat2)) *
-            math.sin(dLng / 2) *
-            math.sin(dLng / 2);
+        math.cos(radians(lat1)) * math.cos(radians(lat2)) * math.sin(dLng / 2) * math.sin(dLng / 2);
     return 2 * earthRadius * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
@@ -4736,9 +3550,7 @@ class _AddressSheetState extends State<_AddressSheet> {
     final formOk = _formKey.currentState?.validate() ?? false;
     if (_geoSource == 'mobile_live_gps') {
       final accuracy = _locationAccuracyMeters;
-      if (accuracy != null &&
-          accuracy.isFinite &&
-          accuracy > DeviceLocation.maxAcceptedAccuracyMeters) {
+      if (accuracy != null && accuracy.isFinite && accuracy > DeviceLocation.maxAcceptedAccuracyMeters) {
         // Si Android n'a pas un fix fin mais qu'une adresse a bien été
         // identifiée, reclasser la source en aide de localisation plutôt que
         // bloquer le checkout sur une métrique GPS invisible pour le client.
@@ -4747,9 +3559,7 @@ class _AddressSheetState extends State<_AddressSheet> {
     }
     if (!_hasSelectedLocation) {
       final gpsAddressVisible =
-          (_geoSource == 'mobile_live_gps' ||
-              _geoSource == 'mobile_location_assist') &&
-          _address.trim().isNotEmpty;
+          (_geoSource == 'mobile_live_gps' || _geoSource == 'mobile_location_assist') && _address.trim().isNotEmpty;
       setState(() {
         _locationError = gpsAddressVisible
             ? 'Impossible de confirmer cette position. Relancez « Ma position ».'
@@ -4780,347 +3590,483 @@ class _AddressSheetState extends State<_AddressSheet> {
     );
   }
 
+  static const String _otherQuartierOption = 'Autre quartier / zone';
+
+  List<String> get _communeChoices {
+    final loaded = OvanieReferenceDataStore.instance.communeNames;
+    return loaded.isNotEmpty ? loaded : kAbidjanQuartiersByCommune.keys.toList(growable: false);
+  }
+
+  Map<String, List<String>> get _quarterChoices {
+    final loaded = OvanieReferenceDataStore.instance.quartersByCommuneName;
+    return loaded.isNotEmpty ? loaded : kAbidjanQuartiersByCommune;
+  }
+
+  bool get _gpsLocation => _geoSource == 'mobile_live_gps' || _geoSource == 'mobile_location_assist';
+
+  void _chooseManualMode() {
+    _stopLiveTracking();
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _manualMode = true;
+      _manualError = null;
+      _locationError = null;
+    });
+  }
+
+  Future<void> _pickCommune() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final communes = _communeChoices;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _LocationPickerSheet(
+        title: 'Commune',
+        items: communes,
+        selected: _manualCommune.isEmpty ? null : _manualCommune,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      if (selected != _manualCommune) _manualQuartier = '';
+      _manualCommune = selected;
+      _manualError = null;
+    });
+  }
+
+  Future<void> _pickQuartier() async {
+    if (_manualCommune.isEmpty) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    final quarters = [...(_quarterChoices[_manualCommune] ?? const <String>[]), _otherQuartierOption];
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _LocationPickerSheet(
+        title: 'Quartier',
+        items: quarters,
+        selected: _manualQuartier.isEmpty ? null : _manualQuartier,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _manualQuartier = selected;
+      _manualError = null;
+    });
+  }
+
+  void _submitManual() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final name = _name.text.trim();
+    final phone = _phone.text.trim();
+    final commune = _manualCommune.trim();
+    final quartier = _manualQuartier == _otherQuartierOption ? _otherQuartier.text.trim() : _manualQuartier.trim();
+    final address = _fullAddress.text.trim();
+    if (name.isEmpty || phone.isEmpty || commune.isEmpty || quartier.isEmpty || address.isEmpty) {
+      setState(() {
+        _manualError = 'Renseignez le destinataire, le téléphone, la commune, le quartier et l’adresse complète.';
+      });
+      return;
+    }
+    final inAbidjan = _communeChoices.any((item) => item.toLowerCase() == commune.toLowerCase());
+    _stopLiveTracking();
+    Navigator.of(context).pop(
+      _AddressFormResult(
+        name: name,
+        phone: phone,
+        zone: inAbidjan ? 'abidjan' : 'interieur',
+        commune: commune,
+        quartier: quartier,
+        city: inAbidjan ? 'Abidjan' : commune,
+        address: address,
+        notes: _landmark.text.trim(),
+        geoSource: 'mobile_manual',
+      ),
+    );
+  }
+
+  Widget _label(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      text,
+      style: const TextStyle(color: _ckNavy, fontSize: 14.5, fontWeight: FontWeight.w500),
+    ),
+  );
+
+  Widget _manualForm() {
+    final otherQuartier = _manualQuartier == _otherQuartierOption;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+      decoration: BoxDecoration(color: const Color(0xFFF4F6FA), borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Ajouter une nouvelle adresse',
+            style: TextStyle(color: _ckNavy, fontSize: 19, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Rechercher, utiliser ma position ou saisir l’adresse',
+            style: TextStyle(color: _ckMuted, fontSize: 13.5),
+          ),
+          const SizedBox(height: 16),
+          _label('Nom du destinataire'),
+          TextField(
+            controller: _name,
+            textInputAction: TextInputAction.next,
+            style: const TextStyle(color: _ckNavy, fontSize: 15),
+            decoration: _ckInputDecoration(),
+          ),
+          const SizedBox(height: 14),
+          _label('Téléphone'),
+          TextField(
+            controller: _phone,
+            keyboardType: TextInputType.phone,
+            inputFormatters: const [CiPhoneInputFormatter(withCountryCode: true)],
+            style: const TextStyle(color: _ckNavy, fontSize: 15),
+            decoration: _ckInputDecoration(),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _label('Commune'),
+                    _PickerField(value: _manualCommune, hint: 'Choisir', enabled: true, onTap: _pickCommune),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _label('Quartier'),
+                    _PickerField(
+                      value: _manualQuartier,
+                      hint: _manualCommune.isEmpty ? 'Commune d’abord' : 'Choisir',
+                      enabled: _manualCommune.isNotEmpty,
+                      onTap: _pickQuartier,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (otherQuartier) ...[
+            const SizedBox(height: 14),
+            _label('Quartier / zone'),
+            TextField(
+              controller: _otherQuartier,
+              style: const TextStyle(color: _ckNavy, fontSize: 15),
+              decoration: _ckInputDecoration(hint: 'Saisir le quartier ou la zone'),
+            ),
+          ],
+          const SizedBox(height: 14),
+          _label('Repère / point de repère'),
+          TextField(
+            controller: _landmark,
+            style: const TextStyle(color: _ckNavy, fontSize: 15),
+            decoration: _ckInputDecoration(hint: 'Ex. Immeuble Orange Money, près du carrefour'),
+          ),
+          const SizedBox(height: 14),
+          _label('Adresse complète'),
+          TextField(
+            controller: _fullAddress,
+            style: const TextStyle(color: _ckNavy, fontSize: 15),
+            decoration: _ckInputDecoration(hint: 'Rue, quartier, commune, ville'),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Les frais de livraison seront calculés après confirmation de l’adresse.',
+            style: TextStyle(color: _ckMuted, fontSize: 13),
+          ),
+          if (_manualError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _manualError!,
+              style: const TextStyle(color: _ckRed, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _placeAndContact() {
+    final showPlaceCard = _hasSelectedLocation && _savedAddressId == null;
+    return [
+      const _SheetHeading(
+        title: 'Lieu de livraison',
+        subtitle: 'Recherchez un quartier, une rue, une résidence ou un lieu connu.',
+      ),
+      const SizedBox(height: 12),
+      if (!showPlaceCard) _label('Adresse ou lieu'),
+      TextField(
+        controller: _search,
+        onChanged: _onSearchChanged,
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(color: _ckNavy, fontSize: 15),
+        decoration: _ckInputDecoration(hint: 'Ex. Riviera 3, Angré, Zone 4, Bouaké...'),
+      ),
+      if (_searching || _geoStatus.trim().isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            if (_searching) ...[
+              const SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 1.8)),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                _searching ? 'Recherche de l’adresse…' : _geoStatus,
+                style: const TextStyle(color: _ckMuted, fontSize: 12.5),
+              ),
+            ),
+          ],
+        ),
+      ],
+      if (_searchResults.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _ckBorder),
+          ),
+          child: Column(
+            children: [
+              for (var index = 0; index < _searchResults.length; index++) ...[
+                _AddressResultTile(
+                  result: _searchResults[index],
+                  onTap: () => _selectSearchResult(_searchResults[index]),
+                ),
+                if (index != _searchResults.length - 1) const Divider(height: 1),
+              ],
+            ],
+          ),
+        ),
+      ],
+      const SizedBox(height: 14),
+      if (showPlaceCard)
+        _DetectedPlaceCard(
+          title: _gpsLocation ? 'Adresse détectée' : 'Adresse sélectionnée',
+          place: _commune.trim().isNotEmpty
+              ? _commune.trim()
+              : (_quartier.trim().isNotEmpty ? _quartier.trim() : _city),
+          detail: _gpsLocation ? _formatAccuracy(_locationAccuracyMeters) : _address,
+          onEdit: _editSelectedLocation,
+        )
+      else
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: OutlinedButton(
+            onPressed: _locating ? null : _useCurrentPosition,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _ckBlue,
+              side: const BorderSide(color: _ckBlue, width: 1.4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _locating
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.2, color: _ckBlue),
+                  )
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.my_location_rounded, size: 26),
+                      SizedBox(width: 12),
+                      Text('Ma position', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+          ),
+        ),
+      if (_locationError != null) ...[
+        const SizedBox(height: 12),
+        _LocationWarningBox(message: _locationError!, onRetry: _useCurrentPosition),
+      ],
+      const SizedBox(height: 26),
+      const _SheetHeading(
+        title: 'Contact de livraison',
+        subtitle: 'Ces coordonnées servent au suivi et à la remise de la commande.',
+      ),
+      const SizedBox(height: 14),
+      _label('Nom complet'),
+      TextFormField(
+        controller: _name,
+        textInputAction: TextInputAction.next,
+        style: const TextStyle(color: _ckNavy, fontSize: 15),
+        decoration: _ckInputDecoration(),
+        validator: (value) => _required(value, 'Renseignez le nom complet.'),
+      ),
+      const SizedBox(height: 14),
+      _label('Numéro WhatsApp'),
+      TextFormField(
+        controller: _phone,
+        keyboardType: TextInputType.phone,
+        inputFormatters: const [CiPhoneInputFormatter(withCountryCode: true)],
+        style: const TextStyle(color: _ckNavy, fontSize: 15),
+        decoration: _ckInputDecoration(),
+        validator: (value) => _required(value, 'Renseignez le numéro WhatsApp.'),
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return FractionallySizedBox(
-      heightFactor: 0.94,
+      heightFactor: 0.9,
       child: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
         ),
         child: Column(
           children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 46,
+              height: 5,
+              decoration: BoxDecoration(color: const Color(0xFFD0D6DF), borderRadius: BorderRadius.circular(3)),
+            ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 12, 10),
+              padding: const EdgeInsets.fromLTRB(20, 14, 10, 4),
               child: Row(
                 children: [
                   const Expanded(
                     child: Text(
                       'Adresse de livraison',
-                      style: TextStyle(
-                        color: OvanieColors.navy,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
+                      style: TextStyle(color: _ckNavy, fontSize: 25, fontWeight: FontWeight.w900),
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Fermer',
+                  TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
+                    child: const Text('Fermer', style: TextStyle(color: _ckBlue, fontSize: 16.5)),
                   ),
                 ],
               ),
             ),
-            const Divider(height: 1),
             Expanded(
               child: Form(
                 key: _formKey,
                 child: ListView(
-                  padding: EdgeInsets.fromLTRB(18, 16, 18, 18 + keyboard),
+                  padding: EdgeInsets.fromLTRB(20, 6, 20, 20),
                   children: [
                     if (widget.loadingSavedAddresses)
-                      const LinearProgressIndicator(minHeight: 2)
-                    else if (widget.savedAddresses.isNotEmpty) ...[
-                      _AddressSectionCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const _SheetSectionTitle(
-                              number: '✓',
-                              title: 'Mes adresses enregistrées',
-                              subtitle:
-                                  'Choisissez une adresse de votre carnet ou recherchez une nouvelle adresse.',
-                            ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<int>(
-                              value:
-                                  widget.savedAddresses.any(
-                                    (item) => item.id == _savedAddressId,
-                                  )
-                                  ? _savedAddressId
-                                  : null,
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                labelText: 'Adresse enregistrée',
-                              ),
-                              items: widget.savedAddresses
-                                  .map(
-                                    (item) => DropdownMenuItem<int>(
-                                      value: item.id,
-                                      child: Text(
-                                        '${item.label} — ${item.commune.isNotEmpty ? item.commune : item.city}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(growable: false),
-                              onChanged: (id) {
-                                if (id != null) _applySavedAddress(id);
-                              },
-                            ),
-                          ],
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: LinearProgressIndicator(minHeight: 2, color: OvanieColors.orange),
+                      ),
+                    const _SheetHeading(
+                      title: 'Mes adresses enregistrées',
+                      subtitle: 'Choisissez une adresse de votre carnet ou recherchez une nouvelle adresse.',
+                    ),
+                    const SizedBox(height: 12),
+                    for (final item in widget.savedAddresses)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _SavedAddressChoice(
+                          title:
+                              '${item.label.trim().isEmpty ? 'Adresse' : item.label.trim()} — '
+                              '${item.commune.isNotEmpty ? item.commune : item.city}',
+                          selected: !_manualMode && item.id == _savedAddressId,
+                          onTap: () {
+                            setState(() => _manualMode = false);
+                            _applySavedAddress(item.id);
+                          },
                         ),
                       ),
-                      const SizedBox(height: 14),
-                    ],
-                    _AddressSectionCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _SheetSectionTitle(
-                            number: '1',
-                            title: 'Lieu de livraison',
-                            subtitle:
-                                'Recherchez un quartier, une rue, une résidence ou un lieu connu.',
-                          ),
-                          const SizedBox(height: 14),
-                          const Text(
-                            'Adresse ou lieu',
-                            style: TextStyle(
-                              color: OvanieColors.text,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _search,
-                                  onChanged: _onSearchChanged,
-                                  textInputAction: TextInputAction.search,
-                                  decoration: const InputDecoration(
-                                    hintText:
-                                        'Ex. Riviera 3, Angré, Zone 4, Bouaké...',
-                                    prefixIcon: Icon(
-                                      Icons.location_on_outlined,
-                                      color: OvanieColors.orange,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                width: 112,
-                                height: 56,
-                                child: FilledButton(
-                                  onPressed: _locating
-                                      ? null
-                                      : _useCurrentPosition,
-                                  style: FilledButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                    ),
-                                    backgroundColor: OvanieColors.blue,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  child: _locating
-                                      ? const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
-                                      : const Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.my_location_rounded,
-                                              size: 16,
-                                            ),
-                                            SizedBox(width: 5),
-                                            Flexible(
-                                              child: Text(
-                                                'Ma position',
-                                                maxLines: 1,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w900,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (_searching || _geoStatus.trim().isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (_searching) ...[
-                                  const SizedBox(
-                                    width: 13,
-                                    height: 13,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 1.8,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 7),
-                                ],
-                                Expanded(
-                                  child: Text(
-                                    _searching
-                                        ? 'Recherche de l’adresse…'
-                                        : _geoStatus,
-                                    style: const TextStyle(
-                                      color: OvanieColors.muted,
-                                      fontSize: 11.5,
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (_locationError != null) ...[
-                            const SizedBox(height: 10),
-                            _InlineAddressError(message: _locationError!),
-                          ],
-                          if (_searchResults.isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: OvanieColors.border),
-                              ),
-                              child: Column(
-                                children: [
-                                  for (
-                                    var index = 0;
-                                    index < _searchResults.length;
-                                    index++
-                                  ) ...[
-                                    _AddressResultTile(
-                                      result: _searchResults[index],
-                                      onTap: () => _selectSearchResult(
-                                        _searchResults[index],
-                                      ),
-                                    ),
-                                    if (index != _searchResults.length - 1)
-                                      const Divider(height: 1),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
-                          if (_hasSelectedLocation) ...[
-                            const SizedBox(height: 12),
-                            _SelectedLocationCard(
-                              city: _zone == 'abidjan'
-                                  ? 'Abidjan'
-                                  : (_city.isEmpty ? _commune : _city),
-                              commune: _commune,
-                              quartier: _quartier,
-                              address: _address,
-                              onEdit: _editSelectedLocation,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    _AddressSectionCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _SheetSectionTitle(
-                            number: '2',
-                            title: 'Contact de livraison',
-                            subtitle:
-                                'Ces coordonnées servent au suivi et à la remise de la commande.',
-                          ),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _name,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Nom complet',
-                            ),
-                            validator: (value) =>
-                                _required(value, 'Renseignez le nom complet.'),
-                          ),
-                          const SizedBox(height: 11),
-                          TextFormField(
-                            controller: _phone,
-                            keyboardType: TextInputType.phone,
-                            inputFormatters: const [
-                              CiPhoneInputFormatter(withCountryCode: true),
-                            ],
-                            decoration: const InputDecoration(
-                              labelText: 'Numéro WhatsApp',
-                              hintText: '+225 07 01 00 00 00',
-                            ),
-                            validator: (value) => _required(
-                              value,
-                              'Renseignez le numéro WhatsApp.',
-                            ),
-                          ),
-                        ],
-                      ),
+                    _SavedAddressChoice(
+                      title: 'Ajouter une nouvelle adresse',
+                      selected: _manualMode,
+                      showSavedChip: false,
+                      onTap: _chooseManualMode,
                     ),
                     const SizedBox(height: 18),
+                    if (_manualMode) _manualForm() else ..._placeAndContact(),
                   ],
                 ),
               ),
             ),
-            Container(
-              padding: EdgeInsets.fromLTRB(
-                18,
-                12,
-                18,
-                12 + MediaQuery.paddingOf(context).bottom,
-              ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: OvanieColors.border)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        foregroundColor: OvanieColors.navy,
-                      ),
-                      child: const Text('Annuler'),
+            Padding(
+              padding: EdgeInsets.fromLTRB(20, 10, 20, 8 + (keyboard > 0 ? keyboard : bottomInset)),
+              child: _manualMode
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 56,
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _ckBlue,
+                                side: const BorderSide(color: Color(0xFFCBD3DF)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Annuler', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: SizedBox(
+                            height: 56,
+                            child: FilledButton(
+                              onPressed: _submitManual,
+                              style: FilledButton.styleFrom(
+                                elevation: 0,
+                                backgroundColor: OvanieColors.orange,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text(
+                                'Enregistrer',
+                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: FilledButton(
+                            onPressed: _submit,
+                            style: FilledButton.styleFrom(
+                              elevation: 0,
+                              backgroundColor: OvanieColors.orange,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text(
+                              'Confirmer cette adresse',
+                              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Annuler', style: TextStyle(color: _ckBlue, fontSize: 16.5)),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton(
-                      onPressed: _submit,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        backgroundColor: OvanieColors.orange,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text(
-                        'Confirmer cette adresse',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -5129,86 +4075,166 @@ class _AddressSheetState extends State<_AddressSheet> {
   }
 }
 
-class _AddressSectionCard extends StatelessWidget {
-  final Widget child;
-
-  const _AddressSectionCard({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFBFCFE),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: OvanieColors.border),
-      ),
-      child: child,
-    );
-  }
-}
-
-class _SheetSectionTitle extends StatelessWidget {
-  final String number;
+class _SheetHeading extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const _SheetSectionTitle({
-    required this.number,
+  const _SheetHeading({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: const TextStyle(color: _ckNavy, fontSize: 19, fontWeight: FontWeight.w800),
+      ),
+      const SizedBox(height: 3),
+      Text(subtitle, style: const TextStyle(color: _ckMuted, fontSize: 13.5, height: 1.35)),
+    ],
+  );
+}
+
+class _SavedAddressChoice extends StatelessWidget {
+  final String title;
+  final bool selected;
+  final bool showSavedChip;
+  final VoidCallback onTap;
+
+  const _SavedAddressChoice({
     required this.title,
-    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+    this.showSavedChip = true,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 30,
-          height: 30,
-          alignment: Alignment.center,
-          decoration: const BoxDecoration(
-            color: OvanieColors.navy,
-            shape: BoxShape.circle,
-          ),
-          child: Text(
-            number,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(12),
+    child: Container(
+      constraints: const BoxConstraints(minHeight: 66),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: _choiceDecoration(selected),
+      child: Row(
+        children: [
+          _RadioDot(selected: selected),
+          const SizedBox(width: 18),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(color: _ckNavy, fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                if (selected && showSavedChip) ...[
+                  const SizedBox(height: 6),
+                  const _GreyChip(label: 'Adresse enregistrée'),
+                ],
+              ],
             ),
           ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _DetectedPlaceCard extends StatelessWidget {
+  final String title;
+  final String place;
+  final String detail;
+  final VoidCallback onEdit;
+
+  const _DetectedPlaceCard({required this.title, required this.place, required this.detail, required this.onEdit});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+    decoration: BoxDecoration(
+      color: const Color(0xFFEDF8F0),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFBFE5CB)),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: const BoxDecoration(color: Color(0xFFD5F0DD), shape: BoxShape.circle),
+          child: const Icon(Icons.location_on_rounded, color: Color(0xFF15803D), size: 30),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                title,
-                style: const TextStyle(
-                  color: OvanieColors.navy,
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w900,
-                ),
+                place.trim().isEmpty ? title : '$title · ${place.trim()}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _ckNavy, fontSize: 16, fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  color: OvanieColors.muted,
-                  fontSize: 12,
-                  height: 1.35,
+              if (detail.trim().isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Text(
+                  detail.trim(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _ckMuted, fontSize: 13.5),
                 ),
-              ),
+              ],
             ],
           ),
         ),
+        TextButton(
+          onPressed: onEdit,
+          child: const Text('Modifier', style: TextStyle(color: _ckBlue, fontSize: 15.5)),
+        ),
       ],
-    );
-  }
+    ),
+  );
+}
+
+class _PickerField extends StatelessWidget {
+  final String value;
+  final String hint;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _PickerField({required this.value, required this.hint, required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: enabled ? onTap : null,
+    borderRadius: BorderRadius.circular(10),
+    child: Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: enabled ? Colors.white : const Color(0xFFE9EDF3),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: enabled ? const Color(0xFFD5DCE6) : const Color(0xFFE1E6EE)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              value.isEmpty ? hint : value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: value.isEmpty ? (enabled ? _ckNavy : const Color(0xFF8A93A8)) : _ckNavy,
+                fontSize: 15,
+              ),
+            ),
+          ),
+          if (enabled) const Icon(Icons.keyboard_arrow_down_rounded, color: _ckNavy, size: 24),
+        ],
+      ),
+    ),
+  );
 }
 
 class _AddressResultTile extends StatelessWidget {
@@ -5226,11 +4252,7 @@ class _AddressResultTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
-              Icons.location_on_outlined,
-              size: 18,
-              color: OvanieColors.orange,
-            ),
+            const Icon(Icons.location_on_outlined, size: 18, color: OvanieColors.orange),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -5244,173 +4266,6 @@ class _AddressResultTile extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SelectedLocationCard extends StatelessWidget {
-  final String city;
-  final String commune;
-  final String quartier;
-  final String address;
-  final VoidCallback onEdit;
-
-  const _SelectedLocationCard({
-    required this.city,
-    required this.commune,
-    required this.quartier,
-    required this.address,
-    required this.onEdit,
-  });
-
-  String _shortLabel() {
-    String clean(String value) => value.trim();
-
-    final q = cleanOvanieText(clean(quartier));
-    if (q.isNotEmpty) return q;
-
-    final full = cleanOvanieText(clean(address));
-    if (full.isNotEmpty) {
-      final first = full.split(',').first.trim();
-      if (first.isNotEmpty &&
-          first.toLowerCase() != clean(city).toLowerCase() &&
-          first.toLowerCase() != clean(commune).toLowerCase()) {
-        return first;
-      }
-    }
-
-    final c = cleanOvanieText(clean(commune));
-    if (c.isNotEmpty && c.toLowerCase() != 'abidjan') return c;
-
-    final v = cleanOvanieText(clean(city));
-    return v.isNotEmpty ? v : 'Position actuelle';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cleanAddress = cleanOvanieText(address);
-    final label = _shortLabel();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F8FF),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFB9D9FF)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: OvanieColors.navy,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.check_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Adresse détectée · $label',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: OvanieColors.text,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                if (cleanAddress.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    cleanAddress,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: OvanieColors.muted,
-                      fontSize: 12,
-                      height: 1.3,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          TextButton(onPressed: onEdit, child: const Text('Modifier')),
-        ],
-      ),
-    );
-  }
-}
-
-class _LocationInfoLine extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _LocationInfoLine({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: RichText(
-        text: TextSpan(
-          style: const TextStyle(
-            color: OvanieColors.muted,
-            fontSize: 11.5,
-            height: 1.35,
-          ),
-          children: [
-            TextSpan(
-              text: '$label : ',
-              style: const TextStyle(
-                color: OvanieColors.text,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            TextSpan(text: value),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InlineAddressError extends StatelessWidget {
-  final String message;
-
-  const _InlineAddressError({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF1F2),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFECACA)),
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(
-          color: Color(0xFFB42318),
-          fontSize: 12,
-          height: 1.35,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -5434,12 +4289,7 @@ class _ErrorBox extends StatelessWidget {
       child: Text(
         message,
         textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Color(0xFFB42318),
-          fontSize: 11.5,
-          height: 1.35,
-          fontWeight: FontWeight.w700,
-        ),
+        style: const TextStyle(color: Color(0xFFB42318), fontSize: 11.5, height: 1.35, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -5450,19 +4300,13 @@ class _MobileOnlinePaymentScreen extends StatefulWidget {
   final String initialPhone;
   final List<CheckoutPaymentOperatorOption> operators;
 
-  const _MobileOnlinePaymentScreen({
-    required this.order,
-    required this.initialPhone,
-    this.operators = const [],
-  });
+  const _MobileOnlinePaymentScreen({required this.order, required this.initialPhone, this.operators = const []});
 
   @override
-  State<_MobileOnlinePaymentScreen> createState() =>
-      _MobileOnlinePaymentScreenState();
+  State<_MobileOnlinePaymentScreen> createState() => _MobileOnlinePaymentScreenState();
 }
 
-class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
-    with WidgetsBindingObserver {
+class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen> with WidgetsBindingObserver {
   final _repository = const CheckoutRepository();
   late final TextEditingController _phone;
   late final TextEditingController _orangeOtp;
@@ -5475,60 +4319,32 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
   bool _paymentCompleted = false;
   int _paymentPollCount = 0;
 
-  static const _operatorVisuals =
-      <String, ({String asset, String placeholder})>{
-        'wave': (
-          asset: 'assets/images/operators/wave.png',
-          placeholder: '07 00 00 00 00',
-        ),
-        'orange': (
-          asset: 'assets/images/operators/orange.png',
-          placeholder: '07 00 00 00 00',
-        ),
-        'mtn': (
-          asset: 'assets/images/operators/mtn.png',
-          placeholder: '05 00 00 00 00',
-        ),
-        'moov': (
-          asset: 'assets/images/operators/moov.png',
-          placeholder: '01 00 00 00 00',
-        ),
-      };
+  static const _operatorVisuals = <String, ({String asset, String placeholder})>{
+    'wave': (asset: 'assets/images/operators/wave.png', placeholder: '07 00 00 00 00'),
+    'orange': (asset: 'assets/images/operators/orange.png', placeholder: '07 00 00 00 00'),
+    'mtn': (asset: 'assets/images/operators/mtn.png', placeholder: '05 00 00 00 00'),
+    'moov': (asset: 'assets/images/operators/moov.png', placeholder: '01 00 00 00 00'),
+  };
 
-  List<({String code, String label, String asset, String placeholder})>
-  get _mobileOperators {
+  List<({String code, String label, String asset, String placeholder})> get _mobileOperators {
     final source = widget.operators
-        .where(
-          (item) =>
-              item.code != 'card' && _operatorVisuals.containsKey(item.code),
-        )
+        .where((item) => item.code != 'card' && _operatorVisuals.containsKey(item.code))
         .map((item) {
           final visual = _operatorVisuals[item.code]!;
-          return (
-            code: item.code,
-            label: item.label,
-            asset: visual.asset,
-            placeholder: visual.placeholder,
-          );
+          return (code: item.code, label: item.label, asset: visual.asset, placeholder: visual.placeholder);
         })
         .toList(growable: false);
 
     return source;
   }
 
-  bool get _cardEnabled =>
-      widget.operators.any((item) => item.code == 'card');
+  bool get _cardEnabled => widget.operators.any((item) => item.code == 'card');
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _phone = TextEditingController(
-      text: formatCiPhoneDisplay(
-        widget.initialPhone,
-        includeCountryCode: false,
-      ),
-    );
+    _phone = TextEditingController(text: formatCiPhoneDisplay(widget.initialPhone, includeCountryCode: false));
     _orangeOtp = TextEditingController();
     _operator = _mobileOperators.isNotEmpty ? _mobileOperators.first.code : '';
   }
@@ -5544,20 +4360,14 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed &&
-        _paymentOpened &&
-        !_paymentCompleted) {
+    if (state == AppLifecycleState.resumed && _paymentOpened && !_paymentCompleted) {
       unawaited(_checkPaymentStatus());
     }
   }
 
-  ({String code, String label, String asset, String placeholder})?
-  get _selected {
+  ({String code, String label, String asset, String placeholder})? get _selected {
     if (_mobileOperators.isEmpty) return null;
-    return _mobileOperators.firstWhere(
-      (item) => item.code == _operator,
-      orElse: () => _mobileOperators.first,
-    );
+    return _mobileOperators.firstWhere((item) => item.code == _operator, orElse: () => _mobileOperators.first);
   }
 
   Future<void> _pay({String? forceOperator}) async {
@@ -5565,16 +4375,13 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
     final operator = forceOperator ?? _operator;
     if (operator.isEmpty) {
       setState(() {
-        _error =
-            'Les opérateurs Mobile Money OVANIE sont indisponibles. Actualisez puis réessayez.';
+        _error = 'Les opérateurs Mobile Money OVANIE sont indisponibles. Actualisez puis réessayez.';
       });
       return;
     }
     final isCard = operator == 'card';
     final localPhone = ciLocalPhoneDigits(_phone.text);
-    final phone = localPhone.length == 10
-        ? '+225$localPhone'
-        : _phone.text.trim();
+    final phone = localPhone.length == 10 ? '+225$localPhone' : _phone.text.trim();
 
     if (!isCard && localPhone.length != 10) {
       setState(() => _error = 'Renseignez le numéro Mobile Money à débiter.');
@@ -5627,9 +4434,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
     if (_checkingPayment || _paymentCompleted) return;
     _checkingPayment = true;
     try {
-      final order = await const OrdersRepository().fetchOrder(
-        widget.order.orderId,
-      );
+      final order = await const OrdersRepository().fetchOrder(widget.order.orderId);
       if (!order.isPaymentConfirmed) return;
 
       _paymentCompleted = true;
@@ -5684,10 +4489,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
           children: [
             Icon(Icons.lock_outline_rounded, size: 20),
             SizedBox(width: 8),
-            Text(
-              'Paiement sécurisé',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
+            Text('Paiement sécurisé', style: TextStyle(fontWeight: FontWeight.w900)),
           ],
         ),
       ),
@@ -5701,13 +4503,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: OvanieColors.border),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x0D071B48),
-                    blurRadius: 20,
-                    offset: Offset(0, 8),
-                  ),
-                ],
+                boxShadow: const [BoxShadow(color: Color(0x0D071B48), blurRadius: 20, offset: Offset(0, 8))],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -5715,28 +4511,17 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                   const Text(
                     'Paiement Mobile Money',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: OvanieColors.navy,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: TextStyle(color: OvanieColors.navy, fontSize: 24, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 7),
                   const Text(
                     'Choisissez votre opérateur et saisissez le numéro à débiter.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: OvanieColors.muted,
-                      fontSize: 12.5,
-                      height: 1.4,
-                    ),
+                    style: TextStyle(color: OvanieColors.muted, fontSize: 12.5, height: 1.4),
                   ),
                   const SizedBox(height: 20),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 14,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8FAFD),
                       borderRadius: BorderRadius.circular(14),
@@ -5773,11 +4558,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                           children: [
                             const Text(
                               'Montant',
-                              style: TextStyle(
-                                color: OvanieColors.muted,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: TextStyle(color: OvanieColors.muted, fontSize: 11.5, fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 3),
                             Text(
@@ -5796,41 +4577,24 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                   const SizedBox(height: 20),
                   const Text(
                     'Opérateur',
-                    style: TextStyle(
-                      color: OvanieColors.text,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: TextStyle(color: OvanieColors.text, fontSize: 12.5, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 7),
                   DropdownButtonFormField<String>(
                     value: _operator.isEmpty ? null : _operator,
                     isExpanded: true,
                     decoration: const InputDecoration(
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 14,
-                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                     ),
                     selectedItemBuilder: (context) => _mobileOperators
                         .map(
                           (item) => Row(
                             children: [
-                              SizedBox(
-                                width: 34,
-                                height: 28,
-                                child: Image.asset(
-                                  item.asset,
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
+                              SizedBox(width: 34, height: 28, child: Image.asset(item.asset, fit: BoxFit.contain)),
                               const SizedBox(width: 10),
                               Text(
                                 item.label,
-                                style: const TextStyle(
-                                  color: OvanieColors.text,
-                                  fontWeight: FontWeight.w900,
-                                ),
+                                style: const TextStyle(color: OvanieColors.text, fontWeight: FontWeight.w900),
                               ),
                             ],
                           ),
@@ -5842,14 +4606,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                             value: item.code,
                             child: Row(
                               children: [
-                                SizedBox(
-                                  width: 34,
-                                  height: 28,
-                                  child: Image.asset(
-                                    item.asset,
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
+                                SizedBox(width: 34, height: 28, child: Image.asset(item.asset, fit: BoxFit.contain)),
                                 const SizedBox(width: 10),
                                 Text(item.label),
                               ],
@@ -5867,11 +4624,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                   const SizedBox(height: 16),
                   const Text(
                     'Numéro Mobile Money',
-                    style: TextStyle(
-                      color: OvanieColors.text,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: TextStyle(color: OvanieColors.text, fontSize: 12.5, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 7),
                   TextField(
@@ -5896,46 +4649,28 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                       ),
                     ),
                   ],
-                  if (_error != null) ...[
-                    const SizedBox(height: 14),
-                    _ErrorBox(message: _error!),
-                  ],
+                  if (_error != null) ...[const SizedBox(height: 14), _ErrorBox(message: _error!)],
                   const SizedBox(height: 18),
                   SizedBox(
                     height: 54,
                     child: FilledButton(
-                      onPressed: _submitting || _operator.isEmpty
-                          ? null
-                          : () => _pay(),
+                      onPressed: _submitting || _operator.isEmpty ? null : () => _pay(),
                       style: FilledButton.styleFrom(
                         backgroundColor: OvanieColors.orange,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(13),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
                       ),
                       child: _submitting
                           ? const SizedBox(
                               width: 22,
                               height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.3,
-                                color: Colors.white,
-                              ),
+                              child: CircularProgressIndicator(strokeWidth: 2.3, color: Colors.white),
                             )
                           : Row(
                               children: [
-                                const Text(
-                                  'Payer maintenant',
-                                  style: TextStyle(fontWeight: FontWeight.w900),
-                                ),
+                                const Text('Payer maintenant', style: TextStyle(fontWeight: FontWeight.w900)),
                                 const Spacer(),
-                                Text(
-                                  formatFcfa(amount),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
+                                Text(formatFcfa(amount), style: const TextStyle(fontWeight: FontWeight.w900)),
                               ],
                             ),
                     ),
@@ -5944,20 +4679,13 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                   const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.verified_user_outlined,
-                        size: 17,
-                        color: Color(0xFF159455),
-                      ),
+                      Icon(Icons.verified_user_outlined, size: 17, color: Color(0xFF159455)),
                       SizedBox(width: 7),
                       Flexible(
                         child: Text(
                           'Transaction sécurisée. Ne communiquez jamais votre code secret.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: OvanieColors.muted,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: OvanieColors.muted, fontSize: 12),
                         ),
                       ),
                     ],
@@ -5968,11 +4696,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                   const Text(
                     'Moyens acceptés',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: OvanieColors.muted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(color: OvanieColors.muted, fontSize: 11, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -5981,14 +4705,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                         .map(
                           (item) => Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 7),
-                            child: SizedBox(
-                              width: 38,
-                              height: 28,
-                              child: Image.asset(
-                                item.asset,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
+                            child: SizedBox(width: 38, height: 28, child: Image.asset(item.asset, fit: BoxFit.contain)),
                           ),
                         )
                         .toList(growable: false),
@@ -5996,9 +4713,7 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
                   if (_cardEnabled) ...[
                     const SizedBox(height: 16),
                     OutlinedButton.icon(
-                      onPressed: _submitting
-                          ? null
-                          : () => _pay(forceOperator: 'card'),
+                      onPressed: _submitting ? null : () => _pay(forceOperator: 'card'),
                       icon: const Icon(Icons.credit_card_rounded),
                       label: const Text('Payer par carte bancaire'),
                     ),
@@ -6007,156 +4722,6 @@ class _MobileOnlinePaymentScreenState extends State<_MobileOnlinePaymentScreen>
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AddressChoiceTile extends StatelessWidget {
-  const _AddressChoiceTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFFFF4EC) : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? OvanieColors.orange : const Color(0xFFD5DDE8),
-            width: selected ? 1.6 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              selected
-                  ? Icons.radio_button_checked_rounded
-                  : Icons.radio_button_off_rounded,
-              color: selected ? OvanieColors.orange : const Color(0xFF94A3B8),
-              size: 21,
-            ),
-            const SizedBox(width: 10),
-            Icon(icon, color: OvanieColors.navy, size: 20),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: OvanieColors.navy,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  if (subtitle.trim().isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF64748B),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PaymentOptionTile extends StatelessWidget {
-  const _PaymentOptionTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1 : .5,
-      child: Material(
-        color: selected ? const Color(0xFFFFF4EC) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: selected ? OvanieColors.orange : const Color(0xFFDDE3EC),
-                width: selected ? 1.6 : 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(icon, color: selected ? OvanieColors.orange : OvanieColors.navy),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: OvanieColors.navy,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(color: Color(0xFF59657B), fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: selected ? OvanieColors.orange : const Color(0xFFA7B1C2),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );

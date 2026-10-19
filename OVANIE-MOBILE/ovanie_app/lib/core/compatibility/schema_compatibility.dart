@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../features/auth/presentation/auth_branding.dart';
 import '../config/app_config.dart';
 
 /// Contrat de données compris par CETTE version de l'APK.
@@ -117,55 +118,31 @@ class OvanieSchemaIncompatibleApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff0b2e5e)),
       ),
-      home: Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(28),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.system_update_alt_rounded, size: 64),
-                    const SizedBox(height: 22),
-                    const Text(
-                      'Mise à jour de l’application requise',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'Une nouvelle version de l’application est disponible. Mettez-la à jour pour continuer à utiliser OVANIE.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 22),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Application : ${OvanieSchemaContract.appLabel}'),
-                                                                            ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Vos données sont conservées. Installez la dernière version puis reconnectez-vous.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: const Color(0xffff6b00), fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-              ),
+      home: OvanieStatusPage(
+        art: 'update',
+        artAspect: 941 / 715,
+        title: 'Mise à jour de l’application requise',
+        message: 'Une nouvelle version de l’application est disponible. Mettez-la à jour pour continuer à utiliser OVANIE.',
+        extras: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF2F7),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE0E5EE)),
+            ),
+            child: const Text(
+              'Application : ${OvanieSchemaContract.appLabel}',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: authNavy, fontSize: 14.5, fontWeight: FontWeight.w500),
             ),
           ),
-        ),
+          const OvanieInfoStrip(
+            icon: Icons.verified_user_outlined,
+            divider: false,
+            text: 'Vos données sont conservées. Installez la dernière version puis reconnectez-vous.',
+          ),
+        ],
       ),
     );
   }

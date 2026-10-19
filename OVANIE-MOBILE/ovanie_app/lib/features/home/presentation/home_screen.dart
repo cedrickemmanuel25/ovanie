@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../catalog/presentation/catalog_screen.dart';
+
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/formatters.dart';
@@ -20,21 +22,13 @@ import 'flash_sale_screen.dart';
 import 'offer_collection_screen.dart';
 import 'new_arrivals_screen.dart';
 
-typedef HomeCatalogNavigation = void Function({
-  String? categorySlug,
-  String? categoryName,
-  String? offer,
-});
+typedef HomeCatalogNavigation = void Function({String? categorySlug, String? categoryName, String? offer});
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onOpenCart;
   final HomeCatalogNavigation? onOpenCatalog;
 
-  const HomeScreen({
-    super.key,
-    this.onOpenCart,
-    this.onOpenCatalog,
-  });
+  const HomeScreen({super.key, this.onOpenCart, this.onOpenCatalog});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -74,16 +68,8 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _openCatalog({
-    String? categorySlug,
-    String? categoryName,
-    String? offer,
-  }) {
-    widget.onOpenCatalog?.call(
-      categorySlug: categorySlug,
-      categoryName: categoryName,
-      offer: offer,
-    );
+  void _openCatalog({String? categorySlug, String? categoryName, String? offer}) {
+    widget.onOpenCatalog?.call(categorySlug: categorySlug, categoryName: categoryName, offer: offer);
   }
 
   @override
@@ -108,10 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     const SizedBox(height: 100),
-                    ApiErrorCard(
-                      message: ApiClient.friendlyError(snapshot.error!),
-                      onRetry: _reload,
-                    ),
+                    ApiErrorCard(message: ApiClient.friendlyError(snapshot.error!), onRetry: _reload),
                   ],
                 );
               }
@@ -140,9 +123,7 @@ class _HomeLoadingView extends StatelessWidget {
       slivers: [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(
-            child: CircularProgressIndicator(color: OvanieColors.orange),
-          ),
+          child: Center(child: CircularProgressIndicator(color: OvanieColors.orange)),
         ),
       ],
     );
@@ -154,11 +135,7 @@ class _OvanieHomeContent extends StatelessWidget {
   final HomeCatalogNavigation onOpenCatalog;
   final VoidCallback onFlashExpired;
 
-  const _OvanieHomeContent({
-    required this.data,
-    required this.onOpenCatalog,
-    required this.onFlashExpired,
-  });
+  const _OvanieHomeContent({required this.data, required this.onOpenCatalog, required this.onFlashExpired});
 
   HomeMarketplaceSection? _section(String mode) {
     for (final section in data.sections) {
@@ -176,29 +153,24 @@ class _OvanieHomeContent extends StatelessWidget {
     final selection = _section('selection');
 
     return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: BouncingScrollPhysics(),
-      ),
+      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
       slivers: [
         SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _SearchBar(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const SearchScreen(),
-                  ),
-                ),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SearchScreen())),
               ),
-              _HomeHero(onTap: () => onOpenCatalog()),
+              _HomeHero(
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute<void>(builder: (_) => const CatalogScreen(showBackButton: true))),
+              ),
               if (data.categories.isNotEmpty)
                 _PopularCategories(
                   items: data.categories.take(6).toList(growable: false),
-                  onTap: (category) => onOpenCatalog(
-                    categorySlug: category.slug,
-                    categoryName: category.name,
-                  ),
+                  onTap: (category) => onOpenCatalog(categorySlug: category.slug, categoryName: category.name),
                   onViewAll: () => onOpenCatalog(),
                 ),
               if (flash != null && flash.products.isNotEmpty)
@@ -209,33 +181,27 @@ class _OvanieHomeContent extends StatelessWidget {
                   flashEndsAtUtc: data.flashSaleEndsAtUtc,
                   serverClockOffset: data.serverClockOffset,
                   onFlashExpired: onFlashExpired,
-                  onViewAll: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => FlashSaleScreen(offer: flash.catalogOffer),
-                    ),
-                  ),
+                  onViewAll: () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute<void>(builder: (_) => FlashSaleScreen(offer: flash.catalogOffer))),
                 ),
               if (bestSellers != null && bestSellers.products.isNotEmpty)
                 _ProductSection(
                   title: 'Meilleures ventes',
                   type: _HomeProductCardType.bestSeller,
                   section: bestSellers,
-                  onViewAll: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => BestSellersScreen(offer: bestSellers.catalogOffer),
-                    ),
-                  ),
+                  onViewAll: () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute<void>(builder: (_) => BestSellersScreen(offer: bestSellers.catalogOffer))),
                 ),
               if (latest != null && latest.products.isNotEmpty)
                 _ProductSection(
                   title: 'Nouveautés',
                   type: _HomeProductCardType.newArrival,
                   section: latest,
-                  onViewAll: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => NewArrivalsScreen(offer: latest.catalogOffer),
-                    ),
-                  ),
+                  onViewAll: () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute<void>(builder: (_) => NewArrivalsScreen(offer: latest.catalogOffer))),
                 ),
               if (promotions != null && promotions.products.isNotEmpty)
                 _ProductSection(
@@ -269,11 +235,8 @@ class _OvanieHomeContent extends StatelessWidget {
               _BlackFridayBanner(
                 maxDiscountPercent: data.blackFridayMaxDiscountPercent,
                 productCount: data.blackFridayProductCount,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const BlackFridayScreen(),
-                  ),
-                ),
+                onTap: () =>
+                    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const BlackFridayScreen())),
               ),
               const SizedBox(height: 8),
             ],
@@ -283,7 +246,6 @@ class _OvanieHomeContent extends StatelessWidget {
     );
   }
 }
-
 
 class _SearchBar extends StatelessWidget {
   final VoidCallback onTap;
@@ -309,30 +271,18 @@ class _SearchBar extends StatelessWidget {
             ),
             child: const Row(
               children: [
-                Icon(
-                  Icons.search_rounded,
-                  size: 24,
-                  color: Color(0xFF566174),
-                ),
+                Icon(Icons.search_rounded, size: 24, color: Color(0xFF566174)),
                 SizedBox(width: 11),
                 Expanded(
                   child: Text(
                     'Rechercher un produit, une marque...',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      color: Color(0xFF7B8493),
-                      fontWeight: FontWeight.w400,
-                    ),
+                    style: TextStyle(fontSize: 14.5, color: Color(0xFF7B8493), fontWeight: FontWeight.w400),
                   ),
                 ),
                 SizedBox(width: 8),
-                Icon(
-                  Icons.center_focus_weak_rounded,
-                  size: 24,
-                  color: Color(0xFF152139),
-                ),
+                Icon(Icons.center_focus_weak_rounded, size: 24, color: Color(0xFF152139)),
               ],
             ),
           ),
@@ -341,7 +291,6 @@ class _SearchBar extends StatelessWidget {
     );
   }
 }
-
 
 class _HomeHero extends StatelessWidget {
   final VoidCallback onTap;
@@ -363,33 +312,19 @@ class _HomeHero extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.asset(
-                'assets/images/hero.png',
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-              ),
+              Image.asset('assets/images/hero.png', fit: BoxFit.cover, alignment: Alignment.center),
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                     stops: [0, .42, .72, 1],
-                    colors: [
-                      Color(0xEA071525),
-                      Color(0xB8071525),
-                      Color(0x3D071525),
-                      Color(0x00071525),
-                    ],
+                    colors: [Color(0xEA071525), Color(0xB8071525), Color(0x3D071525), Color(0x00071525)],
                   ),
                 ),
               ),
               Padding(
-                padding: EdgeInsets.fromLTRB(
-                  phone ? 16 : 18,
-                  phone ? 14 : 12,
-                  12,
-                  phone ? 9 : 7,
-                ),
+                padding: EdgeInsets.fromLTRB(phone ? 16 : 18, phone ? 14 : 12, 12, phone ? 9 : 7),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -408,32 +343,16 @@ class _HomeHero extends StatelessWidget {
                       'Qualité professionnelle, livraison fiable',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: phone ? 10 : 8,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: phone ? 10 : 8, fontWeight: FontWeight.w400),
                     ),
                     SizedBox(height: phone ? 8 : 7),
                     Row(
                       children: [
-                        _HeroProof(
-                          icon: Icons.verified_user_outlined,
-                          label: 'Produits vérifiés',
-                          phone: phone,
-                        ),
+                        _HeroProof(icon: Icons.verified_user_outlined, label: 'Produits vérifiés', phone: phone),
                         SizedBox(width: phone ? 10 : 8),
-                        _HeroProof(
-                          icon: Icons.credit_card_outlined,
-                          label: 'Paiement\nsécurisé',
-                          phone: phone,
-                        ),
+                        _HeroProof(icon: Icons.credit_card_outlined, label: 'Paiement\nsécurisé', phone: phone),
                         SizedBox(width: phone ? 10 : 8),
-                        _HeroProof(
-                          icon: Icons.local_shipping_outlined,
-                          label: 'Livraison\nOVANIE',
-                          phone: phone,
-                        ),
+                        _HeroProof(icon: Icons.local_shipping_outlined, label: 'Livraison\nOVANIE', phone: phone),
                       ],
                     ),
                     const Spacer(),
@@ -444,39 +363,26 @@ class _HomeHero extends StatelessWidget {
                         style: FilledButton.styleFrom(
                           backgroundColor: OvanieColors.orange,
                           foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: phone ? 14 : 10,
-                          ),
+                          padding: EdgeInsets.symmetric(horizontal: phone ? 14 : 10),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(phone ? 8 : 6),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(phone ? 8 : 6)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               'Explorer le catalogue',
-                              style: TextStyle(
-                                fontSize: phone ? 11.5 : 8.2,
-                                fontWeight: FontWeight.w800,
-                              ),
+                              style: TextStyle(fontSize: phone ? 11.5 : 8.2, fontWeight: FontWeight.w800),
                             ),
                             SizedBox(width: phone ? 8 : 6),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              size: phone ? 16 : 11,
-                            ),
+                            Icon(Icons.arrow_forward_rounded, size: phone ? 16 : 11),
                           ],
                         ),
                       ),
                     ),
                     SizedBox(height: phone ? 4 : 3),
-                    const Align(
-                      alignment: Alignment.center,
-                      child: _HeroDots(),
-                    ),
+                    const Align(alignment: Alignment.center, child: _HeroDots()),
                   ],
                 ),
               ),
@@ -488,17 +394,12 @@ class _HomeHero extends StatelessWidget {
   }
 }
 
-
 class _HeroProof extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool phone;
 
-  const _HeroProof({
-    required this.icon,
-    required this.label,
-    required this.phone,
-  });
+  const _HeroProof({required this.icon, required this.label, required this.phone});
 
   @override
   Widget build(BuildContext context) {
@@ -508,26 +409,14 @@ class _HeroProof extends StatelessWidget {
         Container(
           width: phone ? 20 : 15,
           height: phone ? 20 : 15,
-          decoration: const BoxDecoration(
-            color: Color(0x52FFFFFF),
-            shape: BoxShape.circle,
-          ),
+          decoration: const BoxDecoration(color: Color(0x52FFFFFF), shape: BoxShape.circle),
           alignment: Alignment.center,
-          child: Icon(
-            icon,
-            size: phone ? 13 : 9,
-            color: const Color(0xFFBBD8C7),
-          ),
+          child: Icon(icon, size: phone ? 13 : 9, color: const Color(0xFFBBD8C7)),
         ),
         SizedBox(width: phone ? 4 : 3),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: phone ? 7.6 : 5.7,
-            height: 1.02,
-            fontWeight: FontWeight.w500,
-          ),
+          style: TextStyle(color: Colors.white, fontSize: phone ? 7.6 : 5.7, height: 1.02, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -545,10 +434,7 @@ class _HeroDots extends StatelessWidget {
         Container(
           width: 10,
           height: 3.5,
-          decoration: BoxDecoration(
-            color: OvanieColors.orange,
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(color: OvanieColors.orange, borderRadius: BorderRadius.circular(8)),
         ),
         const SizedBox(width: 4),
         ...List.generate(
@@ -557,10 +443,7 @@ class _HeroDots extends StatelessWidget {
             width: 3.5,
             height: 3.5,
             margin: const EdgeInsets.only(right: 4),
-            decoration: const BoxDecoration(
-              color: Color(0xFFD6D9DE),
-              shape: BoxShape.circle,
-            ),
+            decoration: const BoxDecoration(color: Color(0xFFD6D9DE), shape: BoxShape.circle),
           ),
         ),
       ],
@@ -568,17 +451,12 @@ class _HeroDots extends StatelessWidget {
   }
 }
 
-
 class _PopularCategories extends StatelessWidget {
   final List<CategoryModel> items;
   final ValueChanged<CategoryModel> onTap;
   final VoidCallback onViewAll;
 
-  const _PopularCategories({
-    required this.items,
-    required this.onTap,
-    required this.onViewAll,
-  });
+  const _PopularCategories({required this.items, required this.onTap, required this.onViewAll});
 
   @override
   Widget build(BuildContext context) {
@@ -605,10 +483,7 @@ class _PopularCategories extends StatelessWidget {
                 final item = items[index];
                 return SizedBox(
                   width: width,
-                  child: _CategoryCard(
-                    category: item,
-                    onTap: () => onTap(item),
-                  ),
+                  child: _CategoryCard(category: item, onTap: () => onTap(item)),
                 );
               },
             ),
@@ -619,7 +494,6 @@ class _PopularCategories extends StatelessWidget {
   }
 }
 
-
 class _CategoryCard extends StatelessWidget {
   final CategoryModel category;
   final VoidCallback onTap;
@@ -628,9 +502,7 @@ class _CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = category.imageUrl.isNotEmpty
-        ? category.imageUrl
-        : category.icon;
+    final imageUrl = category.imageUrl.isNotEmpty ? category.imageUrl : category.icon;
 
     return Material(
       color: Colors.white,
@@ -647,11 +519,7 @@ class _CategoryCard extends StatelessWidget {
           child: Column(
             children: [
               Expanded(
-                child: _NetworkImage(
-                  url: imageUrl,
-                  fit: BoxFit.contain,
-                  fallbackIcon: Icons.category_outlined,
-                ),
+                child: _NetworkImage(url: imageUrl, fit: BoxFit.contain, fallbackIcon: Icons.category_outlined),
               ),
               const SizedBox(height: 5),
               Text(
@@ -673,7 +541,6 @@ class _CategoryCard extends StatelessWidget {
     );
   }
 }
-
 
 enum _HomeProductCardType { flash, bestSeller, newArrival }
 
@@ -716,11 +583,9 @@ class _ProductSection extends StatelessWidget {
 
           final width = phone
               ? (isFlash
-                  ? (constraints.maxWidth * .455).clamp(152.0, 178.0).toDouble()
-                  : (constraints.maxWidth * .35).clamp(118.0, 142.0).toDouble())
-              : (constraints.maxWidth -
-                      gap * ((isFlash ? 4 : 6) - 1)) /
-                  (isFlash ? 4 : 6);
+                    ? (constraints.maxWidth * .455).clamp(152.0, 178.0).toDouble()
+                    : (constraints.maxWidth * .35).clamp(118.0, 142.0).toDouble())
+              : (constraints.maxWidth - gap * ((isFlash ? 4 : 6) - 1)) / (isFlash ? 4 : 6);
 
           return SizedBox(
             height: phone ? (isFlash ? 218 : 178) : (isFlash ? 100 : 84),
@@ -731,10 +596,7 @@ class _ProductSection extends StatelessWidget {
               separatorBuilder: (_, __) => SizedBox(width: gap),
               itemBuilder: (context, index) => SizedBox(
                 width: width,
-                child: _HomeProductCard(
-                  product: section.products[index],
-                  type: type,
-                ),
+                child: _HomeProductCard(product: section.products[index], type: type),
               ),
             ),
           );
@@ -744,19 +606,13 @@ class _ProductSection extends StatelessWidget {
   }
 }
 
-
 class _HomeSectionFrame extends StatelessWidget {
   final String title;
   final Widget? titleTrailing;
   final VoidCallback onViewAll;
   final Widget content;
 
-  const _HomeSectionFrame({
-    required this.title,
-    this.titleTrailing,
-    required this.onViewAll,
-    required this.content,
-  });
+  const _HomeSectionFrame({required this.title, this.titleTrailing, required this.onViewAll, required this.content});
 
   @override
   Widget build(BuildContext context) {
@@ -765,80 +621,68 @@ class _HomeSectionFrame extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          phone ? 16 : 13,
-          phone ? 14 : 9,
-          phone ? 16 : 13,
-          0,
-        ),
+        padding: EdgeInsets.fromLTRB(phone ? 16 : 13, phone ? 14 : 9, phone ? 16 : 13, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          SizedBox(
-            width: double.infinity,
-            height: phone ? 30 : 20,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  right: phone ? 104 : 70,
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: const Color(0xFF101A33),
-                            fontSize: phone ? 17 : 11,
-                            height: 1,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                      if (titleTrailing != null) ...[
-                        SizedBox(width: phone ? 9 : 7),
-                        titleTrailing!,
-                      ],
-                    ],
-                  ),
-                ),
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: InkWell(
-                    onTap: onViewAll,
-                    borderRadius: BorderRadius.circular(8),
+            SizedBox(
+              width: double.infinity,
+              height: phone ? 30 : 20,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    right: phone ? 104 : 70,
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          'Voir toutes',
-                          style: TextStyle(
-                            color: OvanieColors.orange,
-                            fontSize: phone ? 11.5 : 7,
-                            fontWeight: FontWeight.w700,
+                        Flexible(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: const Color(0xFF101A33),
+                              fontSize: phone ? 17 : 11,
+                              height: 1,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 2),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          color: OvanieColors.orange,
-                          size: phone ? 17 : 10,
-                        ),
+                        if (titleTrailing != null) ...[SizedBox(width: phone ? 9 : 7), titleTrailing!],
                       ],
                     ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: InkWell(
+                      onTap: onViewAll,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Voir toutes',
+                            style: TextStyle(
+                              color: OvanieColors.orange,
+                              fontSize: phone ? 11.5 : 7,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(Icons.chevron_right_rounded, color: OvanieColors.orange, size: phone ? 17 : 10),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          SizedBox(height: phone ? 9 : 5),
+            SizedBox(height: phone ? 9 : 5),
             content,
           ],
         ),
@@ -852,16 +696,11 @@ class _FlashCountdownBadge extends StatefulWidget {
   final Duration serverClockOffset;
   final VoidCallback? onExpired;
 
-  const _FlashCountdownBadge({
-    required this.endsAtUtc,
-    required this.serverClockOffset,
-    this.onExpired,
-  });
+  const _FlashCountdownBadge({required this.endsAtUtc, required this.serverClockOffset, this.onExpired});
 
   @override
   State<_FlashCountdownBadge> createState() => _FlashCountdownBadgeState();
 }
-
 
 class _FlashCountdownBadgeState extends State<_FlashCountdownBadge> {
   Timer? _timer;
@@ -877,8 +716,7 @@ class _FlashCountdownBadgeState extends State<_FlashCountdownBadge> {
   @override
   void didUpdateWidget(covariant _FlashCountdownBadge oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.endsAtUtc != widget.endsAtUtc ||
-        oldWidget.serverClockOffset != widget.serverClockOffset) {
+    if (oldWidget.endsAtUtc != widget.endsAtUtc || oldWidget.serverClockOffset != widget.serverClockOffset) {
       _expirationSent = false;
       _synchronize();
     }
@@ -899,8 +737,7 @@ class _FlashCountdownBadgeState extends State<_FlashCountdownBadge> {
       return;
     }
 
-    final backendNow =
-        DateTime.now().toUtc().add(widget.serverClockOffset);
+    final backendNow = DateTime.now().toUtc().add(widget.serverClockOffset);
     final next = end.difference(backendNow);
     final clamped = next.isNegative ? Duration.zero : next;
 
@@ -927,9 +764,7 @@ class _FlashCountdownBadgeState extends State<_FlashCountdownBadge> {
     final totalHours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds.remainder(60);
-    return [totalHours, minutes, seconds]
-        .map((value) => value.toString().padLeft(2, '0'))
-        .join(' : ');
+    return [totalHours, minutes, seconds].map((value) => value.toString().padLeft(2, '0')).join(' : ');
   }
 
   @override
@@ -939,29 +774,16 @@ class _FlashCountdownBadgeState extends State<_FlashCountdownBadge> {
     final phone = MediaQuery.sizeOf(context).width < 520;
 
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: phone ? 8 : 5,
-        vertical: phone ? 4 : 2.4,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: phone ? 8 : 5, vertical: phone ? 4 : 2.4),
       decoration: BoxDecoration(
         color: const Color(0xFFE31822),
         borderRadius: BorderRadius.circular(phone ? 7 : 4.5),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x1A000000),
-            blurRadius: 3,
-            offset: Offset(0, 1),
-          ),
-        ],
+        boxShadow: const [BoxShadow(color: Color(0x1A000000), blurRadius: 3, offset: Offset(0, 1))],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.bolt_rounded,
-            color: Colors.white,
-            size: phone ? 13 : 7.5,
-          ),
+          Icon(Icons.bolt_rounded, color: Colors.white, size: phone ? 13 : 7.5),
           SizedBox(width: phone ? 3 : 2),
           Text(
             label,
@@ -991,13 +813,7 @@ class _HomeProductCard extends StatelessWidget {
     if (!SessionStore.instance.isAuthenticated) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Connectez-vous pour ajouter ce produit à vos favoris.',
-            ),
-          ),
-        );
+        ..showSnackBar(const SnackBar(content: Text('Connectez-vous pour ajouter ce produit à vos favoris.')));
       return;
     }
     FavoritesStore.instance.toggle(product);
@@ -1007,21 +823,14 @@ class _HomeProductCard extends StatelessWidget {
     if (!product.canAddToCart) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(product.availabilityLabel)),
-        );
+        ..showSnackBar(SnackBar(content: Text(product.availabilityLabel)));
       return;
     }
 
     CartStore.instance.add(product);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          duration: Duration(milliseconds: 900),
-          content: Text('Produit ajouté au panier.'),
-        ),
-      );
+      ..showSnackBar(const SnackBar(duration: Duration(milliseconds: 900), content: Text('Produit ajouté au panier.')));
   }
 
   @override
@@ -1035,11 +844,8 @@ class _HomeProductCard extends StatelessWidget {
       color: Colors.white,
       borderRadius: BorderRadius.circular(radius),
       child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => ProductDetailScreen(product: product),
-          ),
-        ),
+        onTap: () =>
+            Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductDetailScreen(product: product))),
         borderRadius: BorderRadius.circular(radius),
         child: Container(
           decoration: BoxDecoration(
@@ -1066,7 +872,6 @@ class _HomeProductCard extends StatelessWidget {
     );
   }
 }
-
 
 class _FlashProductCardBody extends StatelessWidget {
   final ProductModel product;
@@ -1096,28 +901,16 @@ class _FlashProductCardBody extends StatelessWidget {
             children: [
               Positioned.fill(
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    phone ? 12 : 7,
-                    phone ? 8 : 4,
-                    phone ? 12 : 7,
-                    0,
-                  ),
+                  padding: EdgeInsets.fromLTRB(phone ? 12 : 7, phone ? 8 : 4, phone ? 12 : 7, 0),
                   child: _NetworkImage(url: product.imageUrl),
                 ),
               ),
               if (product.discountPercent > 0)
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  child: _ProductBadge.discount(product.discountPercent),
-                ),
+                Positioned(left: 0, top: 0, child: _ProductBadge.discount(product.discountPercent)),
               Positioned(
                 right: 0,
                 top: 0,
-                child: _FavoriteIconButton(
-                  product: product,
-                  onTap: onFavorite,
-                ),
+                child: _FavoriteIconButton(product: product, onTap: onFavorite),
               ),
             ],
           ),
@@ -1139,11 +932,7 @@ class _FlashProductCardBody extends StatelessWidget {
           product.homeSubtitle,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: const Color(0xFF6D7788),
-            fontSize: phone ? 10.2 : 5.8,
-            height: 1,
-          ),
+          style: TextStyle(color: const Color(0xFF6D7788), fontSize: phone ? 10.2 : 5.8, height: 1),
         ),
         const Spacer(),
         Row(
@@ -1184,9 +973,7 @@ class _FlashProductCardBody extends StatelessWidget {
             ),
             SizedBox(width: phone ? 6 : 2),
             Material(
-              color: product.canAddToCart
-                  ? OvanieColors.orange
-                  : const Color(0xFFBCC2CC),
+              color: product.canAddToCart ? OvanieColors.orange : const Color(0xFFBCC2CC),
               borderRadius: BorderRadius.circular(phone ? 8 : 4),
               child: InkWell(
                 onTap: onAddToCart,
@@ -1194,11 +981,7 @@ class _FlashProductCardBody extends StatelessWidget {
                 child: SizedBox(
                   width: phone ? 36 : 18,
                   height: phone ? 36 : 18,
-                  child: Icon(
-                    Icons.shopping_cart_outlined,
-                    color: Colors.white,
-                    size: phone ? 20 : 10,
-                  ),
+                  child: Icon(Icons.shopping_cart_outlined, color: Colors.white, size: phone ? 20 : 10),
                 ),
               ),
             ),
@@ -1208,7 +991,6 @@ class _FlashProductCardBody extends StatelessWidget {
     );
   }
 }
-
 
 class _CompactProductCardBody extends StatelessWidget {
   final ProductModel product;
@@ -1236,29 +1018,16 @@ class _CompactProductCardBody extends StatelessWidget {
             children: [
               Positioned.fill(
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    phone ? 6 : 2,
-                    phone ? 5 : 2,
-                    phone ? 6 : 2,
-                    0,
-                  ),
+                  padding: EdgeInsets.fromLTRB(phone ? 6 : 2, phone ? 5 : 2, phone ? 6 : 2, 0),
                   child: _NetworkImage(url: product.imageUrl),
                 ),
               ),
               if (type == _HomeProductCardType.newArrival)
-                const Positioned(
-                  left: 0,
-                  top: 0,
-                  child: _ProductBadge.newArrival(),
-                ),
+                const Positioned(left: 0, top: 0, child: _ProductBadge.newArrival()),
               Positioned(
                 right: 0,
                 top: 0,
-                child: _FavoriteIconButton(
-                  product: product,
-                  onTap: onFavorite,
-                  compact: true,
-                ),
+                child: _FavoriteIconButton(product: product, onTap: onFavorite, compact: true),
               ),
             ],
           ),
@@ -1291,22 +1060,14 @@ class _CompactProductCardBody extends StatelessWidget {
           SizedBox(height: phone ? 5 : 2),
           Row(
             children: [
-              Icon(
-                Icons.star_rounded,
-                size: phone ? 12 : 6,
-                color: const Color(0xFFF5A500),
-              ),
+              Icon(Icons.star_rounded, size: phone ? 12 : 6, color: const Color(0xFFF5A500)),
               SizedBox(width: phone ? 2 : 1),
               Expanded(
                 child: Text(
                   '${product.rating?.toStringAsFixed(1) ?? '—'} (${product.reviewsCount})',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF717A89),
-                    fontSize: phone ? 8.8 : 4.5,
-                    height: 1,
-                  ),
+                  style: TextStyle(color: const Color(0xFF717A89), fontSize: phone ? 8.8 : 4.5, height: 1),
                 ),
               ),
             ],
@@ -1317,42 +1078,28 @@ class _CompactProductCardBody extends StatelessWidget {
   }
 }
 
-
 class _ProductBadge extends StatelessWidget {
   final String label;
   final Color background;
 
   const _ProductBadge._({required this.label, required this.background});
 
-  factory _ProductBadge.discount(int percent) => _ProductBadge._(
-        label: '-$percent%',
-        background: const Color(0xFFE31822),
-      );
+  factory _ProductBadge.discount(int percent) =>
+      _ProductBadge._(label: '-$percent%', background: const Color(0xFFE31822));
 
-  const _ProductBadge.newArrival()
-      : label = 'NOUVEAU',
-        background = const Color(0xFF17A34A);
+  const _ProductBadge.newArrival() : label = 'NOUVEAU', background = const Color(0xFF17A34A);
 
   @override
   Widget build(BuildContext context) {
     final phone = MediaQuery.sizeOf(context).width < 520;
 
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: phone ? 7 : 3.2,
-        vertical: phone ? 4 : 1.6,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: phone ? 7 : 3.2, vertical: phone ? 4 : 1.6),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(phone ? 6 : 3),
         border: Border.all(color: Colors.white, width: phone ? .8 : .45),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x18000000),
-            blurRadius: 3,
-            offset: Offset(0, 1),
-          ),
-        ],
+        boxShadow: const [BoxShadow(color: Color(0x18000000), blurRadius: 3, offset: Offset(0, 1))],
       ),
       child: Text(
         label,
@@ -1369,30 +1116,21 @@ class _ProductBadge extends StatelessWidget {
   }
 }
 
-
 class _FavoriteIconButton extends StatelessWidget {
   final ProductModel product;
   final VoidCallback onTap;
   final bool compact;
 
-  const _FavoriteIconButton({
-    required this.product,
-    required this.onTap,
-    this.compact = false,
-  });
+  const _FavoriteIconButton({required this.product, required this.onTap, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     final phone = MediaQuery.sizeOf(context).width < 520;
 
     return AnimatedBuilder(
-      animation: Listenable.merge([
-        FavoritesStore.instance,
-        SessionStore.instance,
-      ]),
+      animation: Listenable.merge([FavoritesStore.instance, SessionStore.instance]),
       builder: (context, _) {
-        final favorite = SessionStore.instance.isAuthenticated &&
-            FavoritesStore.instance.contains(product);
+        final favorite = SessionStore.instance.isAuthenticated && FavoritesStore.instance.contains(product);
 
         return InkWell(
           onTap: onTap,
@@ -1400,13 +1138,9 @@ class _FavoriteIconButton extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.all(phone ? 4 : (compact ? 1 : 1.5)),
             child: Icon(
-              favorite
-                  ? Icons.favorite_rounded
-                  : Icons.favorite_border_rounded,
+              favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               size: phone ? (compact ? 18 : 20) : (compact ? 9 : 10),
-              color: favorite
-                  ? OvanieColors.orange
-                  : const Color(0xFF13213A),
+              color: favorite ? OvanieColors.orange : const Color(0xFF13213A),
             ),
           ),
         );
@@ -1420,36 +1154,25 @@ class _NetworkImage extends StatelessWidget {
   final BoxFit fit;
   final IconData fallbackIcon;
 
-  const _NetworkImage({
-    required this.url,
-    this.fit = BoxFit.contain,
-    this.fallbackIcon = Icons.inventory_2_outlined,
-  });
+  const _NetworkImage({required this.url, this.fit = BoxFit.contain, this.fallbackIcon = Icons.inventory_2_outlined});
 
   @override
   Widget build(BuildContext context) {
     if (url.trim().isEmpty) {
-      return Center(
-        child: Icon(fallbackIcon, size: 18, color: OvanieColors.muted),
-      );
+      return Center(child: Icon(fallbackIcon, size: 18, color: OvanieColors.muted));
     }
 
     return Image.network(
       url,
       fit: fit,
-      errorBuilder: (_, __, ___) => Center(
-        child: Icon(fallbackIcon, size: 18, color: OvanieColors.muted),
-      ),
+      errorBuilder: (_, __, ___) => Center(child: Icon(fallbackIcon, size: 18, color: OvanieColors.muted)),
       loadingBuilder: (context, child, event) {
         if (event == null) return child;
         return const Center(
           child: SizedBox(
             width: 11,
             height: 11,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.1,
-              color: Color(0xFFCBD1DA),
-            ),
+            child: CircularProgressIndicator(strokeWidth: 1.1, color: Color(0xFFCBD1DA)),
           ),
         );
       },
@@ -1462,11 +1185,7 @@ class _BlackFridayBanner extends StatelessWidget {
   final int productCount;
   final VoidCallback onTap;
 
-  const _BlackFridayBanner({
-    required this.maxDiscountPercent,
-    required this.productCount,
-    required this.onTap,
-  });
+  const _BlackFridayBanner({required this.maxDiscountPercent, required this.productCount, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1485,11 +1204,7 @@ class _BlackFridayBanner extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.asset(
-                    'assets/images/black_friday.png',
-                    fit: BoxFit.fill,
-                    alignment: Alignment.center,
-                  ),
+                  Image.asset('assets/images/black_friday.png', fit: BoxFit.fill, alignment: Alignment.center),
                   Positioned(
                     left: phone ? 14 : 13,
                     top: height * .24,
@@ -1499,11 +1214,7 @@ class _BlackFridayBanner extends StatelessWidget {
                       children: [
                         RichText(
                           text: TextSpan(
-                            style: TextStyle(
-                              fontSize: phone ? 20 : 14.8,
-                              height: .98,
-                              fontWeight: FontWeight.w900,
-                            ),
+                            style: TextStyle(fontSize: phone ? 20 : 14.8, height: .98, fontWeight: FontWeight.w900),
                             children: const [
                               TextSpan(
                                 text: 'Black ',
@@ -1529,9 +1240,7 @@ class _BlackFridayBanner extends StatelessWidget {
                         ),
                         SizedBox(height: phone ? 5 : 2),
                         Text(
-                          productCount > 0
-                              ? '$productCount offres Black Friday'
-                              : 'Sélection de produits BTP',
+                          productCount > 0 ? '$productCount offres Black Friday' : 'Sélection de produits BTP',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1550,10 +1259,7 @@ class _BlackFridayBanner extends StatelessWidget {
                     top: height * .255,
                     width: width * .205,
                     height: height * .37,
-                    child: _BlackFridayDiscountTag(
-                      percent: maxDiscountPercent,
-                      phone: phone,
-                    ),
+                    child: _BlackFridayDiscountTag(percent: maxDiscountPercent, phone: phone),
                   ),
                   Positioned(
                     right: phone ? 14 : 13,
@@ -1566,29 +1272,19 @@ class _BlackFridayBanner extends StatelessWidget {
                           backgroundColor: OvanieColors.orange,
                           foregroundColor: Colors.white,
                           minimumSize: Size.zero,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: phone ? 10 : 9,
-                          ),
+                          padding: EdgeInsets.symmetric(horizontal: phone ? 10 : 9),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(phone ? 9 : 5),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(phone ? 9 : 5)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               "J'en profite",
-                              style: TextStyle(
-                                fontSize: phone ? 9.5 : 6.4,
-                                fontWeight: FontWeight.w800,
-                              ),
+                              style: TextStyle(fontSize: phone ? 9.5 : 6.4, fontWeight: FontWeight.w800),
                             ),
                             SizedBox(width: phone ? 5 : 4),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              size: phone ? 14 : 9,
-                            ),
+                            Icon(Icons.arrow_forward_rounded, size: phone ? 14 : 9),
                           ],
                         ),
                       ),
@@ -1608,10 +1304,7 @@ class _BlackFridayDiscountTag extends StatelessWidget {
   final int percent;
   final bool phone;
 
-  const _BlackFridayDiscountTag({
-    required this.percent,
-    required this.phone,
-  });
+  const _BlackFridayDiscountTag({required this.percent, required this.phone});
 
   @override
   Widget build(BuildContext context) {
@@ -1664,15 +1357,9 @@ class _BlackFridayFeatures extends StatelessWidget {
       children: [
         _BannerPoint(icon: Icons.inventory_2_outlined, label: 'Stock limité'),
         SizedBox(height: 2),
-        _BannerPoint(
-          icon: Icons.local_offer_outlined,
-          label: 'Offres exclusives',
-        ),
+        _BannerPoint(icon: Icons.local_offer_outlined, label: 'Offres exclusives'),
         SizedBox(height: 2),
-        _BannerPoint(
-          icon: Icons.local_shipping_outlined,
-          label: 'Livraison rapide',
-        ),
+        _BannerPoint(icon: Icons.local_shipping_outlined, label: 'Livraison rapide'),
       ],
     );
   }

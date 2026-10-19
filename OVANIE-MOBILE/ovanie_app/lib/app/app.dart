@@ -198,7 +198,7 @@ class _OvanieAppState extends State<OvanieApp> {
             return Stack(
               children: [
                 Positioned.fill(child: child ?? const SizedBox.shrink()),
-                if (runtime.isOffline)
+                if (runtime.isOffline && runtime.isBootCompleted)
                   const Positioned.fill(child: OfflineNetworkScreen())
                 else if (runtime.isSessionExpired)
                   Positioned.fill(

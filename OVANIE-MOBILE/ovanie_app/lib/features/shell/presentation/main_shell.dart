@@ -80,6 +80,7 @@ class _MainShellState extends State<MainShell> {
             onOpenAccount: () => _selectTab(OvanieMainTab.account),
             onOpenCart: () => _selectTab(OvanieMainTab.cart),
             onStartShopping: _openCatalogTab,
+            onOpenCategories: () => _selectTab(OvanieMainTab.categories),
           ),
           AccountScreen(
             onOpenHome: () => _selectTab(OvanieMainTab.home),

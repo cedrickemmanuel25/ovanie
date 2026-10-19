@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/network/api_client.dart';
+import '../../core/ui/mk_dialogs.dart';
 import '../orders/order_ui.dart';
 import '../finance/data_ui.dart';
 import '../../core/ui/vendor_mockup_ui.dart';
@@ -155,8 +156,10 @@ class MenuPage extends StatelessWidget {
     this.hasContent,
     this.actions = const <Widget>[],
     this.showLogo = false,
+    this.showTabs = true,
     this.titleTrailing,
   });
+  final bool showTabs;
   final String title, subtitle;
   final List<Widget> children;
   final Future<void> Function() refresh;
@@ -176,6 +179,7 @@ class MenuPage extends StatelessWidget {
     subtitle: subtitle,
     trailing: titleTrailing,
     showLogo: showLogo,
+    showTabs: showTabs,
     loading: loading,
     error: error,
     hasContent: hasContent ?? !loading,
@@ -534,59 +538,28 @@ class MenuSelect extends StatelessWidget {
   );
 }
 
-/// Feuille de choix unique ; renvoie la clé retenue.
-Future<T?> menuPick<T>(BuildContext context, String title, Map<T, String> options, T? selected) => showModalBottomSheet<T>(
-  context: context,
-  isScrollControlled: true,
-  backgroundColor: Colors.white,
-  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-  builder: (sheet) => MkTheme(
-    lightStatusBar: false,
-    child: SafeArea(
-      top: false,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheet).height * .72),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 10),
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(color: const Color(0xFFD5DBE7), borderRadius: BorderRadius.circular(99)),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
-              child: Text(title, style: const TextStyle(color: menuBlue, fontSize: 18, fontWeight: FontWeight.w800)),
-            ),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
-                children: [
-                  for (final option in options.entries)
-                    ListTile(
-                      onTap: () => Navigator.pop(sheet, option.key),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      title: Text(
-                        option.value,
-                        style: TextStyle(
-                          color: menuBlue,
-                          fontSize: 15,
-                          fontWeight: option.key == selected ? FontWeight.w800 : FontWeight.w500,
-                        ),
-                      ),
-                      trailing: option.key == selected ? const Icon(Icons.check_rounded, color: Mk.orange) : null,
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  ),
+/// Fenêtre de choix unique. Avec un sous-titre : cartes à bouton radio ;
+/// sinon liste à coche. Renvoie la clé retenue, ou null si elle est fermée.
+Future<T?> menuPick<T>(
+  BuildContext context,
+  String title,
+  Map<T, String> options,
+  T? selected, {
+  IconData? icon,
+  Color iconColor = menuAzure,
+  String? subtitle,
+  String? searchHint,
+}) => showMkChoiceSheet<T>(
+  context,
+  title: title,
+  items: options.keys.toList(),
+  label: (key) => options[key] ?? '$key',
+  selected: selected,
+  subtitle: subtitle,
+  boxed: subtitle != null,
+  closeButton: subtitle == null,
+  icon: icon,
+  searchable: searchHint != null,
+  searchHint: searchHint ?? 'Rechercher…',
 );
+

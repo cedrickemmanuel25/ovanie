@@ -4,11 +4,15 @@ import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/ovanie_bottom_navigation.dart';
+import '../../payments/presentation/payment_ui.dart';
 import '../../shell/domain/main_navigation_store.dart';
-import '../../support/presentation/support_center_screen.dart';
 import '../data/addresses_repository.dart';
 import '../domain/client_address.dart';
 import 'address_form_screen.dart';
+
+const _navy = Color(0xFF0A1B3D);
+const _muted = Color(0xFF6B7890);
+const _line = Color(0xFFE7ECF2);
 
 class AddressesScreen extends StatefulWidget {
   final bool selectionMode;
@@ -46,68 +50,50 @@ class _AddressesScreenState extends State<AddressesScreen> {
 
   Future<void> _load() async {
     setState(() {
-      _loading = true;
+      _loading = _addresses.isEmpty;
       _error = null;
     });
     try {
       final payload = await _repository.fetch();
       if (!mounted) return;
       setState(() {
-        _addresses = payload.addresses;
+        // L'adresse principale est toujours présentée en premier.
+        _addresses = [...payload.addresses]..sort((a, b) => a.isDefault == b.isDefault ? 0 : (a.isDefault ? -1 : 1));
         _types = payload.types;
       });
     } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = ApiClient.friendlyError(error));
+      if (mounted) setState(() => _error = ApiClient.friendlyError(error));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _openForm({
-    ClientAddress? existing,
-    bool useCurrentPosition = false,
-  }) async {
+  Future<void> _openForm({ClientAddress? existing, bool useCurrentPosition = false}) async {
     final saved = await Navigator.of(context).push<ClientAddress>(
       MaterialPageRoute<ClientAddress>(
-        builder: (_) => AddressFormScreen(
-          existing: existing,
-          types: _types,
-          startWithCurrentPosition: useCurrentPosition,
-        ),
+        builder: (_) =>
+            AddressFormScreen(existing: existing, types: _types, startWithCurrentPosition: useCurrentPosition),
       ),
     );
     if (saved == null || !mounted) return;
+    showOvanieToast(context, existing == null ? 'Adresse ajoutée.' : 'Adresse mise à jour.');
     await _load();
   }
 
   Future<void> _delete(ClientAddress address) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer cette adresse ?'),
-        content: Text('« ${address.label} » sera retirée de vos adresses enregistrées.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: OvanieColors.danger),
-            child: const Text('Supprimer'),
-          ),
-        ],
-      ),
+      builder: (_) => _DeleteDialog(label: address.label),
     );
-    if (confirmed != true) return;
-
+    if (confirmed != true || !mounted) return;
     setState(() => _mutating = true);
     try {
       await _repository.delete(address.id);
+      if (!mounted) return;
+      showOvanieToast(context, 'Adresse supprimée.');
       await _load();
     } catch (error) {
-      if (mounted) setState(() => _error = ApiClient.friendlyError(error));
+      if (mounted) showOvanieToast(context, ApiClient.friendlyError(error), error: true);
     } finally {
       if (mounted) setState(() => _mutating = false);
     }
@@ -118,170 +104,117 @@ class _AddressesScreenState extends State<AddressesScreen> {
     setState(() => _mutating = true);
     try {
       await _repository.setDefault(address.id);
+      if (!mounted) return;
+      showOvanieToast(context, '« ${address.label} » est votre adresse principale.');
       await _load();
     } catch (error) {
-      if (mounted) setState(() => _error = ApiClient.friendlyError(error));
+      if (mounted) showOvanieToast(context, ApiClient.friendlyError(error), error: true);
     } finally {
       if (mounted) setState(() => _mutating = false);
     }
   }
 
-  void _select(ClientAddress address) {
-    if (widget.selectionMode) Navigator.of(context).pop(address);
-  }
-
-  void _openSupport() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SupportCenterScreen()),
-    );
-  }
-
-  void _leaveFor(VoidCallback? destination) {
-    if (destination == null) return;
-    Navigator.of(context).pop();
-    destination();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final title = widget.selectionMode ? 'Choisir une adresse' : 'Mes adresses';
-    final isEmpty = !_loading && _error == null && _addresses.isEmpty;
-
+    final selection = widget.selectionMode;
+    final empty = !_loading && _error == null && _addresses.isEmpty;
     return Scaffold(
       backgroundColor: Colors.white,
-      bottomNavigationBar: widget.selectionMode
-          ? null
-          : const OvanieBottomNavigation(
-              selectedTab: OvanieMainTab.account,
-            ),
+      bottomNavigationBar: selection ? null : const OvanieBottomNavigation(selectedTab: OvanieMainTab.account),
       body: SafeArea(
-        bottom: widget.selectionMode,
+        bottom: selection,
         child: RefreshIndicator(
           color: OvanieColors.orange,
           onRefresh: _load,
           child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                  child: _Header(
-                    title: title,
-                    onBack: () => Navigator.maybePop(context),
-                    onAdd: _mutating ? null : () => _openForm(),
-                    selectionMode: widget.selectionMode,
-                  ),
+                child: _Header(
+                  title: selection ? 'Choisir une adresse' : 'Mes adresses',
+                  subtitle: selection
+                      ? 'Sélectionnez l’adresse à utiliser pour votre livraison.'
+                      : 'Gérez vos adresses de livraison, chantier, bureau et dépôt.',
                 ),
               ),
-              if (!widget.selectionMode)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(54, 4, 18, 0),
-                    child: Text(
-                      'Gérez vos adresses de livraison, chantier, bureau et dépôt.',
-                      style: TextStyle(
-                        color: Color(0xFF18326B),
-                        fontSize: 12.2,
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                  child: _InfoBanner(
-                    text: widget.selectionMode
-                        ? 'Sélectionnez l’adresse à utiliser pour votre livraison.'
-                        : 'L’adresse principale est utilisée par défaut lors du passage en caisse.',
-                  ),
-                ),
-              ),
-              if (!widget.selectionMode)
+              if (!selection || empty)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+                    padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
                     child: Row(
                       children: [
                         Expanded(
-                          child: _PrimaryActionButton(
+                          flex: 21,
+                          child: _ActionButton(
                             icon: Icons.add_rounded,
                             label: 'Ajouter une adresse',
+                            filled: true,
                             onTap: _mutating ? null : () => _openForm(),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         Expanded(
-                          child: _OutlineActionButton(
-                            icon: Icons.location_on_outlined,
+                          flex: 19,
+                          child: _ActionButton(
+                            icon: Icons.gps_fixed_rounded,
                             label: 'Utiliser ma position',
-                            onTap: _mutating
-                                ? null
-                                : () => _openForm(useCurrentPosition: true),
+                            filled: false,
+                            onTap: _mutating ? null : () => _openForm(useCurrentPosition: true),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-              if (_error != null)
-                SliverToBoxAdapter(
+              if (!selection && !empty && !_loading)
+                const SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-                    child: _ErrorBox(message: _error!),
+                    padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: Text(
+                      'L’adresse principale est utilisée par défaut lors du passage en caisse.',
+                      style: TextStyle(color: _muted, fontSize: 12.5, height: 1.35),
+                    ),
                   ),
                 ),
               if (_loading)
-                const SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 420,
-                    child: Center(
-                      child: CircularProgressIndicator(color: OvanieColors.orange),
-                    ),
-                  ),
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator(color: OvanieColors.orange)),
                 )
-              else if (isEmpty)
-                SliverToBoxAdapter(
-                  child: _EmptyAddresses(
-                    onAdd: () => _openForm(),
-                    onPosition: () => _openForm(useCurrentPosition: true),
-                    onSupport: _openSupport,
-                    compact: widget.selectionMode,
-                  ),
+              else if (_error != null && _addresses.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _ErrorState(message: _error!, onRetry: _load),
                 )
-              else
+              else if (empty)
+                const SliverFillRemaining(hasScrollBody: false, child: _EmptyAddresses())
+              else ...[
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    18,
-                    widget.selectionMode ? 14 : 12,
-                    18,
-                    18,
-                  ),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, rawIndex) {
-                        final itemCount = _addresses.length + (widget.selectionMode ? 0 : 1);
-                        if (rawIndex.isOdd) return const SizedBox(height: 9);
-                        final index = rawIndex ~/ 2;
-                        if (index >= itemCount) return null;
-                        if (index == _addresses.length) {
-                          return _SupportCard(onTap: _openSupport);
-                        }
-                        final address = _addresses[index];
-                        return _AddressCard(
-                          address: address,
-                          selectionMode: widget.selectionMode,
-                          disabled: _mutating,
-                          onSelect: () => _select(address),
-                          onEdit: () => _openForm(existing: address),
-                          onDelete: () => _delete(address),
-                          onDefault: () => _setDefault(address),
-                        );
-                      },
-                      childCount: (_addresses.length + (widget.selectionMode ? 0 : 1)) * 2 - 1,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                  sliver: SliverList.separated(
+                    itemCount: _addresses.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 14),
+                    itemBuilder: (context, index) {
+                      final address = _addresses[index];
+                      return _AddressCard(
+                        address: address,
+                        selectionMode: selection,
+                        disabled: _mutating,
+                        onSelect: () => Navigator.of(context).pop(address),
+                        onEdit: () => _openForm(existing: address),
+                        onDelete: () => _delete(address),
+                        onDefault: () => _setDefault(address),
+                      );
+                    },
                   ),
                 ),
+                if (!selection)
+                  const SliverToBoxAdapter(
+                    child: Padding(padding: EdgeInsets.fromLTRB(14, 14, 14, 18), child: _PrecisionTip()),
+                  )
+                else
+                  const SliverToBoxAdapter(child: SizedBox(height: 18)),
+              ],
             ],
           ),
         ),
@@ -291,82 +224,38 @@ class _AddressesScreenState extends State<AddressesScreen> {
 }
 
 class _Header extends StatelessWidget {
+  const _Header({required this.title, required this.subtitle});
+
   final String title;
-  final VoidCallback onBack;
-  final VoidCallback? onAdd;
-  final bool selectionMode;
-
-  const _Header({
-    required this.title,
-    required this.onBack,
-    required this.onAdd,
-    required this.selectionMode,
-  });
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        InkWell(
-          onTap: onBack,
-          borderRadius: BorderRadius.circular(28),
-          child: const Padding(
-            padding: EdgeInsets.all(4),
-            child: Icon(Icons.arrow_back_rounded, size: 21, color: Color(0xFF041A57)),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFF061A56),
-              fontSize: 21,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.5,
-            ),
-          ),
-        ),
-        if (!selectionMode)
-          InkWell(
-            onTap: onAdd,
-            borderRadius: BorderRadius.circular(28),
-            child: const Padding(
-              padding: EdgeInsets.all(5),
-              child: Icon(Icons.add_location_alt_outlined, size: 21, color: Color(0xFF061A56)),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _InfoBanner extends StatelessWidget {
-  final String text;
-  const _InfoBanner({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FD),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+      child: Stack(
         children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xFF061A56), size: 21),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Color(0xFF17306A),
-                fontSize: 12.2,
-                height: 1.35,
-                fontWeight: FontWeight.w500,
-              ),
+          IconButton(
+            onPressed: () => Navigator.maybePop(context),
+            tooltip: 'Retour',
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _navy, size: 22),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(44, 8, 44, 0),
+            child: Column(
+              children: [
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _navy, fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _muted, fontSize: 12.5, height: 1.35),
+                ),
+              ],
             ),
           ),
         ],
@@ -375,67 +264,68 @@ class _InfoBanner extends StatelessWidget {
   }
 }
 
-class _PrimaryActionButton extends StatelessWidget {
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({required this.icon, required this.label, required this.filled, this.onTap});
+
   final IconData icon;
   final String label;
+  final bool filled;
   final VoidCallback? onTap;
-
-  const _PrimaryActionButton({required this.icon, required this.label, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 48,
-      child: FilledButton.icon(
-        onPressed: onTap,
-        style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFFFF4C0A),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontSize: 12.8, fontWeight: FontWeight.w900),
+    final content = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: filled ? 22 : 20),
+        const SizedBox(width: 7),
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(label, maxLines: 1, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          ),
         ),
-        icon: Icon(icon, size: 22),
-        label: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1)),
-      ),
+      ],
+    );
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(10));
+    const padding = EdgeInsets.symmetric(horizontal: 8);
+    return SizedBox(
+      height: 46,
+      child: filled
+          ? FilledButton(
+              onPressed: onTap,
+              style: FilledButton.styleFrom(
+                backgroundColor: OvanieColors.orange,
+                foregroundColor: Colors.white,
+                padding: padding,
+                shape: shape,
+              ),
+              child: content,
+            )
+          : OutlinedButton(
+              onPressed: onTap,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _navy,
+                side: const BorderSide(color: _navy, width: 1.3),
+                padding: padding,
+                shape: shape,
+              ),
+              child: content,
+            ),
     );
   }
 }
 
-class _OutlineActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  const _OutlineActionButton({required this.icon, required this.label, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 48,
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF061A56),
-          side: const BorderSide(color: Color(0xFFB7C4E4), width: 1.2),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontSize: 12.8, fontWeight: FontWeight.w900),
-        ),
-        icon: Icon(icon, size: 21),
-        label: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1)),
-      ),
-    );
-  }
-}
+/// Couleurs de l'étiquette de type (Chantier, Bureau, Dépôt…).
+(Color, Color) _typeColors(String type) => switch (type) {
+  'site' => (const Color(0xFFFFEDE2), const Color(0xFFC2410C)),
+  'office' => (const Color(0xFFE8F1FF), const Color(0xFF0B2E6B)),
+  'warehouse' => (const Color(0xFFE5F6EB), const Color(0xFF15803D)),
+  'home' => (const Color(0xFFF1EBFF), const Color(0xFF5B34B5)),
+  _ => (const Color(0xFFF0F2F5), const Color(0xFF3B4A60)),
+};
 
 class _AddressCard extends StatelessWidget {
-  final ClientAddress address;
-  final bool selectionMode;
-  final bool disabled;
-  final VoidCallback onSelect;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onDefault;
-
   const _AddressCard({
     required this.address,
     required this.selectionMode,
@@ -446,361 +336,321 @@ class _AddressCard extends StatelessWidget {
     required this.onDefault,
   });
 
-  IconData get _icon => switch (address.type) {
-        'office' => Icons.apartment_rounded,
-        'site' => Icons.construction_rounded,
-        'warehouse' => Icons.warehouse_rounded,
-        _ => Icons.home_outlined,
-      };
-
-  Color get _accent => switch (address.type) {
-        'office' => const Color(0xFF6137D6),
-        'site' => const Color(0xFF153A99),
-        'warehouse' => const Color(0xFF07963F),
-        _ => const Color(0xFFFF6500),
-      };
-
-  Color get _accentBg => switch (address.type) {
-        'office' => const Color(0xFFF0EBFF),
-        'site' => const Color(0xFFEAF1FF),
-        'warehouse' => const Color(0xFFE8F7ED),
-        _ => const Color(0xFFFFF0E5),
-      };
+  final ClientAddress address;
+  final bool selectionMode;
+  final bool disabled;
+  final VoidCallback onSelect;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onDefault;
 
   @override
   Widget build(BuildContext context) {
+    final (typeBg, typeFg) = _typeColors(address.type);
     final phone = address.phone.trim().isEmpty ? '' : formatCiPhoneDisplay(address.phone);
-    final displayedAddress = address.address.trim().isNotEmpty
-        ? address.address.trim()
-        : address.locationSummary;
+    final line = address.address.trim().isNotEmpty ? address.address.trim() : address.locationSummary;
+    final contact = [address.recipientName.trim(), phone].where((part) => part.isNotEmpty).join('  ·  ');
+    final highlighted = address.isDefault;
 
-    return InkWell(
-      onTap: selectionMode ? onSelect : null,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE7ECF4)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0D0A1D4D),
-              blurRadius: 18,
-              offset: Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Column(
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 62,
-                    height: 62,
-                    decoration: BoxDecoration(
-                      color: _accentBg,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(_icon, color: _accent, size: 32),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 9,
-                          runSpacing: 7,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              address.label,
-                              style: const TextStyle(
-                                color: Color(0xFF061A56),
-                                fontSize: 16.5,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            if (address.isDefault)
-                              const _Pill(
-                                label: '★ Par défaut',
-                                foreground: Colors.white,
-                                background: Color(0xFF1554E8),
-                              ),
-                            _Pill(
-                              label: address.typeLabel,
-                              foreground: _accent,
-                              background: _accentBg,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        if (address.recipientName.trim().isNotEmpty)
-                          _MetaLine(icon: Icons.person_outline_rounded, text: address.recipientName),
-                        if (phone.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          _MetaLine(icon: Icons.phone_outlined, text: phone),
-                        ],
-                        if (displayedAddress.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          _MetaLine(
-                            icon: Icons.location_on_outlined,
-                            text: displayedAddress,
-                            maxLines: 3,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    selectionMode ? Icons.chevron_right_rounded : Icons.keyboard_arrow_down_rounded,
-                    color: const Color(0xFF061A56),
-                    size: 24,
-                  ),
-                ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(color: typeBg, borderRadius: BorderRadius.circular(7)),
+              child: Text(
+                address.typeLabel,
+                style: TextStyle(color: typeFg, fontSize: 12.5, fontWeight: FontWeight.w600),
               ),
             ),
-            if (!selectionMode)
+            const Spacer(),
+            if (address.isDefault)
               Container(
-                height: 40,
-                decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: Color(0xFFE5EAF2))),
-                ),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(8, 4, 11, 4),
+                decoration: BoxDecoration(color: OvanieColors.orange, borderRadius: BorderRadius.circular(99)),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: _CardAction(
-                        icon: Icons.edit_outlined,
-                        label: 'Modifier',
-                        color: const Color(0xFF0A4CDA),
-                        onTap: disabled ? null : onEdit,
-                      ),
+                    Icon(Icons.star_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text(
+                      'Par défaut',
+                      style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
                     ),
-                    const VerticalDivider(width: 1, color: Color(0xFFE5EAF2)),
-                    Expanded(
-                      child: _CardAction(
-                        icon: Icons.delete_outline_rounded,
-                        label: 'Supprimer',
-                        color: const Color(0xFFFF1F2C),
-                        onTap: disabled ? null : onDelete,
-                      ),
-                    ),
-                    if (!address.isDefault) ...[
-                      const VerticalDivider(width: 1, color: Color(0xFFE5EAF2)),
-                      Expanded(
-                        child: _CardAction(
-                          icon: Icons.star_border_rounded,
-                          label: 'Définir comme principale',
-                          color: const Color(0xFF0A4CDA),
-                          onTap: disabled ? null : onDefault,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final String label;
-  final Color foreground;
-  final Color background;
-
-  const _Pill({required this.label, required this.foreground, required this.background});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(8)),
-      child: Text(
-        label,
-        style: TextStyle(color: foreground, fontSize: 12, fontWeight: FontWeight.w800),
-      ),
-    );
-  }
-}
-
-class _MetaLine extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final int maxLines;
-
-  const _MetaLine({required this.icon, required this.text, this.maxLines = 1});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: const Color(0xFF0B2A6A), size: 15),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: maxLines,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF18326B),
-              fontSize: 12.0,
-              height: 1.35,
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (selectionMode)
+              Padding(
+                padding: const EdgeInsets.only(top: 1, right: 12),
+                child: _Radio(selected: address.isDefault),
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.only(top: 1, right: 12),
+                child: Icon(Icons.location_on_outlined, color: OvanieColors.orange, size: 23),
+              ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    address.label,
+                    style: const TextStyle(color: _navy, fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                  if (line.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(line, style: const TextStyle(color: Color(0xFF3B4A60), fontSize: 13.5, height: 1.35)),
+                  ],
+                ],
+              ),
             ),
-          ),
+          ],
         ),
+        if (contact.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.person_outline_rounded, color: Color(0xFF5E6B80), size: 20),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Text(contact, style: const TextStyle(color: _muted, fontSize: 13.5)),
+              ),
+            ],
+          ),
+        ],
       ],
     );
+
+    final actions = <Widget>[
+      if (!selectionMode) ...[
+        _CardAction(icon: Icons.edit_outlined, label: 'Modifier', color: _navy, onTap: disabled ? null : onEdit),
+        _CardAction(
+          icon: Icons.delete_outline_rounded,
+          label: 'Supprimer',
+          color: const Color(0xFFC81E1E),
+          onTap: disabled ? null : onDelete,
+        ),
+      ],
+      if (!address.isDefault)
+        _CardAction(
+          icon: Icons.star_border_rounded,
+          label: 'Définir comme principale',
+          color: _navy,
+          onTap: disabled ? null : onDefault,
+        ),
+    ];
+
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: highlighted ? OvanieColors.orange : _line, width: highlighted ? 1.5 : 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: selectionMode ? onSelect : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              details,
+              if (actions.isEmpty)
+                const SizedBox(height: 10)
+              else ...[
+                const SizedBox(height: 12),
+                const Divider(height: 1, color: _line),
+                SizedBox(
+                  height: 44,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: selectionMode ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < actions.length; i++) ...[
+                          if (i > 0) Container(width: 1, height: 18, color: _line),
+                          actions[i],
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
+}
+
+class _Radio extends StatelessWidget {
+  const _Radio({required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 22,
+    height: 22,
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(color: selected ? OvanieColors.orange : const Color(0xFF9AA5B5), width: 1.6),
+    ),
+    child: selected
+        ? const DecoratedBox(
+            decoration: BoxDecoration(color: OvanieColors.orange, shape: BoxShape.circle),
+          )
+        : null,
+  );
 }
 
 class _CardAction extends StatelessWidget {
+  const _CardAction({required this.icon, required this.label, required this.color, this.onTap});
+
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback? onTap;
 
-  const _CardAction({required this.icon, required this.label, required this.color, this.onTap});
-
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 15, color: color),
+            Icon(icon, size: 20, color: color),
             const SizedBox(width: 7),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 2,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800),
-              ),
+            Text(
+              label,
+              style: TextStyle(color: color, fontSize: 13.5, fontWeight: FontWeight.w600),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PrecisionTip extends StatelessWidget {
+  const _PrecisionTip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
+      decoration: BoxDecoration(color: const Color(0xFFF2F4F7), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(color: Color(0xFFE2E6EC), shape: BoxShape.circle),
+            child: const Icon(Icons.location_on_rounded, color: Color(0xFF4A586E), size: 22),
+          ),
+          Container(width: 1, height: 32, margin: const EdgeInsets.symmetric(horizontal: 12), color: _line),
+          const Expanded(
+            child: Text(
+              'Utilisez des adresses précises pour améliorer l’estimation des frais et délais de livraison.',
+              style: TextStyle(color: Color(0xFF4A586E), fontSize: 13, height: 1.4),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _EmptyAddresses extends StatelessWidget {
-  final VoidCallback onAdd;
-  final VoidCallback onPosition;
-  final VoidCallback onSupport;
-  final bool compact;
-
-  const _EmptyAddresses({
-    required this.onAdd,
-    required this.onPosition,
-    required this.onSupport,
-    required this.compact,
-  });
+  const _EmptyAddresses();
 
   @override
   Widget build(BuildContext context) {
-    if (compact) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(18, 28, 18, 24),
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(26, 20, 26, 40),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image(image: AssetImage('assets/images/checkout/addresses_empty.png'), width: 270),
+          SizedBox(height: 18),
+          Text(
+            'Aucune adresse enregistrée',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: _navy, fontSize: 21, fontWeight: FontWeight.w800),
+          ),
+          SizedBox(height: 10),
+          Text(
+            'Vous n’avez pas encore ajouté d’adresse. Utilisez les actions ci-dessus pour ajouter votre première '
+            'adresse.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: _muted, fontSize: 14, height: 1.45),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeleteDialog extends StatelessWidget {
+  const _DeleteDialog({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(
-              'assets/images/address_empty_illustration.png',
-              width: 220,
-              fit: BoxFit.contain,
+            const Text(
+              'Supprimer cette adresse ?',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _navy, fontSize: 19, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '« $label » sera retirée de vos adresses enregistrées.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: _muted, fontSize: 14.5, height: 1.4),
             ),
             const SizedBox(height: 18),
-            const Text(
-              'Aucune adresse enregistrée',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF061A56),
-                fontSize: 21,
-                fontWeight: FontWeight.w900,
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFE02424),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Supprimer', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700)),
               ),
             ),
-            const SizedBox(height: 11),
-            const Text(
-              'Ajoutez une adresse pour continuer.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF53658F), fontSize: 12.8),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Annuler', style: TextStyle(color: Color(0xFF0B3C8C), fontSize: 15)),
             ),
-            const SizedBox(height: 22),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320),
-              child: _PrimaryActionButton(
-                icon: Icons.add_rounded,
-                label: 'Ajouter une adresse',
-                onTap: onAdd,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final viewport = MediaQuery.sizeOf(context);
-    final illustrationWidth = (viewport.width * .61).clamp(218.0, 292.0).toDouble();
-
-    // IMPORTANT: this widget is rendered inside a SliverToBoxAdapter.
-    // A Column + Spacer with an unbounded sliver height makes Flutter stop
-    // laying out the empty-state content on some physical devices. Give the
-    // empty state a real viewport-relative height so the illustration, texts
-    // and support block are always visible, exactly like the reference screen.
-    final emptyHeight = (viewport.height - 292.0).clamp(505.0, 660.0).toDouble();
-
-    return SizedBox(
-      height: emptyHeight,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Image.asset(
-              'assets/images/address_empty_illustration.png',
-              width: illustrationWidth,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
-            ),
-            const SizedBox(height: 17),
-            const Text(
-              'Aucune adresse enregistrée',
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              style: TextStyle(
-                color: Color(0xFF061A56),
-                fontSize: 22.0,
-                height: 1.08,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -.3,
-              ),
-            ),
-            const SizedBox(height: 13),
-            const Text(
-              'Vous n’avez pas encore ajouté d’adresse.\n'
-              'Utilisez les actions ci-dessus pour ajouter\n'
-              'votre première adresse.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF53658F),
-                fontSize: 13.4,
-                height: 1.55,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const Spacer(),
-            _SupportCard(onTap: onSupport),
           ],
         ),
       ),
@@ -808,30 +658,29 @@ class _EmptyAddresses extends StatelessWidget {
   }
 }
 
-class _SupportCard extends StatelessWidget {
-  final VoidCallback onTap;
-  const _SupportCard({required this.onTap});
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
 
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}
-
-class _ErrorBox extends StatelessWidget {
   final String message;
-  const _ErrorBox({required this.message});
+  final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF1F1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFC8C8)),
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(color: Color(0xFFB42318), fontWeight: FontWeight.w700),
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: _muted, size: 52),
+          const SizedBox(height: 14),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _muted, height: 1.45),
+          ),
+          const SizedBox(height: 18),
+          PaymentButton(label: 'Réessayer', onPressed: onRetry),
+        ],
       ),
     );
   }

@@ -1,10 +1,11 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/ui/mk_dialogs.dart';
+import '../../core/ui/mk_file_pick.dart';
 import '../../core/ui/vendor_design.dart';
 import '../../core/ui/vendor_mockup_ui.dart';
 import '../../core/ui/vendor_select.dart';
@@ -267,6 +268,40 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     return '';
   }
 
+  bool _suggesting = false, _suggested = false;
+  String _suggestedFor = '';
+
+  /// Propose la catégorie à partir du nom saisi (même service que le Web).
+  /// Ne remplace jamais une catégorie déjà choisie par le vendeur.
+  Future<void> _suggestCategory() async {
+    final name = ctrl('name').text.trim();
+    if (_mainCategoryId != null || name.length < 4 || name == _suggestedFor || _suggesting) return;
+    _suggestedFor = name;
+    setState(() => _suggesting = true);
+    try {
+      final response = await ApiClient.dio.post<dynamic>(
+        '/mobile/v1/vendor/products/suggest-category',
+        data: {'name': name},
+      );
+      ApiClient.ensureSuccess(response);
+      final body = response.data;
+      final suggestion = body is Map ? body['suggestion'] : null;
+      if (!mounted || suggestion is! Map || _mainCategoryId != null) return;
+      final main = int.tryParse('${suggestion['category_id']}');
+      final sub = int.tryParse('${suggestion['subcategory_id']}');
+      if (main == null || !_categoryTree.any((c) => int.tryParse('${c['id']}') == main)) return;
+      setState(() {
+        _mainCategoryId = main;
+        _subcategoryId = sub != null && _childrenFor(main).any((c) => int.tryParse('${c['id']}') == sub) ? sub : null;
+        _suggested = true;
+      });
+    } catch (_) {
+      // La suggestion est un confort : le vendeur choisit lui-même sinon.
+    } finally {
+      if (mounted) setState(() => _suggesting = false);
+    }
+  }
+
   List<Map<String, dynamic>> get _categoryTree =>
       ((_meta['product_categories'] as List?) ?? const [])
           .whereType<Map>()
@@ -381,22 +416,42 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
   }
 
-  Future<void> _pickTechnicalSheet() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf'],
+  /// Fenêtre de l'app avant l'appareil photo ou la galerie du téléphone.
+  Future<void> _choosePhotoSource() async {
+    final source = await showMkSourceSheet(
+      context,
+      title: 'Photos du produit',
+      message: 'Images claires, de préférence carrées. JPG ou PNG, 5 Mo maximum par image.',
+      galleryLabel: 'Choisir dans la galerie (plusieurs possibles)',
     );
-    final path = result?.files.single.path;
-    if (path != null && mounted) setState(() => _technicalSheet = File(path));
+    if (source == null || !mounted) return;
+    await _addImages(source == 'camera' ? ImageSource.camera : ImageSource.gallery);
+  }
+
+  Future<void> _pickTechnicalSheet() async {
+    final file = await pickMkFile(
+      context,
+      title: 'Fiche technique',
+      message: 'Document PDF du fabricant, 5 Mo maximum.',
+      camera: false,
+      gallery: false,
+      extensions: const ['pdf'],
+    );
+    if (file != null && mounted) setState(() => _technicalSheet = file);
   }
 
   Future<void> _pickVideo() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['mp4', 'mov', 'webm', 'm4v'],
+    final file = await pickMkFile(
+      context,
+      title: 'Vidéo du produit',
+      message: 'MP4 ou MOV, 50 Mo et 2 minutes maximum.',
+      camera: false,
+      gallery: false,
+      extensions: const ['mp4', 'mov', 'webm', 'm4v'],
+      fileLabel: 'Choisir une vidéo',
+      fileIcon: Icons.videocam_outlined,
     );
-    final path = result?.files.single.path;
-    if (path != null && mounted) setState(() => _video = File(path));
+    if (file != null && mounted) setState(() => _video = file);
   }
 
   double get _volumeM3 {
@@ -484,24 +539,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       final dirty = _controllers.values.any((c) => c.text.trim().isNotEmpty) ||
           _images.isNotEmpty;
       if (dirty && widget.productId == null) {
-        final leave = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Quitter sans enregistrer ?'),
-            content: const Text('Les informations saisies seront perdues.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Continuer'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Quitter'),
-              ),
-            ],
-          ),
-        );
-        if (leave != true || !mounted) return;
+        if (!await _confirmLeave() || !mounted) return;
       }
       if (mounted) Navigator.of(context).pop();
       return;
@@ -653,24 +691,39 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     ('Médias du produit', 'Ajoutez des photos et une vidéo pour rendre votre produit plus attractif.'),
   ];
 
+  /// Saisie non enregistrée : brouillon, abandon ou poursuite de la saisie.
+  /// Renvoie vrai uniquement si le vendeur choisit de quitter sans enregistrer.
+  Future<bool> _confirmLeave() async {
+    final name = ctrl('name').text.trim();
+    final choice = await showMkDialog<String>(
+      context,
+      icon: Icons.note_alt_outlined,
+      iconColor: Mk.orange,
+      title: 'Quitter le formulaire produit sans enregistrer ?',
+      message: name.isEmpty
+          ? 'Les informations saisies seront perdues.'
+          : 'Les informations saisies pour « $name » seront perdues.',
+      actions: const [
+        MkDialogAction('Enregistrer en brouillon', 'draft', icon: Icons.save_as_outlined, caption: 'Sauvegardez et terminez plus tard'),
+        MkDialogAction('Quitter sans enregistrer', 'leave', color: Mk.danger, style: MkDialogActionStyle.outlined),
+        MkDialogAction('Continuer la saisie', 'stay', color: Mk.muted, style: MkDialogActionStyle.text),
+      ],
+    );
+    if (choice == 'draft' && mounted) {
+      // Le brouillon referme le formulaire une fois enregistré.
+      await _save(draft: true);
+      return false;
+    }
+    return choice == 'leave';
+  }
+
   /// Fermeture par la croix : demande confirmation si une saisie serait perdue.
   Future<void> _close() async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (_saving) return;
     final dirty = _controllers.values.any((c) => c.text.trim().isNotEmpty) || _images.isNotEmpty;
     if (dirty && widget.productId == null) {
-      final leave = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Quitter sans enregistrer ?'),
-          content: const Text('Les informations saisies seront perdues.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Continuer')),
-            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Quitter')),
-          ],
-        ),
-      );
-      if (leave != true || !mounted) return;
+      if (!await _confirmLeave() || !mounted) return;
     }
     if (mounted) Navigator.of(context).pop();
   }
@@ -783,7 +836,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       children: [
         _FormCard(
           children: [
-            _labeled('Nom du produit', _textField('name', 'Ex. Ciment CPA 42.5R', required: true), required: true),
+            _labeled(
+              'Nom du produit',
+              Focus(
+                onFocusChange: (focused) {
+                  if (!focused) _suggestCategory();
+                },
+                child: _textField('name', 'Ex. Ciment CPA 42.5R', required: true),
+              ),
+              required: true,
+            ),
             _gap,
             _categorySelector(
               label: 'Catégorie principale',
@@ -793,8 +855,42 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               onChanged: (id) => setState(() {
                 _mainCategoryId = id;
                 _subcategoryId = null;
+                _suggested = false;
               }),
             ),
+            if (_suggesting || _suggested)
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                decoration: BoxDecoration(
+                  color: _suggesting ? const Color(0xFFF2F5FA) : const Color(0xFFE3EEFD),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    _suggesting
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2.2, color: Color(0xFF1668E3)),
+                          )
+                        : const Icon(Icons.auto_awesome_rounded, color: Color(0xFF1668E3), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _suggesting
+                            ? 'Recherche de la catégorie adaptée…'
+                            : 'Catégorie proposée d’après le nom du produit. Vous pouvez la changer.',
+                        style: TextStyle(
+                          color: _suggesting ? Mk.muted : Mk.navy,
+                          fontSize: 12.5,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             _gap,
             _categorySelector(
               label: 'Sous-catégorie',
@@ -802,7 +898,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               items: children,
               hint: 'Sélectionnez une sous-catégorie',
               enabled: _mainCategoryId != null && children.isNotEmpty,
-              onChanged: (id) => setState(() => _subcategoryId = id),
+              onChanged: (id) => setState(() {
+                _subcategoryId = id;
+                _suggested = false;
+              }),
             ),
           ],
         ),
@@ -1096,7 +1195,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 style: TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w800),
               ),
               SizedBox(height: 3),
-              Text('Calculer les frais de livraison et de sélectionner le mode logistique le plus adapté à votre produit.'),
+              Text('Calculer les frais de livraison et choisir le véhicule adapté à votre produit.'),
             ],
           ),
         ),
@@ -1105,13 +1204,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   }
 
   Future<void> _pickVariantImage(int index) async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 92,
+    final picked = await pickMkFile(
+      context,
+      title: 'Photo du modèle',
+      message: 'Photo de ce modèle ou de cette couleur.',
       maxWidth: 1800,
+      quality: 92,
     );
     if (picked == null || !mounted) return;
-    setState(() => _variants[index].image = File(picked.path));
+    setState(() => _variants[index].image = picked);
   }
 
   void _addVariant() {
@@ -1234,22 +1335,34 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   Widget _mediaStep() {
     final videoName = _video?.path.split(Platform.pathSeparator).last;
-    final canAdd = _images.length < 10;
+    // En modification, les images déjà en ligne comptent dans la limite de 10.
+    final online = widget.productId == null ? 0 : ((_existing['images'] as List?)?.length ?? 0);
+    final canAdd = online + _images.length < 10;
     return _FormCard(
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            const Expanded(child: MkLabel('Images produit', required: true)),
+            Expanded(child: MkLabel(online > 0 ? 'Ajouter des images' : 'Images produit', required: online == 0)),
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                '${_images.length}/10 images',
+                '${online + _images.length}/10 images',
                 style: const TextStyle(color: Mk.muted, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
           ],
         ),
+        if (online > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              online > 1
+                  ? '$online images sont déjà en ligne. Pour les remplacer ou les supprimer, utilisez « Gérer les images » sur la fiche du produit.'
+                  : '1 image est déjà en ligne. Pour la remplacer ou la supprimer, utilisez « Gérer les images » sur la fiche du produit.',
+              style: const TextStyle(color: Mk.muted, fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w500),
+            ),
+          ),
         _dropZone(
           icon: Icons.add_photo_alternate_rounded,
           title: 'Ajouter des photos',
@@ -1257,7 +1370,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           line2: 'Format : JPG, PNG • Taille max : 5 Mo • Format carré recommandé (1:1)',
           orange: true,
           busy: _pickingImages,
-          onTap: canAdd && !_pickingImages ? () => _addImages(ImageSource.gallery) : null,
+          onTap: canAdd && !_pickingImages ? _choosePhotoSource : null,
         ),
         const SizedBox(height: 10),
         _OutlineAction(

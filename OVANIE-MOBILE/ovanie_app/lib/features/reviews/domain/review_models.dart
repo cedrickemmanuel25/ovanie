@@ -14,11 +14,11 @@ class ExistingReview {
   final DateTime? updatedAt;
   const ExistingReview({required this.id, required this.rating, required this.comment, required this.updatedAt});
   factory ExistingReview.fromJson(Map<String, dynamic> json) => ExistingReview(
-        id: _int(json['id']),
-        rating: _int(json['rating']),
-        comment: cleanOvanieText('${json['comment'] ?? ''}'),
-        updatedAt: _date(json['updated_at']),
-      );
+    id: _int(json['id']),
+    rating: _int(json['rating']),
+    comment: cleanOvanieText('${json['comment'] ?? ''}'),
+    updatedAt: _date(json['updated_at']),
+  );
 }
 
 class ProductReviewItem {
@@ -62,7 +62,12 @@ class DeliveryReviewItem {
   final String orderNumber;
   final DateTime? deliveredAt;
   final ExistingReview? review;
-  const DeliveryReviewItem({required this.orderId, required this.orderNumber, required this.deliveredAt, required this.review});
+  const DeliveryReviewItem({
+    required this.orderId,
+    required this.orderNumber,
+    required this.deliveredAt,
+    required this.review,
+  });
   factory DeliveryReviewItem.fromJson(Map<String, dynamic> json) {
     final rawReview = json['review'];
     return DeliveryReviewItem(
@@ -80,15 +85,29 @@ class ReviewCenterData {
   final bool productRating;
   final bool deliveryRating;
   final bool sellerRating;
-  const ReviewCenterData({required this.products, required this.deliveries, required this.productRating, required this.deliveryRating, required this.sellerRating});
+  const ReviewCenterData({
+    required this.products,
+    required this.deliveries,
+    required this.productRating,
+    required this.deliveryRating,
+    required this.sellerRating,
+  });
 
   factory ReviewCenterData.fromJson(Map<String, dynamic> json) {
     final productRaw = json['product_reviews'] is List ? json['product_reviews'] as List : const [];
     final deliveryRaw = json['delivery_reviews'] is List ? json['delivery_reviews'] as List : const [];
-    final caps = json['capabilities'] is Map ? Map<String, dynamic>.from(json['capabilities'] as Map) : <String, dynamic>{};
+    final caps = json['capabilities'] is Map
+        ? Map<String, dynamic>.from(json['capabilities'] as Map)
+        : <String, dynamic>{};
     return ReviewCenterData(
-      products: productRaw.whereType<Map>().map((e) => ProductReviewItem.fromJson(Map<String, dynamic>.from(e))).toList(growable: false),
-      deliveries: deliveryRaw.whereType<Map>().map((e) => DeliveryReviewItem.fromJson(Map<String, dynamic>.from(e))).toList(growable: false),
+      products: productRaw
+          .whereType<Map>()
+          .map((e) => ProductReviewItem.fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false),
+      deliveries: deliveryRaw
+          .whereType<Map>()
+          .map((e) => DeliveryReviewItem.fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false),
       productRating: caps['product_rating'] == true,
       deliveryRating: caps['delivery_rating'] == true,
       sellerRating: caps['seller_rating'] == true,

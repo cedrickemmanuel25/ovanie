@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api\Support;
 use App\Http\Controllers\Controller;
 use App\Models\SupportCallbackRequest;
 use App\Models\SupportConversation;
+use App\Models\SupportConversationMessage;
 use App\Services\Support\SupportCaseService;
 use App\Services\SupportAi\AssistantShoppingService;
 use App\Services\SupportAi\SupportAiOrchestrator;
 use App\Services\SupportAi\SupportIdentityResolver;
 use App\Services\SupportAi\SupportServiceStatusService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class PublicSupportChatController extends Controller
@@ -154,6 +156,13 @@ class PublicSupportChatController extends Controller
                 'body' => $message->body,
                 // Fiches produits montrées avec ce message : elles restent visibles quand la conversation est rouverte.
                 'products' => array_values((array) data_get($message->metadata, 'products', [])),
+                'attachments' => collect((array) data_get($message->metadata, 'attachments', []))->values()
+                    ->map(fn ($file, $index) => [
+                        'name' => (string) ($file['name'] ?? 'Fichier'),
+                        'mime' => (string) ($file['mime'] ?? ''),
+                        'size' => (int) ($file['size'] ?? 0),
+                        'path' => "support/chat/{$conversation->public_token}/attachments/{$message->id}/{$index}",
+                    ])->all(),
                 'created_at' => $message->created_at,
             ]),
         ]);
@@ -226,6 +235,78 @@ class PublicSupportChatController extends Controller
             'status' => $callback->status,
             'message' => 'Votre demande de rappel a été enregistrée.',
         ], 201);
+    }
+
+    /**
+     * Pièce jointe envoyée dans la conversation (photo ou PDF). Le fichier est
+     * gardé sur le disque privé et rattaché à un message du demandeur, visible
+     * du conseiller Support dans la même conversation.
+     */
+    public function attachment(Request $request, string $token)
+    {
+        $conversation = $this->conversation($token, $request);
+        if (in_array($conversation->status, ['resolved', 'closed'], true)) {
+            return response()->json(['message' => 'Cette conversation est clôturée.'], 409);
+        }
+
+        $data = $request->validate([
+            'file' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+            'message' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'file.mimes' => 'Le fichier doit être une photo (JPG, PNG, WebP) ou un PDF.',
+            'file.max' => 'Le fichier ne doit pas dépasser 5 Mo.',
+        ]);
+
+        $file = $request->file('file');
+        $name = mb_substr(preg_replace('/[^\pL\pN ._-]+/u', '_', (string) $file->getClientOriginalName()), 0, 120) ?: 'fichier';
+        $path = $file->store('support/chat/' . $conversation->id, 'local');
+        $caption = trim((string) ($data['message'] ?? ''));
+
+        $message = $conversation->messages()->create([
+            'sender_type' => 'customer',
+            'sender_user_id' => $request->user('sanctum')->id,
+            'body' => $caption !== '' ? $caption : 'Pièce jointe : ' . $name,
+            'metadata' => ['attachments' => [[
+                'name' => $name,
+                'path' => $path,
+                'mime' => (string) $file->getMimeType(),
+                'size' => (int) $file->getSize(),
+            ]]],
+        ]);
+
+        // L'assistante ne lit pas les fichiers : elle en accuse réception pour
+        // que le demandeur sache que le conseiller y aura accès.
+        $reply = null;
+        if (! $conversation->requires_human) {
+            $reply = $conversation->messages()->create([
+                'sender_type' => 'ai',
+                'body' => 'J’ai bien reçu votre fichier. Il est joint à cette conversation : un conseiller OVANIE pourra le consulter.',
+            ]);
+        }
+        $conversation->touch();
+
+        return response()->json([
+            'message_id' => $message->id,
+            'reply' => $reply?->body,
+            'requires_human' => (bool) $conversation->requires_human,
+            'status' => $conversation->status,
+        ], 201);
+    }
+
+    public function downloadAttachment(Request $request, string $token, int $message, int $index)
+    {
+        $conversation = $this->conversation($token, $request);
+        $row = $conversation->messages()->where('is_internal', false)->whereKey($message)->firstOrFail();
+
+        return $this->attachmentResponse($row, $index);
+    }
+
+    public static function attachmentResponse(SupportConversationMessage $message, int $index)
+    {
+        $file = data_get($message->metadata, "attachments.{$index}");
+        abort_unless(is_array($file) && ! empty($file['path']) && Storage::disk('local')->exists($file['path']), 404);
+
+        return Storage::disk('local')->download($file['path'], (string) ($file['name'] ?? 'fichier'));
     }
 
     /**

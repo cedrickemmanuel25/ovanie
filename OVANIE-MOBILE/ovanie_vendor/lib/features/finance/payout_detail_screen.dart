@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/network/api_client.dart';
 import '../../core/ui/vendor_mockup_ui.dart';
 import '../../data/vendor_repository.dart';
+import '../../core/ui/mk_dialogs.dart';
 import '../orders/order_detail_screen.dart';
 import '../orders/order_ui.dart';
 import '../orders/order_widgets.dart';
@@ -88,14 +89,20 @@ class _PayoutDetailScreenState extends State<PayoutDetailScreen> {
         children: [
           Text(
             'Commandes incluses (${orders.length})',
-            style: const TextStyle(color: Mk.navy, fontSize: 18, fontWeight: FontWeight.w800),
+            style: const TextStyle(color: Mk.navy, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -.3),
           ),
-          const SizedBox(height: 6),
-          for (final order in orders)
-            _orderRow(order, onTap: () {
-              Navigator.pop(sheet);
-              _openOrder(order);
-            }),
+          const SizedBox(height: 8),
+          for (var i = 0; i < orders.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: orderBorder),
+            _orderRow(
+              orders[i],
+              large: true,
+              onTap: () {
+                Navigator.pop(sheet);
+                _openOrder(orders[i]);
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -103,7 +110,7 @@ class _PayoutDetailScreenState extends State<PayoutDetailScreen> {
 
   void _copy(String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Référence copiée.')));
+    mkToast(context, 'Référence copiée.');
   }
 
   Future<void> _followUp() async {
@@ -463,15 +470,19 @@ class _PayoutDetailScreenState extends State<PayoutDetailScreen> {
     );
   }
 
-  Widget _orderRow(Map<String, dynamic> order, {required VoidCallback onTap}) {
+  Widget _orderRow(Map<String, dynamic> order, {required VoidCallback onTap, bool large = false}) {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
+        padding: EdgeInsets.symmetric(vertical: large ? 12 : 9),
         child: Row(
           children: [
-            const FinanceIconDisc(Icons.inventory_2_outlined, color: financeSlate, size: 38),
-            const SizedBox(width: 10),
+            FinanceIconDisc(
+              large ? Icons.view_in_ar_outlined : Icons.inventory_2_outlined,
+              color: large ? const Color(0xFF1668E3) : financeSlate,
+              size: large ? 46 : 38,
+            ),
+            SizedBox(width: large ? 14 : 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -480,20 +491,24 @@ class _PayoutDetailScreenState extends State<PayoutDetailScreen> {
                     screenText(order['order_number']),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Mk.navy, fontSize: 13.5, fontWeight: FontWeight.w700),
+                    style: TextStyle(color: Mk.navy, fontSize: large ? 15 : 13.5, fontWeight: large ? FontWeight.w800 : FontWeight.w700),
                   ),
                   Text(
                     orderShortDate(order['created_at']),
-                    style: const TextStyle(color: Mk.muted, fontSize: 12.5, fontWeight: FontWeight.w500),
+                    style: TextStyle(color: Mk.muted, fontSize: large ? 13 : 12.5, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
             ),
             if (order['amount'] != null) ...[
               const SizedBox(width: 8),
-              ConstrainedBox(constraints: const BoxConstraints(maxWidth: 130), child: FinanceAmount(order['amount'], size: 14)),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 140),
+                child: FinanceAmount(order['amount'], size: large ? 15.5 : 14),
+              ),
             ],
-            const Icon(Icons.chevron_right_rounded, color: Mk.icon, size: 24),
+            SizedBox(width: large ? 6 : 0),
+            Icon(Icons.chevron_right_rounded, color: large ? const Color(0xFF1668E3) : Mk.icon, size: 24),
           ],
         ),
       ),

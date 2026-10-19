@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
+import '../ui/vendor_mockup_ui.dart';
 
 /// Contrat de données compris par CETTE version de l'APK.
 ///
@@ -115,52 +116,89 @@ class OvanieSchemaIncompatibleApp extends StatelessWidget {
       title: OvanieSchemaContract.appLabel,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff0b2e5e)),
+        fontFamily: Mk.font,
+        scaffoldBackgroundColor: const Color(0xFFF7F9FC),
+        colorScheme: ColorScheme.fromSeed(seedColor: Mk.navy),
       ),
-      home: Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(28),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.system_update_alt_rounded, size: 64),
-                    const SizedBox(height: 22),
-                    const Text(
-                      'Mise à jour de l’application requise',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'Une nouvelle version de l’application est disponible. Mettez-la à jour pour continuer à utiliser OVANIE.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 22),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      home: MkTheme(
+        lightStatusBar: false,
+        child: Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Image.asset(
+                          'assets/images/mockups/logo_navy.png',
+                          height: 52,
+                          semanticLabel: OvanieSchemaContract.appLabel,
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Application : ${OvanieSchemaContract.appLabel}'),
-                                                                            ],
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Image.asset('assets/images/mockups/update_required.jpg', excludeFromSemantics: true),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Vos données sont conservées. Installez la dernière version puis reconnectez-vous.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: const Color(0xffff6b00), fontWeight: FontWeight.w700),
-                    ),
-                  ],
+                      const SizedBox(height: 18),
+                      const Center(child: Icon(Icons.sync_rounded, color: Mk.navy, size: 54)),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Mise à jour de l’application requise',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Mk.navy, fontSize: 23, height: 1.2, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Cette version de l’application ne peut pas utiliser en toute sécurité le contrat de données '
+                        'actuellement déployé par OVANIE. Mettez à jour l’application avant de continuer.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Mk.muted, fontSize: 14.5, height: 1.45, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 18),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                        child: Column(
+                          children: [
+                            _line(Icons.grid_view_rounded, 'Application', OvanieSchemaContract.appLabel),
+                            const Divider(height: 1, color: Color(0xFFE4E9F1)),
+                            _line(Icons.description_outlined, 'Contrat APK', OvanieSchemaContract.supportedSchemaVersion),
+                            if ((result.serverSchemaVersion ?? '').isNotEmpty) ...[
+                              const Divider(height: 1, color: Color(0xFFE4E9F1)),
+                              _line(Icons.dns_outlined, 'Contrat serveur', result.serverSchemaVersion!),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF4EC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFFFB27A)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.verified_user_outlined, color: Color(0xFFE85400), size: 30),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Aucune donnée n’a été modifiée. Fermez cette application et installez la version OVANIE la plus récente.',
+                                style: TextStyle(color: Color(0xFFC24400), fontSize: 14, height: 1.4, fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -169,4 +207,20 @@ class OvanieSchemaIncompatibleApp extends StatelessWidget {
       ),
     );
   }
+
+  Widget _line(IconData icon, String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        child: Row(
+          children: [
+            Icon(icon, color: Mk.icon, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text('$label :', style: const TextStyle(color: Mk.muted, fontSize: 14.5, fontWeight: FontWeight.w500)),
+            ),
+            Flexible(
+              child: Text(value, textAlign: TextAlign.right, style: const TextStyle(color: Mk.navy, fontSize: 14.5, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
 }

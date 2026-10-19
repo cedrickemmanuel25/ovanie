@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/ui/mk_dialogs.dart';
 import '../../data/vendor_repository.dart';
 import '../orders/order_widgets.dart' show OrderMapImage;
 import 'logistics_settings_screen.dart';
@@ -18,6 +19,45 @@ const deliveryVehicles = <String, String>{
 
 String deliveryVehicleLabel(dynamic code) => deliveryVehicles['$code'] ?? screenText(code, 'Véhicule non précisé');
 
+/// Carte de couverture : image du serveur (contours réels des communes) et
+/// noms des communes placés à leur position sur l'image.
+class CoverageMap extends StatelessWidget {
+  const CoverageMap({super.key, required this.map, this.overlay = const []});
+  final Map<String, dynamic> map;
+  final List<Widget> overlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final labels = rowsOf(map['labels']);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            OrderMapImage(url: screenText(map['url'], '')),
+            if (screenText(map['url'], '').isNotEmpty)
+              for (final label in labels)
+                Align(
+                  alignment: FractionalOffset(number(label['x']), number(label['y'])),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: .82), borderRadius: BorderRadius.circular(6)),
+                    child: Text(
+                      screenText(label['name'], ''),
+                      style: TextStyle(color: label['active'] == false ? Mk.icon : menuBlue, fontSize: 12, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+            ...overlay,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Livraison & logistique : mode actuel, délai de traitement et disponibilité de préparation.
 class DeliverySettingsScreen extends StatefulWidget {
   const DeliverySettingsScreen({super.key});
@@ -33,12 +73,7 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
   Set<int> days = {};
   TimeOfDay? start, end;
 
-  static const delays = {
-    'lt24h': 'Moins de 24 h',
-    '24_48h': '24 à 48 h',
-    '3_5j': '3 à 5 jours',
-    '7j_plus': '7 jours et plus',
-  };
+  static const delays = {'lt24h': 'Moins de 24 h', '24_48h': '24 à 48 h', '3_5j': '3 à 5 jours', '7j_plus': '7 jours et plus'};
   static const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
   @override
@@ -75,8 +110,7 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
     }
   }
 
-  String time(TimeOfDay? t) =>
-      t == null ? 'Choisir' : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  String time(TimeOfDay? t) => t == null ? 'Choisir' : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Future<void> pickTime(bool first) async {
     final t = await showTimePicker(
@@ -107,7 +141,7 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
       problem = 'L’heure limite doit être après l’heure de début.';
     }
     if (problem != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(problem)));
+      mkToast(context, problem, error: true);
       return;
     }
     setState(() => saving = true);
@@ -118,7 +152,7 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
         data: {'processing_time': delay, 'days': days.toList()..sort(), 'start': time(start), 'end': time(end)},
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paramètres enregistrés.')));
+        mkToast(context, 'Paramètres enregistrés.');
       }
     } catch (e) {
       if (mounted) menuError(context, e);
@@ -127,16 +161,55 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
     }
   }
 
+  /// Une boutique ne change de mode que lorsque toutes ses commandes en cours
+  /// sont terminées : elle n'a ainsi jamais deux parcours de livraison à la fois.
+  Future<bool> _canSwitchMode() async {
+    setState(() => saving = true);
+    try {
+      final check = mapOf((await menuApi('shop/delivery'))['mode_switch']);
+      if (check['allowed'] != false || !mounted) return true;
+      final open = number(check['open_orders']).toInt();
+      await showMkDialog<void>(
+        context,
+        icon: Icons.local_shipping_outlined,
+        iconColor: menuOrange,
+        title: 'Changement impossible pour le moment',
+        message: screenText(
+          check['message'],
+          'Terminez vos commandes en cours avant de changer de mode logistique.',
+        ),
+        extra: Text(
+          open > 1
+              ? 'Ces $open commandes se terminent avec le mode actuel. Vous pourrez changer dès qu’elles seront livrées.'
+              : 'Cette commande se termine avec le mode actuel. Vous pourrez changer dès qu’elle sera livrée.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: menuMuted, fontSize: 13, height: 1.45, fontWeight: FontWeight.w500),
+        ),
+        actions: const [MkDialogAction('J’ai compris', null)],
+      );
+      return false;
+    } catch (e) {
+      if (mounted) menuError(context, e);
+      return false;
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
   Future<void> editLogistics({bool change = false, String? targetMode}) async {
     final target = targetMode ?? (change ? (mode == 'seller' ? 'ovanie' : 'seller') : mode);
     if (target.isEmpty) return;
+    if (mode.isNotEmpty && target != mode && !await _canSwitchMode()) return;
+    if (!mounted) return;
     final saved = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => LogisticsSettingsScreen(shop: shop, targetMode: target)),
+      MaterialPageRoute(
+        builder: (_) => LogisticsSettingsScreen(shop: shop, targetMode: target),
+      ),
     );
     if (!mounted) return;
     if (saved == true) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informations logistiques enregistrées.')));
+      mkToast(context, 'Informations logistiques enregistrées.');
     }
     await load();
   }
@@ -149,9 +222,7 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
     loading: loading,
     error: error,
     hasContent: shop.isNotEmpty,
-    actions: [
-      MkBarButton(label: 'Enregistrer les paramètres', filled: true, loading: saving, onTap: saving ? null : save),
-    ],
+    actions: [MkBarButton(label: 'Enregistrer les paramètres', filled: true, loading: saving, onTap: saving ? null : save)],
     children: [
       _modeCard(),
       _delayCard(),
@@ -201,7 +272,6 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
   // ---- Mode logistique -----------------------------------------------------------
   Widget _modeCard() {
     final seller = mode == 'seller';
-    final wide = MediaQuery.sizeOf(context).width >= 360;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.antiAlias,
@@ -209,41 +279,54 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 16, 4, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const OrderCaption('Mode actuel'),
-                      const SizedBox(height: 6),
-                      Text(
-                        mode.isEmpty ? 'À configurer' : (seller ? 'Ma propre logistique' : 'OVANIE Logistics'),
-                        style: const TextStyle(color: menuBlue, fontSize: 20, height: 1.2, fontWeight: FontWeight.w800),
+          LayoutBuilder(
+            builder: (context, box) {
+              final height = (box.maxWidth * .44).clamp(132.0, 220.0);
+              return SizedBox(
+                height: height,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: box.maxWidth * .6,
+                      child: ShaderMask(
+                        blendMode: BlendMode.dstIn,
+                        shaderCallback: (rect) =>
+                            const LinearGradient(colors: [Colors.transparent, Colors.white], stops: [0, .18]).createShader(rect),
+                        child: Image.asset(
+                          seller ? 'assets/images/mockups/logi_pickup.jpg' : 'assets/images/mockups/logi_ovanie.jpg',
+                          fit: BoxFit.cover,
+                          alignment: Alignment.center,
+                          excludeFromSemantics: true,
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      mode.isEmpty
-                          ? menuPill('Choix à confirmer', color: const Color(0xFFE85400), icon: Icons.info_rounded)
-                          : menuPill('Mode actif', color: menuGreen, icon: Icons.check_circle_rounded),
-                    ],
-                  ),
+                    ),
+                    Positioned(
+                      left: 16,
+                      top: 18,
+                      width: box.maxWidth * .5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const OrderCaption('Mode actuel'),
+                          const SizedBox(height: 8),
+                          Text(
+                            mode.isEmpty ? 'À configurer' : (seller ? 'Ma propre logistique' : 'OVANIE Logistics'),
+                            style: const TextStyle(color: menuBlue, fontSize: 21, height: 1.2, fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 10),
+                          mode.isEmpty
+                              ? menuPill('Choix à confirmer', color: const Color(0xFFE85400), icon: Icons.info_rounded)
+                              : menuPill('Mode actif', color: menuGreen, icon: Icons.check_circle_rounded),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              if (wide)
-                SizedBox(
-                  width: 150,
-                  height: 118,
-                  child: Image.asset(
-                    seller ? 'assets/images/mockups/logi_pickup.jpg' : 'assets/images/mockups/logi_ovanie.jpg',
-                    fit: BoxFit.cover,
-                    alignment: Alignment.centerLeft,
-                    excludeFromSemantics: true,
-                  ),
-                ),
-            ],
+              );
+            },
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 2, 14, 14),
@@ -295,7 +378,7 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Les commandes déjà créées ou en cours conservent leur mode logistique.',
+                          'Vous pouvez changer de mode quand toutes vos commandes en cours sont terminées.',
                           style: TextStyle(color: menuMuted, fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w500),
                         ),
                       ),
@@ -338,24 +421,70 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
     ),
   );
 
+  Future<void> _pickProcessingDelay() async {
+    final picked = await menuPick<String>(
+      context,
+      'Délai de traitement',
+      delays,
+      delay,
+      icon: Icons.schedule_rounded,
+      iconColor: Mk.icon,
+      subtitle: 'Sélectionnez le délai nécessaire avant la prise en charge de la commande.',
+    );
+    if (picked != null && mounted) setState(() => delay = picked);
+  }
+
   // ---- Délai de traitement ----------------------------------------------------------
+  Widget _cardHeader(IconData icon, Color color, String title, [String? subtitle]) => Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      menuIcon(icon, color: color, size: 50),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(color: menuBlue, fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+            if (subtitle != null)
+              Text(
+                subtitle,
+                style: const TextStyle(color: menuMuted, fontSize: 13, height: 1.35, fontWeight: FontWeight.w500),
+              ),
+          ],
+        ),
+      ),
+    ],
+  );
+
   Widget _delayCard() => DataCard(
-    title: 'Délai de traitement',
-    icon: Icons.schedule_rounded,
-    iconColor: menuOrange,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Sélectionnez le délai nécessaire avant la prise en charge de la commande.',
-          style: TextStyle(color: menuMuted, fontSize: 13, height: 1.4, fontWeight: FontWeight.w500),
+        // Le titre ouvre aussi la liste détaillée des délais.
+        InkWell(
+          onTap: saving ? null : _pickProcessingDelay,
+          borderRadius: BorderRadius.circular(12),
+          child: _cardHeader(
+            Icons.schedule_rounded,
+            menuOrange,
+            'Délai de traitement',
+            'Sélectionnez le délai nécessaire avant la prise en charge de la commande.',
+          ),
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        const SizedBox(height: 14),
+        Row(
           children: [
-            for (final entry in delays.entries) _delayOption(entry.key, entry.value),
+            for (var i = 0; i < delays.length; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              // Largeur proportionnelle au libellé : tous les textes gardent la même taille.
+              Expanded(
+                flex: delays.values.elementAt(i).length + 4,
+                child: _delayOption(delays.keys.elementAt(i), delays.values.elementAt(i)),
+              ),
+            ],
           ],
         ),
       ],
@@ -377,26 +506,31 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: saving ? null : () => setState(() => delay = key),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
-                  color: selected ? Mk.orange : Mk.hint,
-                  size: 20,
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? const Color(0xFFE85400) : Mk.icon,
-                    fontSize: 13.5,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            alignment: Alignment.center,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                    color: selected ? Mk.orange : Mk.hint,
+                    size: 18,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: selected ? const Color(0xFFE85400) : Mk.icon,
+                      fontSize: 13.5,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -406,18 +540,15 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
 
   // ---- Disponibilité de préparation ----------------------------------------------------
   Widget _availabilityCard() => DataCard(
-    title: 'Disponibilité de préparation',
-    icon: Icons.calendar_month_outlined,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _cardHeader(Icons.calendar_month_rounded, menuAzure, 'Disponibilité de préparation'),
+        const SizedBox(height: 14),
         // Sept cases de largeur égale : la sélection ne déplace pas les autres jours.
         Row(
           children: [
-            for (var i = 0; i < 7; i++) ...[
-              if (i > 0) const SizedBox(width: 4),
-              Expanded(child: _dayToggle(i + 1, dayNames[i])),
-            ],
+            for (var i = 0; i < 7; i++) ...[if (i > 0) const SizedBox(width: 4), Expanded(child: _dayToggle(i + 1, dayNames[i]))],
           ],
         ),
         const SizedBox(height: 12),
@@ -455,31 +586,28 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
                     days.add(day);
                   }
                 }),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            alignment: Alignment.center,
             child: ExcludeSemantics(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    selected ? Icons.check_circle_rounded : Icons.circle_outlined,
-                    color: selected ? Colors.white : const Color(0xFFC5CEDE),
-                    size: 15,
-                  ),
-                  const SizedBox(height: 3),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (selected) ...[const Icon(Icons.check_circle_rounded, color: Colors.white, size: 17), const SizedBox(width: 3)],
+                    Text(
                       label,
                       maxLines: 1,
                       style: TextStyle(
                         color: selected ? Colors.white : Mk.icon,
-                        fontSize: 13,
+                        fontSize: 13.5,
                         fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -519,11 +647,7 @@ class _DeliveryState extends State<DeliverySettingsScreen> {
                       ),
                       Text(
                         time(value),
-                        style: TextStyle(
-                          color: value == null ? Mk.hint : menuBlue,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: TextStyle(color: value == null ? Mk.hint : menuBlue, fontSize: 16, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -565,10 +689,7 @@ class _ZonesState extends State<DeliveryZonesScreen> {
       error = null;
     });
     try {
-      final r = await Future.wait([
-        menuApi('shop'),
-        menuApi('shop/delivery${widget.configuring ? '?configure=1' : ''}'),
-      ]);
+      final r = await Future.wait([menuApi('shop'), menuApi('shop/delivery${widget.configuring ? '?configure=1' : ''}')]);
       shop = mapOf(r[0]['shop']);
       data = r[1];
     } catch (e) {
@@ -587,7 +708,7 @@ class _ZonesState extends State<DeliveryZonesScreen> {
     );
     if (!mounted) return;
     if (saved == true) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Zone de livraison enregistrée.')));
+      mkToast(context, 'Zone de livraison enregistrée.');
     }
     await load();
   }
@@ -614,23 +735,12 @@ class _ZonesState extends State<DeliveryZonesScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  OrderMapImage(url: screenText(data['area_map_url'], '')),
-                  Positioned(left: 8, top: 8, child: _mapCounter(Icons.map_outlined, menuGreen, 'Zones actives', active)),
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: _mapCounter(Icons.schedule_rounded, Mk.icon, 'Zones suspendues', all.length - active),
-                  ),
-                ],
-              ),
-            ),
+          child: CoverageMap(
+            map: mapOf(data['coverage_map']).isNotEmpty ? mapOf(data['coverage_map']) : {'url': data['area_map_url']},
+            overlay: [
+              Positioned(left: 8, top: 8, child: _mapCounter(Icons.map_outlined, menuGreen, 'Zones actives', active)),
+              Positioned(right: 8, top: 8, child: _mapCounter(Icons.schedule_rounded, Mk.icon, 'Zones suspendues', all.length - active)),
+            ],
           ),
         ),
         menuSearch((v) => setState(() => query = v), 'Rechercher une zone…'),
@@ -674,8 +784,14 @@ class _ZonesState extends State<DeliveryZonesScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w600)),
-            Text('$value', style: TextStyle(color: color, fontSize: 17, height: 1.15, fontWeight: FontWeight.w800)),
+            Text(
+              label,
+              style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              '$value',
+              style: TextStyle(color: color, fontSize: 17, height: 1.15, fontWeight: FontWeight.w800),
+            ),
           ],
         ),
       ],
@@ -753,7 +869,10 @@ class _ZonesState extends State<DeliveryZonesScreen> {
     children: [
       Icon(icon, color: menuOrange, size: 18),
       const SizedBox(width: 6),
-      Text(text, style: const TextStyle(color: menuBlue, fontSize: 13.5, fontWeight: FontWeight.w600)),
+      Text(
+        text,
+        style: const TextStyle(color: menuBlue, fontSize: 13.5, fontWeight: FontWeight.w600),
+      ),
     ],
   );
 }
@@ -775,6 +894,7 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
   int? commune;
   String? vehicle, delay;
   bool active = true, loading = true, saving = false, submitted = false;
+  Map<String, dynamic> communeMap = {};
   String? error;
 
   static const _delays = ['24 h', '48 h', '72 h', '3 à 5 jours', '7 jours'];
@@ -791,6 +911,7 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
     vehicle = deliveryVehicles.containsKey('${z['vehicle_code']}') ? '${z['vehicle_code']}' : null;
     active = z['is_active'] != false;
     load();
+    _loadCommuneMap();
   }
 
   @override
@@ -826,28 +947,61 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
       'Commune couverte',
       {for (final c in communes) number(c['id']).toInt(): screenText(c['name'], 'Commune')},
       commune,
+      icon: Icons.location_on_rounded,
+      searchHint: 'Rechercher une commune…',
     );
-    if (picked != null && mounted) setState(() => commune = picked);
+    if (picked != null && mounted) {
+      setState(() => commune = picked);
+      _loadCommuneMap();
+    }
+  }
+
+  /// Contour réel de la commune choisie, dessiné par le serveur.
+  Future<void> _loadCommuneMap() async {
+    final selected = commune;
+    if (selected == null) return;
+    try {
+      final map = await menuApi('shop/delivery/coverage-map', query: {'commune_ids[]': selected});
+      if (mounted && commune == selected) setState(() => communeMap = map);
+    } catch (_) {
+      // La carte d'ensemble reste affichée.
+    }
   }
 
   Future<void> pickDelay() async {
     final options = {
       for (final value in [..._delays, if (delay != null && !_delays.contains(delay)) delay!]) value: value,
     };
-    final picked = await menuPick<String>(context, 'Délai de livraison', options, delay);
+    final picked = await menuPick<String>(
+      context,
+      'Délai de livraison',
+      options,
+      delay,
+      icon: Icons.schedule_rounded,
+      iconColor: Mk.icon,
+      subtitle: 'Sélectionnez le délai nécessaire pour livrer cette commune.',
+    );
     if (picked != null && mounted) setState(() => delay = picked);
   }
+
+  String? formError;
+  final errorKey = GlobalKey();
 
   Future<void> save() async {
     setState(() => submitted = true);
     final valid = form.currentState!.validate();
     if (!valid || commune == null || vehicle == null || delay == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Complétez la commune, le véhicule, le délai et le tarif.')),
-      );
+      setState(() => formError = 'Complétez la commune, le véhicule, le délai et le tarif.');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final box = errorKey.currentContext;
+        if (box != null) Scrollable.ensureVisible(box, duration: const Duration(milliseconds: 250), alignment: 1);
+      });
       return;
     }
-    setState(() => saving = true);
+    setState(() {
+      formError = null;
+      saving = true;
+    });
     try {
       await menuApi(
         'shop/delivery/zones${widget.zone == null ? '' : '/${widget.zone!['id']}'}',
@@ -862,17 +1016,41 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
       );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) menuError(context, e);
+      if (mounted) setState(() => formError = ApiClient.friendlyError(e));
     } finally {
       if (mounted) setState(() => saving = false);
     }
   }
 
+  /// Encadré rouge au-dessus des boutons : ce qu'il reste à compléter.
+  Widget _errorBox(String text) => Container(
+    key: errorKey,
+    margin: const EdgeInsets.only(bottom: 4),
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFDECEC),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFF5C2C0)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.error_rounded, color: menuRed, size: 24),
+        const SizedBox(width: 10),
+        Container(width: 1, height: 26, color: const Color(0xFFF1B5B2)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(color: Color(0xFFC81E1E), fontSize: 13, height: 1.35, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    ),
+  );
+
   Future<void> openMap() async {
     try {
-      await launchUrl(
-        Uri.https('www.google.com', '/maps/search/', {'api': '1', 'query': '$communeName, Abidjan, Côte d’Ivoire'}),
-      );
+      await launchUrl(Uri.https('www.google.com', '/maps/search/', {'api': '1', 'query': '$communeName, Abidjan, Côte d’Ivoire'}));
     } catch (e) {
       if (mounted) menuError(context, e);
     }
@@ -880,7 +1058,10 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
 
   Widget _missing(String text) => Padding(
     padding: const EdgeInsets.only(top: 6, left: 4),
-    child: Text(text, style: const TextStyle(color: Mk.danger, fontSize: 12.5, fontWeight: FontWeight.w600)),
+    child: Text(
+      text,
+      style: const TextStyle(color: Mk.danger, fontSize: 12.5, fontWeight: FontWeight.w600),
+    ),
   );
 
   @override
@@ -970,7 +1151,10 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
                               widthFactor: 1,
                               child: Padding(
                                 padding: EdgeInsets.only(right: 10),
-                                child: Text('FCFA', style: TextStyle(color: menuMuted, fontSize: 13, fontWeight: FontWeight.w600)),
+                                child: Text(
+                                  'FCFA',
+                                  style: TextStyle(color: menuMuted, fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
                               ),
                             ),
                           ),
@@ -1010,38 +1194,7 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    OrderMapImage(url: widget.areaMapUrl),
-                    if (communeName != null)
-                      Positioned(
-                        left: 8,
-                        top: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(color: Mk.orange, borderRadius: BorderRadius.circular(99)),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.location_on_rounded, color: Colors.white, size: 16),
-                              const SizedBox(width: 4),
-                              Text(
-                                communeName!,
-                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+            CoverageMap(map: communeMap.isNotEmpty ? communeMap : {'url': widget.areaMapUrl}),
             const SizedBox(height: 10),
             MkBarButton(
               label: 'Voir la commune sur la carte',
@@ -1053,6 +1206,7 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
         ),
       ),
       menuInfo('Un tarif est enregistré par commune et par type de véhicule pour calculer les frais de livraison des commandes.'),
+      if (formError != null) _errorBox(formError!),
     ],
   );
 
@@ -1080,26 +1234,19 @@ class _ZoneEditState extends State<DeliveryZoneEditScreen> {
                   padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                   child: Column(
                     children: [
-                      Expanded(
-                        child: Image.asset('assets/images/vehicles/$code.png', fit: BoxFit.contain, excludeFromSemantics: true),
-                      ),
+                      Expanded(child: Image.asset('assets/images/vehicles/$code.png', fit: BoxFit.contain, excludeFromSemantics: true)),
                       const SizedBox(height: 4),
                       ExcludeSemantics(
                         child: Text(
                           label,
                           maxLines: 1,
-                          style: TextStyle(
-                            color: menuBlue,
-                            fontSize: 12.5,
-                            fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-                          ),
+                          style: TextStyle(color: menuBlue, fontSize: 12.5, fontWeight: selected ? FontWeight.w800 : FontWeight.w500),
                         ),
                       ),
                     ],
                   ),
                 ),
-                if (selected)
-                  const Positioned(right: 5, top: 5, child: Icon(Icons.check_circle_rounded, color: Mk.orange, size: 20)),
+                if (selected) const Positioned(right: 5, top: 5, child: Icon(Icons.check_circle_rounded, color: Mk.orange, size: 20)),
               ],
             ),
           ),

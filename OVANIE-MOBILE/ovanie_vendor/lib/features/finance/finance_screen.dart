@@ -103,30 +103,16 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
   double _number(Object? raw) => double.tryParse('${raw ?? ''}') ?? 0;
 
-  void _balanceInfo() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (_) => const FinanceSheet(
-        children: [
-          Text('Solde disponible', style: TextStyle(color: Mk.navy, fontSize: 18, fontWeight: FontWeight.w800)),
-          SizedBox(height: 8),
-          Text(
-            'C’est le montant de vos ventes livrées et validées, prêt à être reversé sur votre compte Mobile Money. '
-            'Les ventes en cours de livraison apparaissent dans « En attente » et rejoignent ce solde après validation.',
-            style: TextStyle(color: Mk.muted, fontSize: 14, height: 1.45, fontWeight: FontWeight.w500),
-          ),
-        ],
-      ),
-    );
+  Future<void> _balanceInfo() async {
+    final weekly = _modeLabel.toLowerCase().contains('hebdo');
+    if (await showBalanceInfoSheet(context, weekly: weekly) && mounted) await _settings();
   }
 
   void _report() => exportData(context, 'rapport-finances.csv', [
         ['Indicateur', 'Montant FCFA'],
         ['Solde disponible', _summary['ready']],
         ['Ventes du mois', _summary['month_sales']],
-        ['En attente', _summary['scheduled']],
+        ['En attente', financePendingTotal(_summary)],
         ['Mois', 'Revenus FCFA'],
         ...orderList(_summary['monthly_revenue']).map((raw) {
           final r = orderMap(raw);
@@ -244,94 +230,12 @@ class _FinanceScreenState extends State<FinanceScreen> {
   }
 
   // ---- Solde disponible ------------------------------------------------------
-  Widget _balanceCard() {
-    final ready = _number(_summary['ready']);
-    final configured = _configured ?? true;
-    return Semantics(
-      button: true,
-      label: 'Solde disponible ${orderMoney(_summary['ready'])}. Ouvrir le portefeuille.',
-      child: Material(
-        borderRadius: BorderRadius.circular(18),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: _wallet,
-          child: Ink(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [Color(0xFF062153), Color(0xFF0A3FA8), Color(0xFF0E5BD6)],
-                stops: [0, .55, 1],
-              ),
-            ),
-            child: Stack(
-              children: [
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: ShaderMask(
-                    blendMode: BlendMode.dstIn,
-                    shaderCallback: (rect) => const LinearGradient(
-                      colors: [Colors.transparent, Colors.white],
-                      stops: [0, .22],
-                    ).createShader(rect),
-                    child: Image.asset(
-                      'assets/images/mockups/fin_hero.jpg',
-                      fit: BoxFit.cover,
-                      alignment: Alignment.centerLeft,
-                      excludeFromSemantics: true,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 12, 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text(
-                            'Solde disponible',
-                            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
-                          ),
-                          InkWell(
-                            onTap: _balanceInfo,
-                            customBorder: const CircleBorder(),
-                            child: const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Icon(Icons.info_outline_rounded, color: Colors.white, size: 18, semanticLabel: 'En savoir plus'),
-                            ),
-                          ),
-                          const Spacer(),
-                          _statePill(configured),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      FractionallySizedBox(
-                        widthFactor: .62,
-                        alignment: Alignment.centerLeft,
-                        child: FinanceAmount(_summary['ready'], size: 34, color: Colors.white, unitColor: Mk.orange),
-                      ),
-                      const SizedBox(height: 4),
-                      FractionallySizedBox(
-                        widthFactor: .6,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          ready > 0 ? 'Disponible au reversement' : 'Rien à reverser pour le moment',
-                          style: const TextStyle(color: Color(0xFFDCE7FB), fontSize: 13, height: 1.3, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _balanceCard() => BalanceBanner(
+    amount: _summary['ready'],
+    onInfo: _balanceInfo,
+    onTap: _wallet,
+    badge: _statePill(_configured ?? true),
+  );
 
   Widget _statePill(bool configured) {
     final color = configured ? const Color(0xFF12894A) : const Color(0xFFE85400);
@@ -373,7 +277,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
         count: orders,
         unit: orders > 1 ? 'commandes' : 'commande',
       ),
-      _metric(Icons.schedule_rounded, Mk.orange, 'En attente', amount: _summary['scheduled']),
+      _metric(Icons.schedule_rounded, Mk.orange, 'En attente', amount: financePendingTotal(_summary)),
       paidAmount != null
           ? _metric(Icons.account_balance_wallet_rounded, financeGreen, 'Reversements reçus', amount: paidAmount, note: 'ce mois')
           : _metric(

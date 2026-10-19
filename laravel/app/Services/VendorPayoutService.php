@@ -12,6 +12,18 @@ use Illuminate\Support\Str;
 
 class VendorPayoutService
 {
+    /**
+     * Référence lisible d'un nouveau versement : VRS-AAAAMMJJ-XXXX (unique).
+     */
+    public static function newPayoutReference(): string
+    {
+        do {
+            $reference = 'VRS-' . now()->format('Ymd') . '-' . Str::upper(Str::random(4));
+        } while (VendorPayout::query()->where('payout_reference', $reference)->exists());
+
+        return $reference;
+    }
+
     public function __construct(
         protected CommissionService $commissionService
     ) {
@@ -186,7 +198,7 @@ class VendorPayoutService
                         'payment_channel' => $shop->hasConfiguredPayout() ? $shop->mm_operator : null,
                         'payment_mode_snapshot' => $shop->hasConfiguredPayout() ? $shop->payment_mode : null,
                         'payout_reference' => $payout->payout_reference
-                            ?: 'REV-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6)),
+                            ?: self::newPayoutReference(),
                         'status' => $payout->status ?: VendorPayout::STATUS_BLOCKED,
                         'meta' => $meta,
                     ]);

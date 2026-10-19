@@ -6,6 +6,12 @@ import '../../../core/utils/formatters.dart';
 import '../../orders/presentation/invoice_screen.dart';
 import '../../orders/presentation/order_detail_screen.dart';
 import '../domain/payment_models.dart';
+import 'payment_ui.dart';
+
+const _navy = Color(0xFF0A1B3D);
+const _muted = Color(0xFF6B7890);
+const _line = Color(0xFFE7ECF2);
+const _pageBackground = Color(0xFFF2F4F7);
 
 /// Reçu d'un paiement : montant, statut, moyen de paiement et référence.
 class PaymentReceiptScreen extends StatelessWidget {
@@ -22,125 +28,227 @@ class PaymentReceiptScreen extends StatelessWidget {
   final Color statusColor;
   final bool success;
 
-  String _date(DateTime? value) {
-    if (value == null) return '—';
-    const months = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
-    String two(int n) => n.toString().padLeft(2, '0');
-    final d = value.toLocal();
-    return '${d.day} ${months[d.month - 1]} ${d.year} · ${two(d.hour)}:${two(d.minute)}';
+  void _copyReference(BuildContext context) {
+    Clipboard.setData(ClipboardData(text: payment.reference));
+    showOvanieToast(context, 'Référence copiée.');
   }
 
   @override
   Widget build(BuildContext context) {
     final rows = <(String, String)>[
-      ('Commande', payment.orderNumber.isEmpty ? '—' : '#${payment.orderNumber}'),
+      ('Commande', payment.orderNumber.isEmpty ? '—' : payment.orderNumber),
       ('Moyen de paiement', payment.methodLabel),
-      ('Date', _date(payment.paidAt ?? payment.createdAt)),
+      ('Date', paymentDateTime(payment.paidAt ?? payment.createdAt, separator: ' · ')),
       ('Référence', payment.reference.isEmpty ? '—' : payment.reference),
     ];
     return Scaffold(
-      backgroundColor: OvanieColors.background,
+      backgroundColor: _pageBackground,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: OvanieColors.navy,
+        backgroundColor: _pageBackground,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(success ? 'Reçu de paiement' : 'Détail du paiement', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        centerTitle: true,
+        leading: IconButton(
+          onPressed: () => Navigator.maybePop(context),
+          tooltip: 'Retour',
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _navy, size: 22),
+        ),
+        title: Text(
+          success ? 'Reçu de paiement' : 'Détail du paiement',
+          style: const TextStyle(color: _navy, fontSize: 19, fontWeight: FontWeight.w800),
+        ),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(18, 24, 18, 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: OvanieColors.border),
-            ),
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: statusColor.withValues(alpha: .12),
-                  child: Icon(success ? Icons.check_rounded : Icons.receipt_long_outlined, color: statusColor, size: 28),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  formatFcfa(payment.amount),
-                  style: const TextStyle(color: OvanieColors.navy, fontSize: 28, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: statusColor.withValues(alpha: .12), borderRadius: BorderRadius.circular(20)),
-                  child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 13, fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(height: 18),
-                const Divider(height: 1, color: OvanieColors.border),
-                for (final row in rows)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(row.$1, style: const TextStyle(color: OvanieColors.muted, fontSize: 14)),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: GestureDetector(
-                            onLongPress: row.$1 == 'Référence' && payment.reference.isNotEmpty
-                                ? () {
-                                    Clipboard.setData(ClipboardData(text: payment.reference));
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Référence copiée.')));
-                                  }
-                                : null,
-                            child: Text(
-                              row.$2,
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(color: OvanieColors.navy, fontSize: 14, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ],
+          PhysicalShape(
+            clipper: const _TicketClipper(),
+            color: Colors.white,
+            elevation: 2,
+            shadowColor: const Color(0x260A1B3D),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 34, 16, 26),
+              child: Column(
+                children: [
+                  Container(
+                    width: 108,
+                    height: 108,
+                    decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), shape: BoxShape.circle),
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 62,
+                      height: 62,
+                      decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                      child: Icon(
+                        success ? Icons.check_rounded : Icons.receipt_long_rounded,
+                        color: Colors.white,
+                        size: 36,
+                      ),
                     ),
                   ),
-              ],
+                  const SizedBox(height: 18),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      formatFcfa(payment.amount),
+                      style: const TextStyle(
+                        color: _navy,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(color: statusColor, fontSize: 14.5, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  const _DashedLine(),
+                  const SizedBox(height: 18),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Détail du paiement',
+                      style: TextStyle(color: _navy, fontSize: 17, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  for (var i = 0; i < rows.length; i++) ...[
+                    if (i > 0) const Divider(height: 1, color: _line),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      child: Row(
+                        children: [
+                          Text(rows[i].$1, style: const TextStyle(color: _muted, fontSize: 14)),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              rows[i].$2,
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(color: _navy, fontSize: 14),
+                            ),
+                          ),
+                          if (rows[i].$1 == 'Référence' && payment.reference.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            InkResponse(
+                              onTap: () => _copyReference(context),
+                              radius: 20,
+                              child: const Padding(
+                                padding: EdgeInsets.all(2),
+                                child: Icon(Icons.copy_rounded, color: Color(0xFF4A586E), size: 20),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
           if (payment.orderId > 0) ...[
-            const SizedBox(height: 16),
-            if (success)
+            const SizedBox(height: 26),
+            if (success) ...[
               SizedBox(
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(builder: (_) => InvoiceScreen(orderId: payment.orderId)),
-                  ),
+                height: 50,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute<void>(builder: (_) => InvoiceScreen(orderId: payment.orderId))),
                   style: FilledButton.styleFrom(
                     backgroundColor: OvanieColors.orange,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  icon: const Icon(Icons.description_outlined, size: 20),
-                  label: const Text('Voir la facture', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  child: const Text('Voir la facture', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                 ),
               ),
-            const SizedBox(height: 10),
+              const SizedBox(height: 12),
+            ],
             SizedBox(
-              height: 48,
+              height: 50,
               child: OutlinedButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => OrderDetailScreen(orderId: payment.orderId)),
-                ),
+                onPressed: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute<void>(builder: (_) => OrderDetailScreen(orderId: payment.orderId))),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: OvanieColors.navy,
-                  side: const BorderSide(color: OvanieColors.border),
+                  foregroundColor: _navy,
+                  backgroundColor: Colors.white,
+                  side: const BorderSide(color: _navy, width: 1.4),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                child: const Text('Voir la commande', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                child: const Text('Voir la commande', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
               ),
             ),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Ticket aux bords haut et bas festonnés.
+class _TicketClipper extends CustomClipper<Path> {
+  const _TicketClipper();
+
+  @override
+  Path getClip(Size size) {
+    const radius = 14.0;
+    const notch = 9.0;
+    const count = 10;
+    final step = size.width / count;
+    final path = Path()..moveTo(0, radius);
+    path.quadraticBezierTo(0, 0, radius, 0);
+    for (var i = 0; i < count; i++) {
+      final center = step * (i + 0.5);
+      path
+        ..lineTo(center - notch, 0)
+        ..arcToPoint(Offset(center + notch, 0), radius: const Radius.circular(notch), clockwise: false);
+    }
+    path
+      ..lineTo(size.width - radius, 0)
+      ..quadraticBezierTo(size.width, 0, size.width, radius)
+      ..lineTo(size.width, size.height - radius)
+      ..quadraticBezierTo(size.width, size.height, size.width - radius, size.height);
+    for (var i = count - 1; i >= 0; i--) {
+      final center = step * (i + 0.5);
+      path
+        ..lineTo(center + notch, size.height)
+        ..arcToPoint(Offset(center - notch, size.height), radius: const Radius.circular(notch), clockwise: false);
+    }
+    path
+      ..lineTo(radius, size.height)
+      ..quadraticBezierTo(0, size.height, 0, size.height - radius)
+      ..close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+class _DashedLine extends StatelessWidget {
+  const _DashedLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final count = (constraints.maxWidth / 9).floor();
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(count, (_) => Container(width: 5, height: 1.2, color: const Color(0xFFCBD3DE))),
+        );
+      },
     );
   }
 }

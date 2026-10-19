@@ -1,17 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/widgets/ovanie_bottom_navigation.dart';
-import '../../shell/domain/main_navigation_store.dart';
 import '../../auth/domain/session_store.dart';
+import '../../auth/presentation/auth_branding.dart' show authCountries, showAuthCountrySheet;
 import '../../cart/domain/cart_store.dart';
-import '../../support/presentation/support_center_screen.dart';
+import '../../payments/presentation/payment_ui.dart';
+import '../../shell/domain/main_navigation_store.dart';
 import '../data/client_account_repository.dart';
 import '../domain/account_models.dart';
 import 'delete_account_screen.dart';
 import 'notification_preferences_screen.dart';
 import 'security_screen.dart';
+
+const _navy = Color(0xFF0A1B3D);
+const _muted = Color(0xFF6B7890);
+const _line = Color(0xFFE7ECF2);
+const _iconColor = Color(0xFF2E3A4D);
+const _pageBackground = Color(0xFFF6F8FB);
+
+/// Sépare un numéro enregistré (« +2250708123456 ») en indicatif + numéro.
+(String, String) splitPhone(String raw) {
+  final compact = raw.replaceAll(RegExp(r'[\s.-]'), '');
+  for (final country in authCountries) {
+    final code = country.$1;
+    final bare = code.substring(1);
+    if (compact.startsWith(code)) return (code, compact.substring(code.length));
+    if (compact.startsWith('00$bare')) return (code, compact.substring(bare.length + 2));
+  }
+  return ('+225', compact.replaceAll(RegExp(r'\D'), ''));
+}
+
+/// « +2250708123456 » → « +225 07 08 12 34 56 ».
+String formatPhone(String raw) {
+  if (raw.trim().isEmpty) return '';
+  final (code, number) = splitPhone(raw);
+  final digits = number.replaceAll(RegExp(r'\D'), '');
+  final groups = <String>[];
+  for (var i = 0; i < digits.length; i += 2) {
+    groups.add(digits.substring(i, i + 2 > digits.length ? digits.length : i + 2));
+  }
+  return '$code ${groups.join(' ')}'.trim();
+}
 
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onOpenHome;
@@ -19,24 +51,13 @@ class ProfileScreen extends StatefulWidget {
   final VoidCallback? onOpenCart;
   final VoidCallback? onOpenFavorites;
 
-  const ProfileScreen({
-    super.key,
-    this.onOpenHome,
-    this.onOpenCategories,
-    this.onOpenCart,
-    this.onOpenFavorites,
-  });
+  const ProfileScreen({super.key, this.onOpenHome, this.onOpenCategories, this.onOpenCart, this.onOpenFavorites});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  static const _navy = Color(0xFF071B53);
-  static const _muted = Color(0xFF52658F);
-  static const _line = Color(0xFFE2E7F0);
-  static const _blue = Color(0xFF1464EB);
-
   final _repository = const ClientAccountRepository();
   ClientProfile? _profile;
   bool _loading = true;
@@ -51,7 +72,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _load() async {
     if (mounted) {
       setState(() {
-        _loading = true;
+        _loading = _profile == null;
         _error = null;
       });
     }
@@ -71,22 +92,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  bool get _isIncomplete {
-    final profile = _profile;
-    if (profile == null) return true;
-    final hasName = _displayName(profile).trim().isNotEmpty;
-    return !hasName || profile.phone.trim().isEmpty || profile.email.trim().isEmpty;
-  }
-
   String _displayName(ClientProfile profile) {
     final combined = '${profile.firstName} ${profile.lastName}'.trim();
     return combined.isNotEmpty ? combined : profile.name.trim();
   }
 
+  bool _isIncomplete(ClientProfile profile) =>
+      _displayName(profile).isEmpty || profile.phone.trim().isEmpty || profile.email.trim().isEmpty;
+
   String _initials(ClientProfile profile) {
-    final name = _displayName(profile);
-    if (name.isEmpty) return 'OV';
-    final parts = name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+    final parts = _displayName(profile).split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+    if (parts.isEmpty) return 'O';
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'.toUpperCase();
   }
@@ -94,211 +110,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _editProfile() async {
     final profile = _profile;
     if (profile == null) return;
-
-    final first = TextEditingController(text: profile.firstName);
-    final last = TextEditingController(text: profile.lastName);
-    final email = TextEditingController(text: profile.email);
-    final phone = TextEditingController(text: profile.phone);
-    final whatsapp = TextEditingController(text: profile.whatsappPhone);
-    final formKey = GlobalKey<FormState>();
-    bool saving = false;
-
-    final saved = await showModalBottomSheet<bool>(
+    final updated = await showModalBottomSheet<ClientProfile>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            Future<void> save() async {
-              if (!(formKey.currentState?.validate() ?? false) || saving) return;
-              setSheetState(() => saving = true);
-              try {
-                final updated = await _repository.updateProfile(
-                  firstName: first.text,
-                  lastName: last.text,
-                  email: email.text,
-                  phone: phone.text,
-                  whatsappPhone: whatsapp.text,
-                );
-                await SessionStore.instance.updateUser(updated.toSessionJson());
-                if (!mounted) return;
-                setState(() => _profile = updated);
-                if (sheetContext.mounted) Navigator.of(sheetContext).pop(true);
-              } catch (error) {
-                if (sheetContext.mounted) {
-                  ScaffoldMessenger.of(sheetContext).showSnackBar(
-                    SnackBar(content: Text(ApiClient.friendlyError(error))),
-                  );
-                }
-              } finally {
-                if (sheetContext.mounted) setSheetState(() => saving = false);
-              }
-            }
-
-            final bottom = MediaQuery.of(sheetContext).viewInsets.bottom;
-            return Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottom),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 42,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFD8DEE9),
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      const Text(
-                        'Modifier mon profil',
-                        style: TextStyle(color: _navy, fontSize: 22, fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          Expanded(child: _editField(first, 'Prénom', Icons.person_outline_rounded)),
-                          const SizedBox(width: 12),
-                          Expanded(child: _editField(last, 'Nom', Icons.person_outline_rounded)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _editField(
-                        email,
-                        'Adresse e-mail',
-                        Icons.mail_outline_rounded,
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) {
-                          final text = value?.trim() ?? '';
-                          if (text.isEmpty || !text.contains('@')) return 'Adresse e-mail invalide';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _editField(phone, 'Numéro de téléphone', Icons.phone_outlined, keyboardType: TextInputType.phone),
-                      const SizedBox(height: 12),
-                      _editField(
-                        whatsapp,
-                        'Téléphone WhatsApp (optionnel)',
-                        Icons.chat_bubble_outline_rounded,
-                        keyboardType: TextInputType.phone,
-                      ),
-                      const SizedBox(height: 18),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: FilledButton(
-                          onPressed: saving ? null : save,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: OvanieColors.orange,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-                          ),
-                          child: saving
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Text('Enregistrer', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    first.dispose();
-    last.dispose();
-    email.dispose();
-    phone.dispose();
-    whatsapp.dispose();
-
-    if (saved == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profil OVANIE mis à jour.')));
-    }
-  }
-
-  Widget _editField(
-    TextEditingController controller,
-    String label,
-    IconData icon, {
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: _navy),
-      ),
-    );
-  }
-
-  void _goRoot(VoidCallback? callback) {
-    if (callback == null) return;
-    Navigator.of(context).pop();
-    callback();
-  }
-
-  void _openSupport() {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SupportCenterScreen()));
-  }
-
-  void _openSecurity() {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SecurityScreen()));
-  }
-
-  void _openDeleteAccount() {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DeleteAccountScreen()));
-  }
-
-  void _openNotificationPreferences() {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const NotificationPreferencesScreen()));
-  }
-
-  void _showSimpleChoice(String title, String value) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (context) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(color: _navy, fontSize: 20, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 14),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.check_circle_rounded, color: OvanieColors.orange),
-                title: Text(value, style: const TextStyle(color: _navy, fontWeight: FontWeight.w700)),
-                onTap: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-        ),
-      ),
+      builder: (_) => _EditProfileSheet(profile: profile, repository: _repository),
     );
+    if (updated == null || !mounted) return;
+    setState(() => _profile = updated);
+    showOvanieToast(context, 'Profil OVANIE mis à jour.');
+  }
+
+  Future<void> _push(Widget screen) async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   @override
@@ -306,355 +131,483 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return AnimatedBuilder(
       animation: CartStore.instance,
       builder: (context, _) {
+        final profile = _profile;
         return Scaffold(
-          backgroundColor: Colors.white,
-          bottomNavigationBar: const OvanieBottomNavigation(
-            selectedTab: OvanieMainTab.account,
+          backgroundColor: _pageBackground,
+          bottomNavigationBar: const OvanieBottomNavigation(selectedTab: OvanieMainTab.account),
+          appBar: AppBar(
+            backgroundColor: _pageBackground,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            centerTitle: true,
+            leading: IconButton(
+              onPressed: () => Navigator.maybePop(context),
+              tooltip: 'Retour',
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _navy, size: 22),
+            ),
+            title: const Text(
+              'Mon profil',
+              style: TextStyle(color: _navy, fontSize: 20, fontWeight: FontWeight.w800),
+            ),
           ),
-          body: SafeArea(
-            bottom: false,
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: OvanieColors.orange))
-                : _error != null
-                    ? _buildError()
-                    : RefreshIndicator(
-                        color: OvanieColors.orange,
-                        onRefresh: _load,
-                        child: ListView(
-                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                          padding: const EdgeInsets.fromLTRB(18, 14, 18, 26),
-                          children: [
-                            _buildHeader(),
-                            const SizedBox(height: 22),
-                            if (_isIncomplete) _buildIncompleteProfile() else _buildCompleteProfile(),
-                          ],
-                        ),
-                      ),
-          ),
+          body: _loading
+              ? const Center(child: CircularProgressIndicator(color: OvanieColors.orange))
+              : profile == null
+              ? _ErrorState(message: _error ?? 'Votre profil est indisponible.', onRetry: _load)
+              : RefreshIndicator(
+                  color: OvanieColors.orange,
+                  onRefresh: _load,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
+                    children: _isIncomplete(profile) ? _incomplete(profile) : _complete(profile),
+                  ),
+                ),
         );
       },
     );
   }
 
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        IconButton(
-          onPressed: () => Navigator.maybePop(context),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-          icon: const Icon(Icons.arrow_back_rounded, color: _navy, size: 29),
-        ),
-        const SizedBox(width: 8),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Mon profil',
-                style: TextStyle(color: _navy, fontSize: 22, fontWeight: FontWeight.w800),
+  List<Widget> _complete(ClientProfile profile) {
+    final name = _displayName(profile);
+    return [
+      _Card(
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+        child: Column(
+          children: [
+            Container(
+              width: 78,
+              height: 78,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(color: OvanieColors.orange, shape: BoxShape.circle),
+              child: Text(
+                _initials(profile),
+                style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: _navy, fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(color: const Color(0xFFEDF0F4), borderRadius: BorderRadius.circular(99)),
+              child: const Text(
+                'Client OVANIE',
+                style: TextStyle(color: Color(0xFF4B586C), fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: OutlinedButton(
+                onPressed: _editProfile,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _navy,
+                  side: const BorderSide(color: _navy, width: 1.4),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                ),
+                child: const Text(
+                  'Modifier mes informations',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
-    );
+      ),
+      const SizedBox(height: 12),
+      _Section(
+        title: 'Informations personnelles',
+        children: [
+          _InfoRow(icon: Icons.person_outline_rounded, label: 'Nom complet', value: name, onTap: _editProfile),
+          _InfoRow(
+            icon: Icons.phone_outlined,
+            label: 'Numéro de téléphone',
+            value: formatPhone(profile.phone),
+            onTap: _editProfile,
+          ),
+          _InfoRow(
+            icon: Icons.mail_outline_rounded,
+            label: 'Adresse e-mail',
+            value: profile.email,
+            onTap: _editProfile,
+          ),
+          _InfoRow(
+            icon: Icons.lock_outline_rounded,
+            label: 'Mot de passe',
+            value: '••••••••',
+            onTap: () => _push(const SecurityScreen()),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      _Section(
+        title: 'Préférences',
+        flush: true,
+        children: [
+          _LinkRow(
+            icon: Icons.notifications_none_rounded,
+            title: 'Notifications',
+            onTap: () => _push(const NotificationPreferencesScreen()),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      _Section(
+        title: 'Sécurité',
+        flush: true,
+        children: [
+          _LinkRow(
+            icon: Icons.verified_user_outlined,
+            title: 'Mot de passe et sécurité',
+            onTap: () => _push(const SecurityScreen()),
+          ),
+          _LinkRow(
+            icon: Icons.laptop_rounded,
+            title: 'Appareils connectés',
+            onTap: () => _push(const SecurityScreen()),
+          ),
+          _LinkRow(
+            icon: Icons.delete_outline_rounded,
+            title: 'Supprimer mon compte',
+            danger: true,
+            onTap: () => _push(const DeleteAccountScreen()),
+          ),
+        ],
+      ),
+    ];
   }
 
-  Widget _buildCompleteProfile() {
-    final profile = _profile!;
+  List<Widget> _incomplete(ClientProfile profile) {
     final name = _displayName(profile);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InkWell(
-          onTap: _editProfile,
+    return [
+      Container(
+        padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF4E8),
           borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _line),
-            ),
-            child: Row(
+          border: Border.all(color: const Color(0xFFF4BE6E)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
                 Container(
                   width: 60,
                   height: 60,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(colors: [Color(0xFF0B2770), Color(0xFF091750)]),
-                  ),
-                  child: Text(
-                    _initials(profile),
-                    style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w700),
-                  ),
+                  decoration: const BoxDecoration(color: Color(0xFFFCE6CF), shape: BoxShape.circle),
+                  child: const Icon(Icons.person_outline_rounded, color: Color(0xFF9A3F0B), size: 32),
                 ),
                 const SizedBox(width: 14),
-                Expanded(
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name.isEmpty ? 'Client OVANIE' : name, style: const TextStyle(color: _navy, fontSize: 18, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 2),
-                      const Text('Modifier mes informations', style: TextStyle(color: OvanieColors.blue, fontSize: 14, fontWeight: FontWeight.w600)),
+                      Text(
+                        'Votre profil est incomplet',
+                        style: TextStyle(color: Color(0xFF8C3A0C), fontSize: 17, fontWeight: FontWeight.w800),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Ajoutez vos informations personnelles pour mieux gérer votre compte OVANIE.',
+                        style: TextStyle(color: Color(0xFF5E6676), fontSize: 13.5, height: 1.4),
+                      ),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: _navy, size: 28),
               ],
             ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        const _SectionTitle('Informations personnelles'),
-        const SizedBox(height: 8),
-        _ProfileGroup(
-          children: [
-            _ProfileRow(
-              icon: Icons.person_outline_rounded,
-              iconColor: const Color(0xFF1464EB),
-              iconBackground: const Color(0xFFEEF4FF),
-              title: 'Nom complet',
-              subtitle: name.isEmpty ? 'Non renseigné' : name,
-              onTap: _editProfile,
-            ),
-            _ProfileRow(
-              icon: Icons.phone_outlined,
-              iconColor: const Color(0xFF10A94D),
-              iconBackground: const Color(0xFFECFAF1),
-              title: 'Numéro de téléphone',
-              subtitle: profile.phone.trim().isEmpty ? 'Non renseigné' : profile.phone.trim(),
-              onTap: _editProfile,
-            ),
-            _ProfileRow(
-              icon: Icons.mail_outline_rounded,
-              iconColor: const Color(0xFF7038F5),
-              iconBackground: const Color(0xFFF3EFFF),
-              title: 'Adresse e-mail',
-              subtitle: profile.email.trim().isEmpty ? 'Non renseignée' : profile.email.trim(),
-              onTap: _editProfile,
-            ),
-            _ProfileRow(
-              icon: Icons.lock_outline_rounded,
-              iconColor: OvanieColors.orange,
-              iconBackground: const Color(0xFFFFF3E9),
-              title: 'Mot de passe',
-              onTap: _openSecurity,
-              divider: false,
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        const _SectionTitle('Préférences'),
-        const SizedBox(height: 8),
-        _ProfileGroup(
-          children: [
-            _ProfileRow(
-              icon: Icons.notifications_none_rounded,
-              iconColor: const Color(0xFF7038F5),
-              iconBackground: const Color(0xFFF3EFFF),
-              title: 'Notifications',
-              onTap: _openNotificationPreferences,
-              divider: false,
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        const _SectionTitle('Sécurité'),
-        const SizedBox(height: 8),
-        _ProfileGroup(
-          children: [
-            _ProfileRow(
-              icon: Icons.verified_user_outlined,
-              iconColor: const Color(0xFF10A94D),
-              iconBackground: const Color(0xFFECFAF1),
-              title: 'Double authentification',
-              trailingText: 'Désactivée',
-              trailingTextColor: OvanieColors.orange,
-              onTap: _openSecurity,
-            ),
-            _ProfileRow(
-              icon: Icons.desktop_windows_outlined,
-              iconColor: const Color(0xFF246BE9),
-              iconBackground: const Color(0xFFEEF4FF),
-              title: 'Appareils connectés',
-              onTap: _openSecurity,
-            ),
-            _ProfileRow(
-              icon: Icons.delete_outline_rounded,
-              iconColor: const Color(0xFFED1B24),
-              iconBackground: const Color(0xFFFFEEEE),
-              title: 'Supprimer mon compte',
-              onTap: _openDeleteAccount,
-              divider: false,
-            ),
-          ],
-        ),
-        const SizedBox(height: 22),
-        _HelpCard(onTap: _openSupport),
-      ],
-    );
-  }
-
-  Widget _compactContact(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: _navy),
-        const SizedBox(width: 8),
-        Flexible(child: Text(text, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _navy, fontSize: 12.7, fontWeight: FontWeight.w500))),
-      ],
-    );
-  }
-
-  Widget _buildIncompleteProfile() {
-    final profile = _profile!;
-    final name = _displayName(profile);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _line),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 108,
-                height: 89,
-                child: Image.asset(
-                  'assets/images/profile_incomplete_illustration.png',
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.account_circle_outlined, color: Color(0xFFC6D1F8), size: 72),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 46,
+              child: FilledButton(
+                onPressed: _editProfile,
+                style: FilledButton.styleFrom(
+                  backgroundColor: OvanieColors.orange,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
+                child: const Text('Compléter mon profil', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      _Section(
+        title: 'Informations personnelles',
+        flush: true,
+        children: [
+          name.isEmpty
+              ? _MissingRow(
+                  icon: Icons.person_outline_rounded,
+                  field: 'Nom et prénom',
+                  missing: 'non renseignés',
+                  onTap: _editProfile,
+                )
+              : _InfoRow(icon: Icons.person_outline_rounded, label: 'Nom complet', value: name, onTap: _editProfile),
+          profile.phone.trim().isEmpty
+              ? _MissingRow(
+                  icon: Icons.phone_outlined,
+                  field: 'Numéro de téléphone',
+                  missing: 'non renseigné',
+                  onTap: _editProfile,
+                )
+              : _InfoRow(
+                  icon: Icons.phone_outlined,
+                  label: 'Numéro de téléphone',
+                  value: formatPhone(profile.phone),
+                  onTap: _editProfile,
+                ),
+          profile.email.trim().isEmpty
+              ? _MissingRow(
+                  icon: Icons.mail_outline_rounded,
+                  field: 'Adresse e-mail',
+                  missing: 'non renseignée',
+                  onTap: _editProfile,
+                )
+              : _InfoRow(
+                  icon: Icons.mail_outline_rounded,
+                  label: 'Adresse e-mail',
+                  value: profile.email,
+                  onTap: _editProfile,
+                ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      _Section(
+        title: 'Préférences',
+        flush: true,
+        children: [
+          _LinkRow(
+            icon: Icons.notifications_none_rounded,
+            title: 'Aucune préférence configurée pour le moment.',
+            muted: true,
+            onTap: () => _push(const NotificationPreferencesScreen()),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      _Section(
+        title: 'Sécurité',
+        flush: true,
+        children: [
+          // La suppression du compte reste accessible depuis cet écran,
+          // même tant que le profil n'est pas complet.
+          _LinkRow(
+            icon: Icons.verified_user_outlined,
+            title: 'Configurez votre sécurité après avoir complété votre profil.',
+            muted: true,
+            onTap: () => _push(const SecurityScreen()),
+          ),
+        ],
+      ),
+    ];
+  }
+}
+
+class _Card extends StatelessWidget {
+  const _Card({required this.child, this.padding = EdgeInsets.zero});
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: padding,
+    clipBehavior: Clip.antiAlias,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: _line),
+      boxShadow: const [BoxShadow(color: Color(0x0A102A4C), blurRadius: 8, offset: Offset(0, 2))],
+    ),
+    child: child,
+  );
+}
+
+/// Carte titrée. `flush` : séparateurs pleine largeur (lignes de navigation).
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.children, this.flush = false});
+
+  final String title;
+  final List<Widget> children;
+  final bool flush;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            child: Text(
+              title,
+              style: const TextStyle(color: _navy, fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+          ),
+          const Divider(height: 1, thickness: 1, color: _line),
+          for (var i = 0; i < children.length; i++) ...[
+            children[i],
+            if (i != children.length - 1)
+              Divider(height: 1, thickness: 1, color: _line, indent: flush ? 0 : 14, endIndent: flush ? 0 : 14),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({required this.icon, required this.label, required this.value, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        child: Row(
+          children: [
+            Icon(icon, color: _iconColor, size: 23),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: const TextStyle(color: _muted, fontSize: 12.5)),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _navy, fontSize: 15.5, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MissingRow extends StatelessWidget {
+  const _MissingRow({required this.icon, required this.field, required this.missing, required this.onTap});
+
+  final IconData icon;
+  final String field;
+  final String missing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 15, 10, 15),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF4A586E), size: 23),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  text: field,
+                  style: const TextStyle(color: Color(0xFF4A586E)),
                   children: [
-                    const Text('Votre profil est incomplet', style: TextStyle(color: _navy, fontSize: 19.5, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Ajoutez vos informations personnelles\npour mieux gérer votre compte OVANIE.',
-                      style: TextStyle(color: _muted, fontSize: 13.4, height: 1.4),
-                    ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      height: 40,
-                      child: FilledButton(
-                        onPressed: _editProfile,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: OvanieColors.orange,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 17),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('Compléter mon profil', style: TextStyle(fontWeight: FontWeight.w900)),
-                            SizedBox(width: 10),
-                            Icon(Icons.arrow_forward_rounded, size: 20),
-                          ],
-                        ),
-                      ),
+                    TextSpan(
+                      text: ' $missing',
+                      style: const TextStyle(color: Color(0xFF8B96A8)),
                     ),
                   ],
                 ),
+                style: const TextStyle(fontSize: 15),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        const _SectionTitle('Informations personnelles'),
-        const SizedBox(height: 8),
-        _ProfileGroup(
-          children: [
-            _ProfileRow(
-              icon: Icons.person_outline_rounded,
-              iconColor: const Color(0xFF1464EB),
-              iconBackground: const Color(0xFFEEF4FF),
-              title: name.isEmpty ? 'Nom et prénom non renseignés' : name,
-              onTap: _editProfile,
-              showChevron: false,
             ),
-            _ProfileRow(
-              icon: Icons.phone_outlined,
-              iconColor: const Color(0xFF10A94D),
-              iconBackground: const Color(0xFFECFAF1),
-              title: profile.phone.trim().isEmpty ? 'Numéro de téléphone non renseigné' : profile.phone.trim(),
-              onTap: _editProfile,
-              showChevron: false,
-            ),
-            _ProfileRow(
-              icon: Icons.mail_outline_rounded,
-              iconColor: const Color(0xFF7038F5),
-              iconBackground: const Color(0xFFF3EFFF),
-              title: profile.email.trim().isEmpty ? 'Adresse e-mail non renseignée' : profile.email.trim(),
-              onTap: _editProfile,
-              showChevron: false,
-              divider: false,
-            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF8A96A8), size: 22),
           ],
         ),
-        const SizedBox(height: 20),
-        const _SectionTitle('Préférences'),
-        const SizedBox(height: 8),
-        _ProfileGroup(
-          children: [
-            _ProfileRow(
-              icon: Icons.tune_rounded,
-              iconColor: const Color(0xFF6175AA),
-              iconBackground: const Color(0xFFF1F4F9),
-              title: 'Aucune préférence configurée pour le moment.',
-              onTap: _openNotificationPreferences,
-              showChevron: false,
-              divider: false,
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        const _SectionTitle('Sécurité'),
-        const SizedBox(height: 8),
-        _ProfileGroup(
-          children: [
-            _ProfileRow(
-              icon: Icons.verified_user_outlined,
-              iconColor: const Color(0xFF6175AA),
-              iconBackground: const Color(0xFFF1F4F9),
-              title: 'Configurez votre sécurité après avoir complété votre profil.',
-              onTap: _openSecurity,
-              showChevron: false,
-              divider: false,
-            ),
-          ],
-        ),
-        const SizedBox(height: 22),
-        _HelpCard(onTap: _openSupport),
-      ],
+      ),
     );
   }
+}
 
-  Widget _buildError() {
+class _LinkRow extends StatelessWidget {
+  const _LinkRow({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.danger = false,
+    this.muted = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  final bool danger;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? OvanieColors.danger : (muted ? const Color(0xFF5E6B80) : _navy);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+        child: Row(
+          children: [
+            Icon(icon, color: danger ? OvanieColors.danger : _iconColor, size: 23),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w500, height: 1.35),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF8A96A8), size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.person_off_outlined, color: _muted, size: 54),
+            const Icon(Icons.cloud_off_rounded, color: _muted, size: 52),
             const SizedBox(height: 14),
-            Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: _muted, height: 1.45)),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: _muted, height: 1.45),
+            ),
             const SizedBox(height: 18),
-            OutlinedButton(onPressed: _load, child: const Text('Réessayer')),
+            PaymentButton(label: 'Réessayer', onPressed: onRetry),
           ],
         ),
       ),
@@ -662,99 +615,174 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
+class _EditProfileSheet extends StatefulWidget {
+  const _EditProfileSheet({required this.profile, required this.repository});
+
+  final ClientProfile profile;
+  final ClientAccountRepository repository;
 
   @override
-  Widget build(BuildContext context) => Text(
-        text,
-        style: const TextStyle(color: Color(0xFF6E7B90), fontSize: 13.5, fontWeight: FontWeight.w600),
-      );
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
 }
 
-class _ProfileGroup extends StatelessWidget {
-  final List<Widget> children;
-  const _ProfileGroup({required this.children});
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  late final _first = TextEditingController(text: widget.profile.firstName);
+  late final _last = TextEditingController(text: widget.profile.lastName);
+  late final _email = TextEditingController(text: widget.profile.email);
+  late final TextEditingController _phone;
+  late final TextEditingController _whatsapp;
+  late String _phoneCode;
+  late String _whatsappCode;
+  final _formKey = GlobalKey<FormState>();
+  bool _saving = false;
+  String? _serverError;
 
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(11),
-          border: Border.all(color: const Color(0xFFE2E7F0)),
-        ),
-        child: Column(children: children),
+  void initState() {
+    super.initState();
+    final phone = splitPhone(widget.profile.phone);
+    final whatsapp = splitPhone(widget.profile.whatsappPhone);
+    _phoneCode = phone.$1;
+    _whatsappCode = whatsapp.$1;
+    _phone = TextEditingController(text: _spaced(phone.$2));
+    _whatsapp = TextEditingController(text: _spaced(whatsapp.$2));
+  }
+
+  static String _spaced(String digits) {
+    final clean = digits.replaceAll(RegExp(r'\D'), '');
+    final buffer = StringBuffer();
+    for (var i = 0; i < clean.length; i++) {
+      if (i > 0 && i.isEven) buffer.write(' ');
+      buffer.write(clean[i]);
+    }
+    return buffer.toString();
+  }
+
+  @override
+  void dispose() {
+    _first.dispose();
+    _last.dispose();
+    _email.dispose();
+    _phone.dispose();
+    _whatsapp.dispose();
+    super.dispose();
+  }
+
+  String _digits(TextEditingController controller) => controller.text.replaceAll(RegExp(r'\D'), '');
+
+  String? _phoneValidator(String? value, {bool optional = false}) {
+    final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return optional ? null : 'Renseignez votre numéro de téléphone';
+    if (digits.length < 8 || digits.length > 12) return 'Numéro de téléphone invalide';
+    return null;
+  }
+
+  Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _serverError = null);
+    if (!(_formKey.currentState?.validate() ?? false) || _saving) return;
+    setState(() => _saving = true);
+    try {
+      final whatsappDigits = _digits(_whatsapp);
+      final updated = await widget.repository.updateProfile(
+        firstName: _first.text.trim(),
+        lastName: _last.text.trim(),
+        email: _email.text.trim(),
+        phone: '$_phoneCode${_digits(_phone)}',
+        whatsappPhone: whatsappDigits.isEmpty ? '' : '$_whatsappCode$whatsappDigits',
       );
-}
-
-class _ProfileRow extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBackground;
-  final String title;
-  final String? subtitle;
-  final String? trailingText;
-  final Color? trailingTextColor;
-  final VoidCallback onTap;
-  final bool showChevron;
-  final bool divider;
-
-  const _ProfileRow({
-    required this.icon,
-    required this.iconColor,
-    required this.iconBackground,
-    required this.title,
-    required this.onTap,
-    this.subtitle,
-    this.trailingText,
-    this.trailingTextColor,
-    this.showChevron = true,
-    this.divider = true,
-  });
+      await SessionStore.instance.updateUser(updated.toSessionJson());
+      if (mounted) Navigator.of(context).pop(updated);
+    } catch (error) {
+      if (mounted) setState(() => _serverError = ApiClient.friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
-          margin: const EdgeInsets.symmetric(horizontal: 0),
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-          decoration: BoxDecoration(
-            border: divider ? const Border(bottom: BorderSide(color: Color(0xFFE6EAF1))) : null,
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: iconColor, size: 22),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(color: const Color(0xFFD5DBE4), borderRadius: BorderRadius.circular(99)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
                   children: [
-                    Text(title, style: const TextStyle(color: Color(0xFF071B53), fontSize: 15, fontWeight: FontWeight.w500)),
-                    if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(subtitle!, style: const TextStyle(color: Color(0xFF6E7B90), fontSize: 13.5)),
-                    ],
+                    const Expanded(
+                      child: Text(
+                        'Modifier mon profil',
+                        style: TextStyle(color: _navy, fontSize: 21, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      tooltip: 'Fermer',
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF4A586E), size: 26),
+                    ),
                   ],
                 ),
-              ),
-              if (trailingText != null) ...[
-                const SizedBox(width: 8),
-                Text(
-                  trailingText!,
-                  style: TextStyle(color: trailingTextColor ?? const Color(0xFF53658F), fontSize: 13.5, fontWeight: FontWeight.w500),
+                _FieldLabel('Prénom'),
+                _SheetField(
+                  controller: _first,
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) => (v ?? '').trim().isEmpty ? 'Renseignez votre prénom' : null,
                 ),
+                _FieldLabel('Nom'),
+                _SheetField(
+                  controller: _last,
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) => (v ?? '').trim().isEmpty ? 'Renseignez votre nom' : null,
+                ),
+                _FieldLabel('Adresse e-mail'),
+                _SheetField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (v) {
+                    final text = (v ?? '').trim();
+                    if (text.isEmpty) return 'Renseignez votre adresse e-mail';
+                    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text)) return 'Adresse e-mail invalide';
+                    return null;
+                  },
+                ),
+                _FieldLabel('Numéro de téléphone'),
+                _PhoneInput(
+                  controller: _phone,
+                  code: _phoneCode,
+                  onCodeChanged: (code) => setState(() => _phoneCode = code),
+                  validator: _phoneValidator,
+                ),
+                _FieldLabel('Téléphone WhatsApp', optional: true),
+                _PhoneInput(
+                  controller: _whatsapp,
+                  code: _whatsappCode,
+                  onCodeChanged: (code) => setState(() => _whatsappCode = code),
+                  validator: (v) => _phoneValidator(v, optional: true),
+                ),
+                if (_serverError != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_serverError!, style: const TextStyle(color: OvanieColors.danger, fontSize: 13.5)),
+                ],
+                const SizedBox(height: 18),
+                PaymentButton(label: 'Enregistrer', loading: _saving, onPressed: _save),
               ],
-              if (showChevron) ...[
-                const SizedBox(width: 8),
-                const Icon(Icons.chevron_right_rounded, color: Color(0xFF071B53), size: 24),
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -762,11 +790,189 @@ class _ProfileRow extends StatelessWidget {
   }
 }
 
-class _HelpCard extends StatelessWidget {
-  final VoidCallback onTap;
-  const _HelpCard({required this.onTap});
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel(this.text, {this.optional = false});
+
+  final String text;
+  final bool optional;
 
   @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 12, bottom: 6),
+    child: Text.rich(
+      TextSpan(
+        text: text,
+        style: const TextStyle(color: _navy, fontWeight: FontWeight.w700),
+        children: [
+          if (optional)
+            const TextSpan(
+              text: ' (optionnel)',
+              style: TextStyle(color: _muted, fontWeight: FontWeight.w400),
+            ),
+        ],
+      ),
+      style: const TextStyle(fontSize: 14),
+    ),
+  );
 }
 
+InputDecoration _sheetDecoration({String? errorText}) {
+  OutlineInputBorder border(Color color, [double width = 1.2]) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(9),
+    borderSide: BorderSide(color: color, width: width),
+  );
+  return InputDecoration(
+    isDense: true,
+    filled: true,
+    fillColor: Colors.white,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    enabledBorder: border(const Color(0xFFD5DCE6)),
+    focusedBorder: border(OvanieColors.navy, 1.4),
+    errorBorder: border(OvanieColors.danger),
+    focusedErrorBorder: border(OvanieColors.danger, 1.4),
+    errorStyle: const TextStyle(color: OvanieColors.danger, fontSize: 13),
+    errorText: errorText,
+  );
+}
+
+/// Champ texte de la feuille : en erreur, fond rosé + pictogramme « ! ».
+class _SheetField extends StatefulWidget {
+  const _SheetField({
+    required this.controller,
+    required this.validator,
+    this.keyboardType,
+    this.textCapitalization = TextCapitalization.none,
+  });
+
+  final TextEditingController controller;
+  final String? Function(String?) validator;
+  final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
+
+  @override
+  State<_SheetField> createState() => _SheetFieldState();
+}
+
+class _SheetFieldState extends State<_SheetField> {
+  @override
+  Widget build(BuildContext context) {
+    return FormField<String>(
+      initialValue: widget.controller.text,
+      validator: (_) => widget.validator(widget.controller.text),
+      builder: (field) {
+        final hasError = field.hasError;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: widget.controller,
+              keyboardType: widget.keyboardType,
+              textCapitalization: widget.textCapitalization,
+              onChanged: (value) {
+                field.didChange(value);
+                if (hasError) field.validate();
+              },
+              style: const TextStyle(color: _navy, fontSize: 15.5),
+              decoration: _sheetDecoration().copyWith(
+                fillColor: hasError ? const Color(0xFFFFF0F0) : Colors.white,
+                enabledBorder: hasError
+                    ? OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(9),
+                        borderSide: const BorderSide(color: OvanieColors.danger, width: 1.2),
+                      )
+                    : null,
+                suffixIcon: hasError
+                    ? const Icon(Icons.error_outline_rounded, color: OvanieColors.danger, size: 24)
+                    : null,
+              ),
+            ),
+            if (hasError) ...[
+              const SizedBox(height: 5),
+              Text(field.errorText!, style: const TextStyle(color: OvanieColors.danger, fontSize: 13.5)),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PhoneInput extends StatelessWidget {
+  const _PhoneInput({required this.controller, required this.code, required this.onCodeChanged, this.validator});
+
+  final TextEditingController controller;
+  final String code;
+  final ValueChanged<String> onCodeChanged;
+  final String? Function(String?)? validator;
+
+  @override
+  Widget build(BuildContext context) {
+    return FormField<String>(
+      validator: (_) => validator?.call(controller.text),
+      builder: (field) {
+        final borderColor = field.hasError ? OvanieColors.danger : const Color(0xFFD5DCE6);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 50,
+              decoration: BoxDecoration(
+                color: field.hasError ? const Color(0xFFFFF0F0) : Colors.white,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: borderColor, width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showAuthCountrySheet(context, code);
+                      if (picked != null) onCodeChanged(picked);
+                    },
+                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(9)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: [
+                          Text(code, style: const TextStyle(color: _navy, fontSize: 15.5)),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF4A586E), size: 22),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(width: 1, height: 30, color: const Color(0xFFD5DCE6)),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
+                        LengthLimitingTextInputFormatter(17),
+                      ],
+                      onChanged: (_) {
+                        if (field.hasError) field.validate();
+                      },
+                      style: const TextStyle(color: _navy, fontSize: 15.5),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (field.hasError) ...[
+              const SizedBox(height: 5),
+              Text(field.errorText!, style: const TextStyle(color: OvanieColors.danger, fontSize: 13.5)),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}

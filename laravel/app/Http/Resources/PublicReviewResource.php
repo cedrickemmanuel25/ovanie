@@ -13,6 +13,9 @@ class PublicReviewResource extends JsonResource
             'id' => $this->id,
             'rating' => (int) $this->rating,
             'comment' => $this->comment,
+            // Réponse publique de la boutique, saisie depuis l'espace vendeur.
+            'vendor_reply' => $this->vendor_reply,
+            'vendor_replied_at' => $this->vendor_replied_at?->toIso8601String(),
             'date' => $this->created_at?->toIso8601String(),
             'verified_purchase' => (bool) ($this->verified_purchase ?? false),
             'author' => new PublicReviewAuthorResource($this->whenLoaded('user')),
